@@ -9,3 +9,4 @@
 2026-10-15T06:28:52Z	review	findings=13 blocking=0 deferred=13
 2026-10-15T06:29:34Z	final	red
 2026-10-15T06:29:37Z	apply-done	blocked=1 blocking=0
+2026-10-15T06:33:04Z	approve	2026-10-15T06:32:55Z · 起飞（续飞：只重跑 S3 + final）
