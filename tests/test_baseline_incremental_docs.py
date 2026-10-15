@@ -22,7 +22,6 @@ def _has_line(text, *words):
     return any(all(w in line for w in words) for line in text.splitlines())
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：propose 文档写明增量基线")
 def test_propose_docs_describe_incremental():
     # Given: template/.claude/commands/opsx-propose.md、template/.claude/skills/openspec-propose/SKILL.md 与 README.md
     cmd = CMD.read_text(encoding="utf-8")
