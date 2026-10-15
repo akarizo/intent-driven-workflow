@@ -1,6 +1,8 @@
-# intent-driven-claude-code
+# intent-driven-workflow
 
 > 把 [intent-driven OpenSpec 工作流](https://intent-driven.dev/) 适配到 Claude Code，并叠加 TDD 实现纪律、PR 自审闭环、CLAUDE.md 知识同步/蒸馏三层增强。
+>
+> 这是 Workflow 引擎版（飞行由 Claude Code 的 Workflow 工具调度，不需要插件）；Mod 版（flight 插件）在 [akarizo/intent-driven-claude-code](https://github.com/akarizo/intent-driven-claude-code)，两者的关系见[与 Mod 版的关系](#与-mod-版的关系)。
 
 ```
 proposal → specs → design → adr → tasks   ┐
@@ -61,14 +63,14 @@ proposal → specs → design → adr → tasks   ┐
 ### 方式 A：克隆后运行（推荐 — 可审计）
 
 ```bash
-git clone https://github.com/akarizo/intent-driven-claude-code.git /tmp/idt
+git clone https://github.com/akarizo/intent-driven-workflow.git /tmp/idt
 /tmp/idt/install.sh ~/path/to/your-project
 ```
 
 ### 方式 B：curl 一行（极简）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh \
   | bash -s -- ~/path/to/your-project
 ```
 
@@ -78,10 +80,36 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/m
 
 ```bash
 cd ~/your-project
-curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh | bash
 ```
 
 安装器**幂等**：重复运行已存在的文件全部 `[skip]`，CLAUDE.md 通过 `<!-- intent-driven:begin -->` marker 跳过追加。**默认模式只增不改，绝不覆盖你的文件。**
+
+### 安装指定版本
+
+`IDT_BRANCH` 可以填分支或 tag（先按分支找，再按 tag 找）；脚本下载对应归档后，交给归档自带的 `install.sh` 执行，装上的就是那个版本自己的安装逻辑与模板。
+
+```bash
+# 管道写法：脚本始终取 main 上的 install.sh，版本由 IDT_BRANCH 指定
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh | IDT_BRANCH=stable-v2.0 bash -s -- ~/path/to/your-project
+
+# 克隆写法：直接 clone 对应 tag 后本地运行
+git clone --depth 1 --branch stable-v2.0 https://github.com/akarizo/intent-driven-workflow.git /tmp/idt
+/tmp/idt/install.sh ~/path/to/your-project
+```
+
+可用 tag 去 GitHub 仓库的 Tags 页查，或运行 `git ls-remote --tags https://github.com/akarizo/intent-driven-workflow`。目前有：
+
+| tag | 对应 | 内容 |
+| --- | --- | --- |
+| `stable-v2.0` | 原仓 PR #34（`49533dd`） | 飞行模式 apply：切片 + Workflow 并行 + `slice-gate.py` 机械门禁 + 评审离关键路径 + 模型按角色显式路由；起飞批准由 `takeoff-gate.py` 校验会话转录里的人类消息 |
+| `stable-v1.0` | 原仓 PR #19（`4c00ac6`） | 飞行模式之前：`/opsx-apply` 逐 task 派 `code-reviewer` 守门，或串行执行 |
+
+main 在 `stable-v2.0` 之上摘入了原仓 #35–#60 里不依赖插件的通用修复：引擎抛错重派与执行体一律隔离、G7 按实际运行结果判、全量测试按基线逐条差分、`/pr-ship` 预合并检查按 `merge-tree` 退出码判断、安装器保留 `settings.json` 并只下发种子等。
+
+> ⚠ 不要从 tag 路径（`raw.githubusercontent.com/.../<tag>/install.sh`）取脚本走管道：`stable-v2.0` 及更早的脚本不认 tag，缺省装的仍是 main。始终用 main 上的 `install.sh` 加 `IDT_BRANCH`。
+>
+> ⚠ 不支持用 `--upgrade` 把已装新版的项目降级到老版本：新版多出的文件不会被删除，`settings.json` 里已合入的 hooks 也会保留。
 
 ### 一键更新（已装项目）
 
@@ -89,25 +117,50 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/m
 
 ```bash
 # 方式 A：克隆后运行（推荐 — 可审计）
-git clone https://github.com/akarizo/intent-driven-claude-code.git /tmp/idt
+git clone https://github.com/akarizo/intent-driven-workflow.git /tmp/idt
 /tmp/idt/install.sh --upgrade ~/path/to/your-project
 
 # 方式 B：curl 一行
-curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh \
   | bash -s -- --upgrade ~/path/to/your-project
 
 # 方式 C：进到项目目录里就地更新（TARGET 缺省 pwd）
 cd ~/your-project
-curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-claude-code/main/install.sh | bash -s -- --upgrade
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh | bash -s -- --upgrade
 ```
 
 `--upgrade` 的边界很清楚：
 
 - **刷新（库自有）**：`.claude/commands/`、`.claude/skills/`、`openspec/schemas/`，并刷新 CLAUDE.md 的 `intent-driven` marker 段。
-- **保留（用户数据）**：`openspec/changes`、`openspec/specs`、`openspec/adr/*.md`、`openspec/superpower`、`openspec/config.yaml`、ADR 风格 `preferences.md`、以及 CLAUDE.md marker 段以外的正文。
+- **保留（用户数据）**：`openspec/changes`、`openspec/specs`、`openspec/adr/*.md`、`openspec/superpower`、`openspec/config.yaml`、ADR 风格 `preferences.md`、`.claude/settings.json`（只补模板里你缺失的顶层键，hooks 按命令去重合并）、以及 CLAUDE.md marker 段以外的正文。
 - **一次性迁移**：把旧版散落在项目根的 `adr/*.md` 自动搬进 `openspec/adr/` 并删空根 `adr/`（同名冲突会跳过并提示人工核对）。
+- **只提示、不代删**：与本库开发工件同名的 `openspec/changes/*`、`openspec/adr/*`（多半是旧版安装器误拷）会被列出，由你确认后手动删除。
+- **进行中的 change**：`slices.json` 现在必须显式写 `gate.test`（`slice-gate.py lint` 会拦），没写的补上再起飞。
 
 > `--upgrade` 会覆盖 `.claude/` 下的库文件，所以**别在 `.claude/skills/` 里直接改库代码**——你的个性化应放在项目自己的文件里。
+
+---
+
+## 与 Mod 版的关系
+
+两个仓库从同一份 `stable-v2.0` 分开维护：
+
+- **本仓（Workflow 版）**：飞行由 Claude Code 的 Workflow 工具调度（`.claude/workflows/opsx-apply.js`），起飞批准 = 你自己发出的 `/opsx-apply`（`takeoff-gate.py` 在会话转录里核验），不需要任何插件。
+- **Mod 版**：[akarizo/intent-driven-claude-code](https://github.com/akarizo/intent-driven-claude-code)，飞行由 flight 插件的状态机执行（批准带、账本、能力包络、无人值守等）。
+- 两边的通用修复按需互相摘取，PR 里写明来源提交。
+
+**从 Mod 版切换过来**（在项目根执行）：
+
+```bash
+# 1. 卸载 flight 插件与它的 marketplace（插件仍启用时会接管 /opsx-apply）
+claude plugin uninstall flight@intent-driven -s project
+claude plugin marketplace remove intent-driven --scope project
+
+# 2. 用本仓的安装器升级
+curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main/install.sh | bash -s -- --upgrade
+```
+
+然后按安装器的提示手动删除 Mod 版遗留文件（如 `.claude/hooks/ledger.py`、`.claude/hooks/plan_fp.py`），重开 Claude Code 会话。安装器检测到插件仍启用时也会打印上面两条卸载命令，但不会代你执行。
 
 ---
 

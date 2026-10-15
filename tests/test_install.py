@@ -97,7 +97,6 @@ def run_install_stubbed(tmp_path, target, *flags, claude=True):
 # ---------------------------------------------------------------- 摘自原仓 #36（flight-integrity-fixes）· scenario: installer-edition#upgrade-adds-missing-template-settings-keys
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_upgrade_adds_missing_template_settings_keys(tmp_path):
     # Given: 已安装的目标仓库，用户把 .claude/settings.json 改成 {"env": {"MY_KEY": "1"}, "custom": true}
     target = tmp_path / "proj"
@@ -133,8 +132,12 @@ exit "${STUB_RC:-0}"
 
 
 def _skip_changes(info):
-    """打归档时略去 template/openspec/changes（历史 change 工件，与安装无关，只会拖慢测试）。"""
-    return None if "/template/openspec/changes" in info.name else info
+    """打归档时略去 template/openspec/changes 下的历史 change 工件（与安装无关，只会拖慢测试）；保留种子 changes/.gitkeep。"""
+    marker = "/template/openspec/changes/"
+    i = info.name.find(marker)
+    if i < 0:
+        return info
+    return info if info.name[i + len(marker):] == ".gitkeep" else None
 
 
 def make_source(tmp_path, ref, kind, files):
@@ -181,7 +184,6 @@ def stub_log(tmp_path):
     return dict(line.split("=", 1) for line in p.read_text(encoding="utf-8").splitlines() if "=" in line)
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_installs_tag_only_ref(tmp_path):
     # Given: 源里只有 tag stable-v9.9 的归档（refs/tags 下），没有同名分支；归档里是桩 install.sh 与 template/VERSION=v9.9
     source = make_source(tmp_path, "stable-v9.9", "tags", {"install.sh": STUB_INSTALLER, "template/VERSION": "v9.9"})
@@ -195,7 +197,6 @@ def test_pipe_installs_tag_only_ref(tmp_path):
     assert stub_log(tmp_path).get("version") == "v9.9", p.stdout + p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_default_ref_is_main_branch(tmp_path):
     # Given: 源里只有分支 main 的归档（refs/heads 下），归档里是桩 install.sh 与 template/VERSION=main
     source = make_source(tmp_path, "main", "heads", {"install.sh": STUB_INSTALLER, "template/VERSION": "main"})
@@ -209,7 +210,6 @@ def test_pipe_default_ref_is_main_branch(tmp_path):
     assert stub_log(tmp_path).get("version") == "main", p.stdout + p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_missing_ref_lists_both_urls(tmp_path):
     # Given: 源里只有分支 main 的归档
     source = make_source(tmp_path, "main", "heads", {"install.sh": STUB_INSTALLER, "template/VERSION": "main"})
@@ -225,7 +225,6 @@ def test_pipe_missing_ref_lists_both_urls(tmp_path):
     assert not target.exists()
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_delegates_args_to_archived_installer(tmp_path):
     # Given: 源里有 tag stable-v9.9 的归档，其 install.sh 是记录参数的桩
     source = make_source(tmp_path, "stable-v9.9", "tags", {"install.sh": STUB_INSTALLER, "template/VERSION": "v9.9"})
@@ -240,7 +239,6 @@ def test_pipe_delegates_args_to_archived_installer(tmp_path):
     assert not (target / ".claude").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_propagates_exit_and_cleans_temp(tmp_path):
     # Given: 源里有 tag stable-v9.9 的归档，其 install.sh 是以 3 退出的桩；TMPDIR 指向一个空目录
     source = make_source(tmp_path, "stable-v9.9", "tags", {"install.sh": STUB_INSTALLER, "template/VERSION": "v9.9"})
@@ -256,7 +254,6 @@ def test_pipe_propagates_exit_and_cleans_temp(tmp_path):
     assert list(tmpdir.iterdir()) == []
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_archive_without_template_exits_4(tmp_path):
     # Given: 源里有 tag stable-v9.9 的归档，里面只有记录调用的桩 install.sh，没有 template/
     #   （用桩而非真实 install.sh：修复前真实脚本会无界递归下载，测试不能触发它）
@@ -274,7 +271,6 @@ def test_pipe_archive_without_template_exits_4(tmp_path):
     assert not target.exists()
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_pipe_real_installer_runs_local_mode(tmp_path):
     # Given: 源里分支 main 的归档由本仓库当前的 install.sh 与 template/ 打成；PATH 上有 openspec 桩，没有 claude
     source = make_source(tmp_path, "main", "heads", {"install.sh": INSTALLER, "template": ROOT / "template"})
@@ -292,7 +288,6 @@ def test_pipe_real_installer_runs_local_mode(tmp_path):
     assert "模式: local" in out, out
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_readme_documents_pinned_install():
     # Given: README.md 与 install.sh --help 的输出
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -317,7 +312,6 @@ def test_readme_documents_pinned_install():
 # ---------------------------------------------------------------- 摘自原仓 #55（install-openspec-seeds）· scenario: installer-edition#fresh-install-ships-only-seeds / upgrade-adds-no-dev-artifacts / upgrade-keeps-user-seed-edits / upgrade-lists-suspected-dev-artifacts
 
 
-# 骨架（workflow-edition S4）：实现后逐条去掉 xfail 标记；在基底上已通过的不带标记。
 TEMPLATE_OPENSPEC = ROOT / "template" / "openspec"
 OPENSPEC_SEEDS = {".gitignore", "config.yaml", "changes/.gitkeep", "adr/.gitkeep", "superpower/.gitkeep"}
 SUSPECT_HINT = "旧版安装器"
@@ -334,7 +328,6 @@ def _dev_artifact_names():
     return change, adr
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_fresh_install_ships_only_seeds(tmp_path):
     # Given: 一个空目录
     target = tmp_path / "proj"
@@ -348,7 +341,6 @@ def test_fresh_install_ships_only_seeds(tmp_path):
     assert _files_under(target / "openspec") == OPENSPEC_SEEDS | schemas
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_upgrade_adds_no_dev_artifacts(tmp_path):
     # Given: 用 install.sh 装好的项目；用户自己建了 change my-change（含 proposal.md）与 ADR 0001-mine.md
     target = tmp_path / "proj"
@@ -387,7 +379,6 @@ def test_upgrade_keeps_user_seed_edits(tmp_path):
     assert schema.read_bytes() == (TEMPLATE_OPENSPEC / "schemas" / "intent-driven" / "schema.yaml").read_bytes()
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_upgrade_lists_suspected_dev_artifacts(tmp_path):
     # Given: 已装项目里有与模板 change 目录同名的目录、与模板 DRAFT ADR 同名的文件（模拟旧版安装器误拷），另有用户自己的 my-change
     change, adr = _dev_artifact_names()
@@ -430,7 +421,6 @@ def _hook_commands(settings):
             for e in entries for h in e.get("hooks") or []}
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_help_names_workflow_repo():
     # Given: 本仓的 install.sh
     # When: 运行 install.sh --help
@@ -471,7 +461,6 @@ def test_upgrade_reregisters_v2_hooks(tmp_path):
     assert set(V2_HOOKS) <= _hook_commands(settings), _hook_commands(settings)
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_upgrade_warns_enabled_flight_plugin(tmp_path):
     # Given: 已安装的目标仓库，其 settings.json 的 enabledPlugins 含 "flight@intent-driven": true
     target = tmp_path / "proj"
@@ -493,7 +482,6 @@ def test_upgrade_warns_enabled_flight_plugin(tmp_path):
     assert json.loads(settings.read_text(encoding="utf-8"))["enabledPlugins"] == {"flight@intent-driven": True}
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S4 尚未实现")
 def test_upgrade_lists_mod_leftovers(tmp_path):
     # Given: 已安装的目标仓库里有 Mod 版留下的 .claude/hooks/ledger.py 与 .claude/hooks/plan_fp.py
     target = tmp_path / "proj"
