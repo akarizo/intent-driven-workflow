@@ -73,7 +73,8 @@
       "title": "判定器：代码树没变时 lint / typecheck 沿用、全量可度量时 verify 从全量 junit 推导",
       "owns": [
         "template/.claude/hooks/slice-gate.py",
-        "tests/test_baseline_skip.py"
+        "tests/test_baseline_skip.py",
+        "tests/test_slice_gate.py"
       ],
       "deps": [
         "S2"

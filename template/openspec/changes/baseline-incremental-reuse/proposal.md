@@ -81,7 +81,7 @@ LOW 6 条：
 - `template/.claude/commands/opsx-propose.md`、`template/.claude/skills/openspec-propose/SKILL.md`（同改）、`README.md`。
 - 测试：
   - 新增 `tests/test_baseline_incremental.py`、`tests/test_baseline_pool.py`、`tests/test_baseline_skip.py`、`tests/test_baseline_incremental_docs.py`；
-  - `tests/test_slice_gate.py` 里对 verify 的完全相等断言放宽为只比 `exit`。
+  - `tests/test_slice_gate.py` 里对 verify 的完全相等断言放宽为只比 `exit`，对 lint 的完全相等断言放宽为只比 `exit` 与 `lines`。
 - ADR：
   - 新增 `DRAFT-baseline-reuse-by-content-fingerprint`、`DRAFT-baseline-verify-derived-from-full-suite`；
   - `DRAFT-test-gate-baseline-diff` 继续有效，不 supersede。

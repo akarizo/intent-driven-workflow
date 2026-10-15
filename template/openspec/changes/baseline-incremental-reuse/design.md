@@ -257,7 +257,7 @@ flowchart TD
   - 旧格式 `gate-baseline.json` 没有 `snapshot` / `cmd_key`，不作候选；下一次 baseline 跑全量后升级为新格式；
   - preflight 对旧格式保持四项校验；
   - verify / lint 记录新增 `cmd`、`key`、`reused`、`derived`；
-  - `tests/test_slice_gate.py::test_baseline_writes_gate_baseline` 对 verify 的完全相等断言放宽为只比 `exit`（S1）。
+  - `tests/test_slice_gate.py::test_baseline_writes_gate_baseline` 对 verify 的完全相等断言放宽为只比 `exit`（S1）；`test_baseline_records_empty_lines_for_green_lint` 对 lint 的完全相等断言放宽为只比 `exit` 与 `lines`（S3，lint 记录新增 `cmd`、`key`）。
 - **升级**：判定器随 `install.sh --upgrade` 下发。池目录按需创建，删掉它只会让下一次跑全量。
 - **回退**：`--full` 恒等于旧行为（不复用、不沿用；verify 推导仍按 D11，可推导条件不满足即照跑）。回滚代码不影响已有 change，新字段会被旧代码忽略。
 
