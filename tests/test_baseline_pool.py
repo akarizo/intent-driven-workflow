@@ -10,7 +10,7 @@ import time
 import pytest
 
 from conftest import git, write
-from test_baseline_incremental import (append, baseline, clear, counting_test, full_c, marker, read_bl, read_plan,
+from test_baseline_incremental import (PY, append, baseline, clear, counting_test, full_c, marker, read_bl, read_plan,
                                        setup_change, two_changes)
 
 POOL = "flight-baseline-pool"
@@ -31,7 +31,6 @@ def pool_entries(git_repo):
     return [n for n in os.listdir(p) if n.endswith(".json") and not n.startswith(".tmp-")]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：基线池与跨 change 复用")
 def test_cross_change_reuse_same_tree(git_repo):
     # Given: change c 跑过一次全量绿基线，没有预存红；change d 的全量脚本与 c 内容相同、命令只差 change 目录名，还没有基线；
     #        c 的工件与门禁脚本都没有提交
@@ -51,7 +50,6 @@ def test_cross_change_reuse_same_tree(git_repo):
     assert read_plan(d)["gate"]["full_suite_sec"] == bc["test"]["sec"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：基线池与跨 change 复用")
 def test_cross_change_reuse_after_test_only_commit(git_repo):
     # Given: change c 跑过一次全量绿基线，没有预存红；之后提交了一个只新增 tests/test_more.py（用例通过）的 commit；
     #        d 的全量脚本与 c 内容相同
@@ -71,7 +69,6 @@ def test_cross_change_reuse_after_test_only_commit(git_repo):
     assert bd["mode"] == "incremental" and bd["incremental"]["files"] == ["tests/test_more.py"], bd
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：基线池与跨 change 复用")
 def test_cross_change_ignores_sourced_files(git_repo):
     # Given: change c 跑过一次全量绿基线，没有预存红；d 的全量脚本与 c 内容相同，但两者各自 source 的 verify/_env.sh 内容不同
     c, d = two_changes(git_repo, c_env="OWNED_PY=(a.py)\n", d_env="OWNED_PY=(b.py)\n", old_red=False)
@@ -87,12 +84,15 @@ def test_cross_change_ignores_sourced_files(git_repo):
     assert bd["mode"] == "incremental" and bd["incremental"]["from"]["change"] == "c", bd
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：同一组差异文件只补跑一次")
 def test_failed_rerun_not_repeated_across_candidates(git_repo):
     # Given: change c 与 d 的全量脚本内容相同，各跑过一次全量绿基线（d 用 --full），池里至少有它们两条；
-    #        之后往 tests/test_cap.py 追加一个会失败的用例，它每运行一次就往仓外计数文件追加一个字符
+    #        之后往 tests/test_cap.py 追加一个会失败的用例，它每运行一次就往仓外计数文件追加一个字符；
+    #        d 的 S1 verify 不运行 tests/test_cap.py（只数补跑与全量）
     counter = marker(git_repo, "count")
     c, d = two_changes(git_repo, old_red=False)
+    plan = read_plan(d)
+    plan["slices"][0]["verify"] = "%s -c pass" % PY
+    write(d / "slices.json", json.dumps(plan, ensure_ascii=False, indent=1))
     full_c(git_repo, c)
     pd = baseline(git_repo, d, "--full")
     assert pd.returncode == 0, pd.stdout + pd.stderr
@@ -109,7 +109,6 @@ def test_failed_rerun_not_repeated_across_candidates(git_repo):
     assert counter.read_text() == "xx", counter.read_text()
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：池的保留与容错")
 def test_pool_pruned_and_tolerant(git_repo):
     # Given: 基线池里预置 31 条 cmd_key 不同的旧条目、1 个内容不是 JSON 的 bad.json，以及一个修改时间在两小时前的 .tmp-stale.json；
     #        change c 没有预存红
@@ -143,7 +142,6 @@ def test_pool_pruned_and_tolerant(git_repo):
     assert not stale.exists()
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：写池失败只警告")
 def test_pool_write_failure_only_warns(git_repo):
     # Given: git common dir 下的 flight-baseline-pool 是一个普通文件；change c 没有预存红
     d = setup_change(git_repo, old_red=False)
