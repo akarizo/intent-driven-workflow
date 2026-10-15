@@ -6,8 +6,6 @@ import shlex
 import subprocess
 import sys
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 from test_slice_gate import plan, slice_, write_plan
 

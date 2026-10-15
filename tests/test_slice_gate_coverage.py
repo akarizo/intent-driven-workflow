@@ -2,8 +2,6 @@
 COVERAGE_FAIL 按 pytest-cov 7.1.0 源码（pytest_cov/plugin.py）的做法构造：测试跑完后打印两行标记，并让 session.testsfailed 加 1。"""
 import json
 
-import pytest
-
 from conftest import commit_all, write
 from test_slice_gate_final import OLD_RED, PYTEST, _baseline, _final, _repo
 

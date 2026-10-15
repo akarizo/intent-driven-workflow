@@ -107,9 +107,9 @@ git clone --depth 1 --branch stable-v2.0 https://github.com/akarizo/intent-drive
 
 main 在 `stable-v2.0` 之上摘入了原仓 #35–#60 里不依赖插件的通用修复：引擎抛错重派与执行体一律隔离、G7 按实际运行结果判、全量测试按基线逐条差分、`/pr-ship` 预合并检查按 `merge-tree` 退出码判断、安装器保留 `settings.json` 并只下发种子等。
 
-> ⚠ 不要从 tag 路径（`raw.githubusercontent.com/.../<tag>/install.sh`）取脚本走管道：`stable-v2.0` 及更早的脚本不认 tag，缺省装的仍是 main。始终用 main 上的 `install.sh` 加 `IDT_BRANCH`。
+> ⚠ 不要从 tag 路径（`raw.githubusercontent.com/.../<tag>/install.sh`）取脚本走管道：`stable-v2.0` 及更早的脚本不认 tag，且缺省从原仓 `akarizo/intent-driven-claude-code` 下载，装上的是 Mod 版的 main。始终用本仓 main 上的 `install.sh` 加 `IDT_BRANCH`。
 >
-> ⚠ 不支持用 `--upgrade` 把已装新版的项目降级到老版本：新版多出的文件不会被删除，`settings.json` 里已合入的 hooks 也会保留。
+> ⚠ 不支持用 `--upgrade` 把已装新版的项目降级到老版本：新版多出的文件不会被删除，`settings.json` 里已合入的 hooks 也会保留。老 tag 的安装器还带着当时的缺陷：`--upgrade` 会用模板覆盖你的 `.claude/settings.json`，并把本库自己的 change 与 ADR 草稿拷进 `openspec/`。
 
 ### 一键更新（已装项目）
 

@@ -3,8 +3,6 @@ import os
 import shutil
 import subprocess
 
-import pytest
-
 from conftest import ROOT
 
 GITIGNORE = ROOT / "template" / "openspec" / ".gitignore"
