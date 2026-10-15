@@ -277,7 +277,6 @@ def test_workflow_start_carries_expect_branch(tmp_path):
     assert "expectHead" not in WORKFLOW.read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_merge_dispatch_forbids_final(tmp_path):
     # Given: waves [[S1, S2], [S3]]，全部切片与合回都成功
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")]] + TAIL_REPLIES
@@ -384,7 +383,7 @@ def test_apply_docs_mirror_noreturn_retry():
 
 
 # ---------------------------------------------------------------- 摘自原仓 #36（flight-integrity-fixes）· scenario: workflow-engine-recovery#workflow-* / single-slice-* / apply-docs-*
-# 骨架（workflow-edition S1）：实现后逐条去掉 xfail 标记。上方 HARNESS 已按运行时实测改为 agent() 可抛错、parallel 逐个兜底。
+# 上方 HARNESS 已按运行时实测改为 agent() 可抛错、parallel 逐个兜底。
 
 THROW = {"__throw__": "agent({schema}): subagent completed without calling StructuredOutput (after in-conversation nudge)"}
 REVIEW_HIGH = {"findings": [{"severity": "HIGH", "file": "a.py", "line": 1, "summary": "漏判空值", "fix": "补判空"}]}
@@ -395,7 +394,6 @@ def fallback_section(text):
     return text[i:text.index("两条路径最终都产出", i)]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_retries_when_executor_throws(tmp_path):
     # Given: waves [[S1, S2], [S3]]；S1 首轮 agent 调用抛错（执行体没交回结构化结果），重派后门禁绿；S2、S3 一次绿
     replies = [["^S1$", THROW], ["^S1:retry$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")]] + TAIL_REPLIES
@@ -411,7 +409,6 @@ def test_workflow_retries_when_executor_throws(tmp_path):
     assert out["result"]["blocked"] == [], out["result"]["blocked"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_blocks_after_retry_throws(tmp_path):
     # Given: waves [[S1, S2], [S3]]、S3 依赖 S1；S1 首轮与重派的 agent 调用都抛错
     replies = [["^S1(:retry)?$", THROW], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")]] + TAIL_REPLIES
@@ -428,7 +425,6 @@ def test_workflow_blocks_after_retry_throws(tmp_path):
     assert "S3" in blocked and "S3" not in labels
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_apply_docs_describe_recovered_gate():
     # Given: slice-executor.md、opsx-apply.md 与 openspec-apply-change/SKILL.md
     fm, body = frontmatter(AGENTS / "slice-executor.md")
@@ -444,7 +440,6 @@ def test_apply_docs_describe_recovered_gate():
     assert all("抛错" in f for f in fallbacks), fallbacks
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_single_slice_wave_runs_isolated(tmp_path):
     # Given: waves [[S1, S2], [S3]]，全部一次门禁绿，S3 的 commit 为 f…f
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3", commit="f" * 40)]] + TAIL_REPLIES
@@ -459,7 +454,6 @@ def test_single_slice_wave_runs_isolated(tmp_path):
     assert any("f" * 40 in c["prompt"] for c in merges), [c["opts"]["label"] for c in merges]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_fix_runs_isolated_and_merges_before_final(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审给出 1 条 HIGH；fix 返回的 commit 为 9…9
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
@@ -475,7 +469,6 @@ def test_fix_runs_isolated_and_merges_before_final(tmp_path):
     assert "9" * 40 in prompt and prompt.index("9" * 40) < prompt.index("slice-gate.py final"), prompt
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_apply_docs_mirror_always_isolate():
     # Given: opsx-apply.md、openspec-apply-change/SKILL.md 与 openspec-git-discipline/SKILL.md
     cmd = (CMD / "opsx-apply.md").read_text(encoding="utf-8")
@@ -495,7 +488,6 @@ def test_apply_docs_mirror_always_isolate():
 
 # ---------------------------------------------------------------- 摘自原仓 #36（flight-integrity-fixes 评审修复）· scenario: workflow-engine-recovery#fix-* / workflow-*-fix-*
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_finalizes_when_fix_throws(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审给出 1 条 HIGH；fix 首轮与重派的 agent 调用都抛错
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
@@ -512,7 +504,6 @@ def test_workflow_finalizes_when_fix_throws(tmp_path):
     assert blocked["fix"]["kind"] == "infra" and "未返回" in blocked["fix"]["reason"] and "已重派" in blocked["fix"]["reason"], blocked
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_retries_fix_after_throw(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审给出 1 条 HIGH；fix 首轮 agent 调用抛错，重派返回 commit 9…9
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
@@ -528,7 +519,6 @@ def test_workflow_retries_fix_after_throw(tmp_path):
     assert out["result"]["blocked"] == [], out["result"]["blocked"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_fix_prompt_checks_base_first(tmp_path):
     # Given: branch=worktree-c，waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审给出 1 条 HIGH
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
@@ -545,7 +535,6 @@ def test_fix_prompt_checks_base_first(tmp_path):
     assert all("--expect-branch worktree-c" in c for c in start_cmds(prompt)) and start_cmds(prompt), prompt
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_apply_docs_mirror_fix_base_check():
     # Given: opsx-apply.md 与 openspec-apply-change/SKILL.md
     cmd = (CMD / "opsx-apply.md").read_text(encoding="utf-8")
@@ -560,7 +549,6 @@ def test_apply_docs_mirror_fix_base_check():
         assert "fix 未返回" in f, f
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_workflow_skips_merge_when_fix_base_rejected(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审给出 1 条 HIGH；fix 首轮与重派都以 G0 base 拒绝，返回的 commit 为 8…8
     g0 = {"slice": "fix", "ok": False, "commit": "8" * 40, "failed": ["G0 base: HEAD 不是分支 worktree-c 的后代"]}
@@ -580,12 +568,11 @@ def test_workflow_skips_merge_when_fix_base_rejected(tmp_path):
 
 
 # ---------------------------------------------------------------- 摘自原仓 #37（flight-integrity-followups）· scenario: workflow-engine-recovery#mechanical-roles-* / reviewer-failure-recorded / apply-docs-mirror-agent-failure-handling
-# 骨架（workflow-edition S1）：实现后逐条去掉 xfail 标记。THROW / fallback_section 复用上方定义。
+# THROW / fallback_section 复用上方定义。
 
 ALL_GREEN = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")]]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_mechanical_roles_retry_once(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；wave 1 的合回与 final-gate 的首次 agent 调用都抛错，重派后都成功
     retried_final = {"slice": "final", "ok": True, "commit": "a" * 40, "failed": []}
@@ -602,7 +589,6 @@ def test_mechanical_roles_retry_once(tmp_path):
     assert out["result"]["final"] == retried_final, out["result"]["final"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_mechanical_roles_blocked_after_retry(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；wave 1 的合回与 final-gate 的首次和重派调用都抛错
     replies = ALL_GREEN + [["^integrate:w1(:retry)?$", THROW], ["^final-gate(:retry)?$", THROW]] + TAIL_REPLIES
@@ -619,7 +605,6 @@ def test_mechanical_roles_blocked_after_retry(tmp_path):
         assert blocked[key]["kind"] == "infra" and "未返回" in blocked[key]["reason"] and "已重派" in blocked[key]["reason"], blocked
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_reviewer_failure_recorded(tmp_path):
     # Given: waves [[S1, S2], [S3]] 全部门禁绿；S1 的评审员调用抛错，S2 的评审给出 1 条 MEDIUM
     medium = {"severity": "MEDIUM", "file": "b.py", "line": 2, "summary": "命名不一致", "fix": "统一命名"}
@@ -636,7 +621,6 @@ def test_reviewer_failure_recorded(tmp_path):
     assert "final-gate" in labels, labels
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S1 尚未实现")
 def test_apply_docs_mirror_agent_failure_handling():
     # Given: opsx-apply.md 与 openspec-apply-change/SKILL.md
     cmd = (CMD / "opsx-apply.md").read_text(encoding="utf-8")

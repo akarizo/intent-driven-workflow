@@ -14,7 +14,7 @@
 //   models        必填：{ executor, reviewer, integrator }，按角色显式路由（铁律：不得留空让 env 默认兜底）
 //                 executor / reviewer = 会话主模型别名（如 "opus" / "fable"）；integrator = 低档模型（"sonnet"）
 //   efforts       可选：{ executor: "high", reviewer: "high", integrator: "low" }
-// 结构：wave 内 parallel 派发切片 → 门禁红或执行体未返回重试一次 →多切片 wave 由 integrator 合回 →
+// 结构：wave 内 parallel 派发切片（一律 isolation: worktree）→ 门禁红或执行体未返回 / 抛错重试一次 → 每个 wave 由 integrator 合回 →
 //       评审只 push 不 await（离关键路径）→ Fix 阶段汇总 CRITICAL/HIGH 一次批量修复 → Finalize 全量门禁。
 // 不用时间戳与随机数（运行时为可续跑而禁止它们），脚本本身不碰文件系统，全部由 agent 执行。
 export const meta = {
@@ -146,12 +146,14 @@ for (const [i, allWave] of waves.entries()) {
   const wave = allWave.filter((s) => !skipped.includes(s))
   log(`wave ${i + 1}/${waves.length}: ${wave.join(', ') || '(全部因依赖 blocked 跳过)'}`)
   if (!wave.length) continue
-  const iso = wave.length > 1 ? 'worktree' : undefined
+  // 每个执行体（含单片 wave）都在临时 worktree 里跑，由 integrator 合回：主 worktree 不留执行体的 .openspec-slice 标记
+  const iso = 'worktree'
+  // 执行体没交回结构化结果时 agent 调用会抛错（运行时实测），与返回空值同样按未返回处理
+  const run = (s, retryOf) => agent(executorPrompt(s, retryOf),
+    { label: retryOf ? `${s}:retry` : s, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+    .catch(() => null)
   const done = await parallel(wave.map((s) => () =>
-    agent(executorPrompt(s), { label: s, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
-      .then((r) => (!r || !r.ok)
-        ? agent(executorPrompt(s, r || NO_RETURN),{ label: `${s}:retry`, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
-        : r)))
+    run(s).then((r) => (!r || !r.ok) ? run(s, r || NO_RETURN) : r)))
   for (const [k, r] of done.entries()) {
     const s = wave[k]
     if (!r) { blocked.push({ slice: s, kind: 'infra', reason: 'agent 未返回（已重派一次）' }); continue }
@@ -159,7 +161,7 @@ for (const [i, allWave] of waves.entries()) {
     if (!r.ok) { blocked.push({ slice: s, kind: 'gate', reason: r.failed.join('; ') }); continue }
   }
   const merged = wave.filter((s, k) => done[k] && done[k].ok)
-  if (iso && merged.length) {
+  if (merged.length) {
     const shas = merged.map((s) => done[wave.indexOf(s)].commit)
     // 临时 worktree 里跑出的门禁结论（含天花板行）不会随 commit 进分支，由 integrator 用 record --json 幂等写回
     const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
@@ -168,18 +170,24 @@ for (const [i, allWave] of waves.entries()) {
       const payload = { slice: s, ok: !!g.ok, commit: g.commit, failed: g.failed || [], warnings: g.warnings || [], ceilings: g.ceilings || [] }
       return `python3 ${hooksDir}/slice-gate.py record --change-dir ${changeDir} --json ${shq(JSON.stringify(payload))}`
     })
-    const integ = await agent(
+    // integrator 抛错与未返回同样重派一次；返回 ok:false（合回冲突）是确定性的，不重派
+    const callInteg = (retry) => agent(
       rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件（timeline.md / gate-report.md / evidence.log）提交掉；` +
       `再按第 1 项把切片 ${merged.join(', ')} 的 commit 合回当前分支：${shas.join(' ')}（冲突则 abort 并返回 ok:false）。` +
       `合回后逐条运行（把临时 worktree 里的门禁结论写回分支）：\n${recordCmds.join('\n')}\n` +
       `然后按第 2 项刷新 ${changeDir}/slices/_interfaces.md，并 \`python3 ${hooksDir}/timeline.py record integrate --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后再按第 0 项把飞行记录提交。` +
       '本次只合回，不要运行第 3 项（全量门禁 final）——后续 wave 的 scenario 还没解锁，现在跑必然红。返回 JSON {ok, merged, failed, warnings}。',
-      { label: `integrate:w${i + 1}`, schema: MERGE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
-    if (!integ || !integ.ok) blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: integ ? integ.failed.join('; ') : 'integrator 未返回' })
+      { label: `integrate:w${i + 1}` + (retry ? ':retry' : ''), schema: MERGE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
+      .catch(() => null)
+    let integ = await callInteg(false)
+    if (!integ) integ = await callInteg(true)
+    if (!integ || !integ.ok) blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: integ ? integ.failed.join('; ') : 'integrator 未返回（已重派一次）' })
   }
   for (const s of merged) {
     const gate = done[wave.indexOf(s)]
-    reviews.push(agent(reviewPrompt(s, gate), { label: `review:${s}`, phase: 'Review', schema: FINDINGS, model: models.reviewer, effort: efforts.reviewer, ...typed('code-reviewer') }))
+    // 评审员抛错不重派、不拖垮工作流：记 blocked（infra），切片级评审缺失由 /pr-ship 的整 PR 评审兜住
+    reviews.push(agent(reviewPrompt(s, gate), { label: `review:${s}`, phase: 'Review', schema: FINDINGS, model: models.reviewer, effort: efforts.reviewer, ...typed('code-reviewer') })
+      .catch(() => { blocked.push({ slice: `review:${s}`, kind: 'infra', reason: '切片 ' + s + ' 评审未返回（不重派，PR 评审兜底）' }); return null }))
   }
 }
 
@@ -190,21 +198,44 @@ const deferred = findings.filter((f) => f.severity !== 'CRITICAL' && f.severity 
 log(`评审 finding：阻断 ${blocking.length}，非阻断 ${deferred.length}`)
 let fix = null
 if (blocking.length) {
-  fix = await agent([
+  // fix 也是执行体：agent 调用抛错与未返回同样处理，重派一次；仍为空记 blocked（infra），Finalize 照常跑（mergeFix 自动跳过）
+  const runFix = (retry) => agent([
     rules('slice-executor') + `你在仓库根。一次性修复 OpenSpec change \`${change}\` 评审挡下的 ${blocking.length} 条 CRITICAL/HIGH，逐条 commit（fix: 前缀），不 push。`,
-    `先运行 \`python3 ${hooksDir}/slice-gate.py start fix --change-dir ${changeDir}\` 记录起点（fix 不受单切片所有权限制：slices.json 若无 fix 条目，start 会拒绝，此时跳过 start）。`,
+    retry ? '上一轮 fix 执行体未返回（多为撞 maxTurns）或被 G0 基点校验拒绝，没有可合回的修复：从头按 finding 清单修复。' : '',
+    // 与切片执行体同一道防线：临时 worktree 可能不是从 change 分支最新 commit 分叉；start 可能因无 fix 条目被拒，所以先单独校验
+    branch
+      ? `第一步做基点校验：运行 \`git merge-base --is-ancestor $(git rev-parse ${branch}) HEAD\`；非 0 退出（HEAD 不是分支 ${branch} 最新 commit 的后代）→ 不做任何改动，直接返回 {"slice":"fix","ok":false,"commit":"<实际 HEAD>","failed":["G0 base: HEAD 不是分支 ${branch} 的后代"]}。`
+      : '',
+    `${branch ? '再' : '先'}运行 \`${startCmd('fix')}\` 记录起点（fix 不受单切片所有权限制：slices.json 若无 fix 条目，start 会拒绝，此时跳过 start${branch ? '；基点已由上一步校验' : ''}）。`,
     `finding 清单：${JSON.stringify(blocking)}`,
-    `每条修复都要有先失败的测试；修完 \`python3 ${hooksDir}/timeline.py record fix --change-dir ${changeDir} --note "blocking=${blocking.length}"\`，` +
-    `再运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，把 JSON 原样返回。`,
-  ].join('\n'), { label: 'fix', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+    // fix 在临时 worktree 里跑，timeline 记录进不了分支：record fix 由 finalize 合回后写
+    `每条修复都要有先失败的测试；修完运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，把 JSON 原样返回。`,
+  ].filter(Boolean).join('\n'), { label: retry ? 'fix:retry' : 'fix', isolation: 'worktree', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+    .catch(() => null)
+  // G0 基点拒绝的 commit 是旧基点上的 HEAD，不能合回：与未返回同样重派一次（新开的临时 worktree 可能基点正确）
+  const baseRejected = (r) => !!r && (r.failed || []).some((f) => f.startsWith('G0'))
+  fix = await runFix(false)
+  if (!fix || baseRejected(fix)) fix = (await runFix(true)) || fix
+  if (!fix) blocked.push({ slice: 'fix', kind: 'infra', reason: 'fix agent 未返回（已重派一次）' })
+  else if (baseRejected(fix)) { blocked.push({ slice: 'fix', kind: 'infra', reason: fix.failed.join('; ') }); fix = null }
 }
 
 phase('Finalize')
-const final = await agent(
-  rules('integrator') + `按 agent 定义第 0 项先提交 ${changeDir} 内未提交的飞行记录文件；` +
+// fix 在临时 worktree 里提交：合回指令必须先于 final，否则 final 验的是没有修复的分支
+const mergeFix = fix && fix.commit
+  ? `再按第 1 项把 fix 的 commit 合回当前分支：${fix.commit}（冲突则 abort，返回 ok:false 且 failed 写「merge fix 冲突」，不再往下跑）；` +
+    `\`python3 ${hooksDir}/timeline.py record fix --change-dir ${changeDir} --note "blocking=${blocking.length}"\`；`
+  : ''
+// final-gate 同 integrator：抛错与未返回重派一次，仍为空记 blocked（infra），返回的 final 为 null
+const callFinal = (retry) => agent(
+  rules('integrator') + `按 agent 定义第 0 项先提交 ${changeDir} 内未提交的飞行记录文件；` + mergeFix +
   `\`python3 ${hooksDir}/timeline.py record review --change-dir ${changeDir} --note "findings=${findings.length} blocking=${blocking.length} deferred=${deferred.length}"\`；` +
   `再按第 3 项运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，` +
   `再 \`python3 ${hooksDir}/timeline.py record apply-done --change-dir ${changeDir} --note "blocked=${blocked.length} blocking=${blocking.length}"\`，最后按第 0 项再提交一次飞行记录。返回 final 的 JSON。`,
-  { label: 'final-gate', schema: GATE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
+  { label: retry ? 'final-gate:retry' : 'final-gate', schema: GATE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
+  .catch(() => null)
+let final = await callFinal(false)
+if (!final) final = await callFinal(true)
+if (!final) blocked.push({ slice: 'final', kind: 'infra', reason: 'final-gate 未返回（已重派一次）' })
 
 return { change, models, efforts, slices: results, blocked, blocking, deferred, fix, final }

@@ -38,13 +38,13 @@ Never create commits, branches, or merges unless the user explicitly asks. This 
 
 This carve-out covers **only** per-task implementation commits inside that apply flow. It does NOT relax anything about merge / push / archive, or about auto-committing proposal or archive artifacts without the user asking.
 
-**Carve-out — wave 内并行切片临时 worktree（flight apply）：** `opsx-apply` 飞行工作流（`Workflow` 工具，或其 `Agent` 工具回退路径）为 wave 内并行的切片各开一个临时 worktree（`isolation: worktree`，见 `template/.claude/workflows/opsx-apply.js`）。这不违反上面「每 change 一间，禁止嵌套子 worktree」的规则，因为：
+**Carve-out — 每个执行体的临时 worktree（flight apply）：** `opsx-apply` 飞行工作流（`Workflow` 工具，或其 `Agent` 工具回退路径）为每个执行体（含单片 wave 与 fix；wave 内并行的切片各自一个）开一个临时 worktree（`isolation: worktree`，见 `template/.claude/workflows/opsx-apply.js`）。这不违反上面「每 change 一间，禁止嵌套子 worktree」的规则，因为：
 
 - **由运行时创建，不是 LLM 手动嵌套** —— 临时 worktree 由 Workflow/Agent 运行时在该切片执行期间创建，执行体本身不手动在 change worktree 内再开子 worktree；
-- **以 SHA 合回，不是 `merge`/`push`** —— 每个切片的本地实现 commit 由 `integrator` 以该切片 HEAD 的 SHA 合回 change 分支，不 push、不 merge 进 main；
+- **以 SHA 合回，不是 `merge`/`push`** —— 每个切片（及 fix）的本地实现 commit 由 `integrator` 以其 HEAD 的 SHA 合回 change 分支，不 push、不 merge 进 main；
 - **清理由运行时负责（无残留改动时）** —— 临时 worktree 内没有未提交改动时由运行时自动清理；若有残留（例如 hook 追加的飞行记录），运行时会保留它，由人确认内容已由 integrator `record` 写回后，在主仓库根手动 `git worktree remove` 清理，执行体不动它。
 
-本 carve-out 只覆盖飞行 apply 工作流产生的 wave 内并行临时 worktree，不放松其它场景下「每 change 一间，禁止嵌套子 worktree」的规则，也不授权对 main 的 `push` 或 `merge`。
+本 carve-out 只覆盖飞行 apply 工作流为每个执行体（含单片 wave 与 fix）产生的临时 worktree，不放松其它场景下「每 change 一间，禁止嵌套子 worktree」的规则，也不授权对 main 的 `push` 或 `merge`。
 
 ## Gates
 
