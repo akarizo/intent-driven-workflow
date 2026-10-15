@@ -1,11 +1,6 @@
 {
   "blocked": [],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "summary": "路由不符 · session-decompose --expect-models exit 3：integrate:w1（两轮各一次）与 integrate:w2 角色判为 executor · 期望 opus · 实际 claude-sonnet-5-5。成因：本次以 useAgentTypes=false 起飞（template/.claude/agents 未注册为 agent 类型），Workflow agent 不带 agentType，session-decompose.py:25 按阶段回退，把 Implement 阶段派发的 integrator 判成 executor；integrator 按路由表应为 sonnet，实际即 sonnet。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "MEDIUM",
@@ -111,6 +106,13 @@
       "line": 729,
       "summary": "（需进一步确认）模块判定 `m = 路径去 .py 后 / 换 .` 默认 pytest rootdir 就是仓库根。design D11 说 rootdir 不同时只会「找不到 m 而多跑」，但它也可能匹配到另一个文件的 classname。例：仓库根下没有 ini，`gate.test = pytest -q tests`，rootdir 被推断为 tests/，tests/test_a.py 的 classname 是 `test_a`。若仓库根另有一个 test_a.py 被某片 verify 引用，m=`test_a` 会命中 cases，这个从未被全量运行的文件就被判为绿。另一种情形是子目录 ini 让 rootdir 下移，classname 与根下同名路径撞上。",
       "fix": "推导时再加一道保守条件：每个 verify 路径必须落在全量 gate.test 的某个路径之下（路径相等或以它加 `/` 开头）；全量没有写路径时，要求仓库根有 pytest 配置（pytest.ini / pyproject 的 tool.pytest / tox.ini / setup.cfg），能确定 rootdir 就是根，否则不推导。同时在 design D11 的「为什么 classname 对不上就照跑」一段补写这种撞名的边界。"
+    },
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 25,
+      "summary": "路由不符 · session-decompose --expect-models exit 3：integrate:w1（两轮各一次）与 integrate:w2 角色判为 executor · 期望 opus · 实际 claude-sonnet-5-5。成因：本次以 useAgentTypes=false 起飞（template/.claude/agents 未注册为 agent 类型），Workflow agent 不带 agentType，session-decompose.py:25 按阶段回退，把 Implement 阶段派发的 integrator 判成 executor；integrator 按路由表应为 sonnet，实际即 sonnet。 ‖ 2026-10-15 人类放行（「放行路由那条」）：属对账脚本误判，非本 PR 代码。实测两轮 Workflow agent：executor / reviewer 8 个均 claude-opus-5-5，integrator（integrate:w1 ×2、integrate:w2、final-gate ×2）5 个均 claude-sonnet-5-5，与路由表一致。",
+      "fix": "另开 change：role 判定改为 agentType → label（integrate:* / final-gate* → integrator，review:* → reviewer，其余 → executor）→ 阶段；补两条测试锁误报与漏报（无 agentType 的 integrate:w1 跑 sonnet 判一致、跑 opus 判不符）。"
     }
   ],
   "fix": null
