@@ -1339,6 +1339,13 @@ def cmd_baseline(args):
     elif skipped:
         bl["reuse_skipped"] = skipped[:5]
     bl["ok"] = not reasons
+    # 入池（design D5）：只收全绿的全量；带预存红的跨 change 用不上，指纹为空的匹配不到
+    if hit is None and bl["ok"] and bl["test"].get("exit") == 0 and key:
+        w = _pool_write(root, {k: bl.get(k) for k in
+                               ("change", "commit", "at", "ok", "cmd_key", "snapshot", "byproducts", "test")})
+        if w:
+            warnings.append(w)
+            bl["warnings"] = warnings
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump(bl, f, ensure_ascii=False, indent=2)
         f.write("\n")
@@ -1594,10 +1601,99 @@ def _delta(root, cand, cur_snap, head, change_rel, same_change):
 
 
 def _baseline_candidates(root, old, key, name, full):
-    """可复用候选，按优先级排：本 change 旧基线（有 snapshot、非运行标记）在前；--full 时没有候选。"""
-    if full or not isinstance(old, dict) or old.get("running") is True or not isinstance(old.get("snapshot"), dict):
+    """可复用候选，按优先级排：本 change 旧基线（有 snapshot、非运行标记）在前，池候选在后（design D5）；--full 时没有候选。"""
+    if full:
         return []
-    return [dict(old, change=old.get("change") or name)]
+    cands = []
+    if isinstance(old, dict) and old.get("running") is not True and isinstance(old.get("snapshot"), dict):
+        cands.append(dict(old, change=old.get("change") or name))
+    return cands + _pool_candidates(root, key)
+
+
+# ---------------------------------------------------------------- 基线池（design D5）
+
+POOL_DIR = "flight-baseline-pool"
+POOL_KEEP = 30
+POOL_TMP_TTL = 3600  # .tmp- 残留超过这么久（秒）视为崩溃遗留，清掉
+
+
+def _pool_dir(root):
+    """git common dir 下的基线池目录（同仓各 worktree 共享）；相对路径按 root 解析成绝对路径。"""
+    common = git(root, "rev-parse", "--git-common-dir")
+    return os.path.join(common if os.path.isabs(common) else os.path.join(root, common), POOL_DIR)
+
+
+def _pool_order(name, entry):
+    """排序键：at 去掉符号（读不出时用文件名，文件名以它开头），由旧到新可比。"""
+    at = entry.get("at") if isinstance(entry, dict) else None
+    return re.sub(r"[^0-9A-Za-z]", "", at) if isinstance(at, str) and at else name
+
+
+def _pool_read(pdir, name):
+    try:
+        with open(os.path.join(pdir, name), encoding="utf-8") as f:
+            e = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return e if isinstance(e, dict) else None
+
+
+def _pool_write(root, entry):
+    """原子写一条池记录（临时文件 + os.replace），再按 at 只留最新 POOL_KEEP 条、清掉过期 .tmp- 残留；
+    失败返回警告文本，成功返回 None。"""
+    try:
+        pdir = _pool_dir(root)
+        os.makedirs(pdir, exist_ok=True)
+        stamp = re.sub(r"[^0-9A-Za-z]", "", str(entry.get("at") or ""))
+        name = "%s-%s-%s.json" % (stamp, entry.get("change"), str(entry.get("commit") or "")[:12])
+        fd, tmp = tempfile.mkstemp(dir=pdir, prefix=".tmp-", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(entry, f, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp, os.path.join(pdir, name))
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        all_names = os.listdir(pdir)
+        names = [n for n in all_names if n.endswith(".json") and not n.startswith(".tmp-")]
+        names.sort(key=lambda n: _pool_order(n, _pool_read(pdir, n)), reverse=True)
+        drop = names[POOL_KEEP:]
+        cutoff = time.time() - POOL_TMP_TTL
+        for n in all_names:
+            if n.startswith(".tmp-"):
+                try:
+                    if os.path.getmtime(os.path.join(pdir, n)) < cutoff:
+                        drop.append(n)
+                except FileNotFoundError:
+                    pass
+        for n in drop:
+            try:
+                os.unlink(os.path.join(pdir, n))
+            except FileNotFoundError:  # 别的 worktree 同时在清理
+                pass
+    except (OSError, RuntimeError) as e:
+        return "基线池写入失败（不影响本次基线）：%s" % e
+    return None
+
+
+def _pool_candidates(root, key, limit=10):
+    """池里 cmd_key == key 的条目，按 at 由新到旧取前 limit 个；坏 JSON 跳过，池不可读返回 []。"""
+    if not key:
+        return []
+    try:
+        pdir = _pool_dir(root)
+        names = [n for n in os.listdir(pdir) if n.endswith(".json") and not n.startswith(".tmp-")]
+    except (OSError, RuntimeError):
+        return []
+    hits = []
+    for n in names:
+        e = _pool_read(pdir, n)
+        if e is not None and e.get("cmd_key") == key:
+            hits.append((_pool_order(n, e), e))
+    hits.sort(key=lambda x: x[0], reverse=True)
+    return [e for _, e in hits[:limit]]
 
 
 def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache):
