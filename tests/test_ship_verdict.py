@@ -326,7 +326,6 @@ def test_ship_stale_after_plan_change(git_repo):  # 既有行为守卫：同上
 # flight-hardening S1 的 scenario 测试。
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_final_fresh_ignores_other_change_bookkeeping(git_repo):
     # Given: changes 下有 c、b 两个 change；c 的 final 记在提交 X 且 ok；X 之后一次提交只改了 b 的 gate-report.md 与 timeline.md
     c = ship_repo(git_repo)
@@ -346,7 +345,6 @@ def test_final_fresh_ignores_other_change_bookkeeping(git_repo):
     assert any("过期" in r for r in after), after
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_final_fresh_ignores_interfaces_summary(git_repo):
     # Given: change c 的 final 记在提交 X 且 ok；X 之后一次提交只改了 c 的 slices/_interfaces.md
     c = ship_repo(git_repo)

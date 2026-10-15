@@ -993,7 +993,6 @@ def _gate(change, repo):
     return json.loads(run_hook("slice-gate", "gate", "S1", "--change-dir", str(change), cwd=repo).stdout)
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_gate_ok_records_result_ref(git_repo):
     # Given: 已 start 且实现完整的切片 S1（门禁会绿）
     change = gate_repo(git_repo)
@@ -1010,7 +1009,6 @@ def test_gate_ok_records_result_ref(git_repo):
     assert git(git_repo, "rev-parse", GATE_REF + "^") == out["commit"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_resume_start_returns_recorded_gate(git_repo, tmp_path):
     # Given: 切片 S1 在基点 X 上提交并门禁通过（结论已留存），随后从 X 新开一个干净 worktree（模拟隔离模式重派）
     change = gate_repo(git_repo)
@@ -1030,7 +1028,6 @@ def test_resume_start_returns_recorded_gate(git_repo, tmp_path):
     assert not (wt / ".openspec-slice").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_resume_start_ignores_foreign_gate_record(git_repo, tmp_path):
     # Given: 切片 S1 的门禁结论已留存（base X、commit C）；C 之后又有提交 Y，在 Y 上新开 worktree
     change = gate_repo(git_repo)
@@ -1052,7 +1049,6 @@ def test_resume_start_ignores_foreign_gate_record(git_repo, tmp_path):
     assert _ref(git_repo, GATE_REF) == recorded
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_record_and_fresh_start_clear_gate_ref(git_repo):
     # Given: 切片 S1 门禁通过、结论已留存
     change = gate_repo(git_repo)
@@ -1107,7 +1103,6 @@ def test_mod_adds():
 '''
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_rejects_aliased_xfail(git_repo):
     # Given: scenario cap#adds 映射的测试用别名装饰器 XF = pytest.mark.xfail(strict=True) 标记，断言尚未满足
     change = gate_repo(git_repo, test_body=ALIASED_XFAIL_TEST)
@@ -1120,7 +1115,6 @@ def test_g7_rejects_aliased_xfail(git_repo):
     assert any(f.startswith("G7") and "cap#adds" in f and "XFAIL" in f for f in out["failed"]), out["failed"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_rejects_imperative_skip(git_repo):
     # Given: scenario cap#adds 映射的测试在测试体内调用 pytest.skip()
     change = gate_repo(git_repo, test_body=IMPERATIVE_SKIP_TEST)
@@ -1133,7 +1127,6 @@ def test_g7_rejects_imperative_skip(git_repo):
     assert any(f.startswith("G7") and "cap#adds" in f and "SKIPPED" in f for f in out["failed"]), out["failed"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_gate_checks_own_slice_outcome(git_repo):
     # Given: 切片 S1 的 scenario 测试用别名装饰器标成 xfail，断言尚未满足
     change = gate_repo(git_repo, test_body=ALIASED_XFAIL_TEST)
@@ -1160,7 +1153,6 @@ def test_g7_reads_outcome_despite_addopts_quiet(git_repo):
 
 # ---------------------------------------------------------------- 摘自原仓 #37（flight-integrity-followups）· scenario: workflow-engine-recovery#resume-start-refuses-record-after-replan
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_resume_start_refuses_record_after_replan(git_repo, tmp_path):  # 既有行为守卫：基点核对已挡住该路径，故不标 xfail
     # Given: 切片 S1 门禁绿、结论已留存，随后飞行中断；人改了计划（proposal.md）并提交，又按批准提交了一次，再从新的分支尖端开 worktree
     change = gate_repo(git_repo)
@@ -1183,7 +1175,6 @@ def test_resume_start_refuses_record_after_replan(git_repo, tmp_path):  # 既有
 
 
 # ---------------------------------------------------------------- 摘自原仓 #37（flight-integrity-followups）· scenario: gate-scenario-run#g7-uses-* / g7-prefers-* / g7-falls-back-* / g7-times-out / g7-reports-*
-# 骨架（workflow-edition S2）：实现后逐条去掉 xfail 标记。
 
 def _update_gate(change, **fields):
     path = change / "slices.json"
@@ -1247,7 +1238,6 @@ def test_g7_uses_runner_from_gate_test(git_repo):
     assert out["scenarios"]["passed"] == 1, out
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_prefers_explicit_pytest_config(git_repo):
     # Given: gate.pytest 指向会留下调用记录的 pytest 包装脚本，gate.test 仍是 python3 -m pytest -q tests
     change = gate_repo(git_repo)
@@ -1263,7 +1253,6 @@ def test_g7_prefers_explicit_pytest_config(git_repo):
     assert out["ok"] is True, out
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_falls_back_with_warning(git_repo):
     # Given: gate.test 是 cd . && python3 -m pytest -q tests（含 shell 语法），没有 gate.pytest
     change = gate_repo(git_repo)
@@ -1277,7 +1266,6 @@ def test_g7_falls_back_with_warning(git_repo):
     assert any(w.startswith("G7") and "gate.pytest" in w for w in out["warnings"]), out["warnings"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_times_out(git_repo):
     # Given: gate.pytest 指向先睡 5 秒再运行的 pytest 包装脚本；环境变量 FLIGHT_G7_TIMEOUT 为 1
     change = gate_repo(git_repo)
@@ -1292,7 +1280,6 @@ def test_g7_times_out(git_repo):
     assert any(f.startswith("G7") and "运行超时" in f for f in out["failed"]), out["failed"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_g7_reports_collection_failure_detail(git_repo):
     # Given: scenario 测试所在文件在模块级抛出 RuntimeError，收集即失败
     change = gate_repo(git_repo, test_body=COLLECT_ERROR_TEST)
@@ -1309,7 +1296,6 @@ def test_g7_reports_collection_failure_detail(git_repo):
 # flight-envelope S1 的 scenario 测试。
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_gate_pairing_ignores_marker(git_repo):
     # Given: 切片 S1 已 start，区间内没有任何提交，工作树里只有未提交的 .openspec-slice 标记
     change = git_repo / "openspec" / "changes" / "c"
@@ -1350,7 +1336,6 @@ def test_gate_flags_committed_bytecode(git_repo):
     assert any(f.startswith("G6") and "__pycache__" in f for f in out["failed"]), out["failed"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_gate_ignores_uncommitted_bytecode(git_repo):
     # Given: 切片 S1 已提交合规的实现与测试；工作树另有未提交、未被 git 忽略的 src/__pycache__/mod.cpython-39.pyc，owns 不含它
     change = gate_repo(git_repo)

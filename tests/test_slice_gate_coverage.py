@@ -21,7 +21,6 @@ COVERAGE_FAIL = (
 )
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_final_red_on_coverage_failure(git_repo):
     # Given: gate.test 为 pytest；基线已生成（test_old 预存红，其余通过）；之后提交了按 pytest-cov 做法报覆盖率未达标的 tests/conftest.py
     change = _repo(git_repo, PYTEST, files={"tests/test_old.py": OLD_RED})
@@ -37,7 +36,6 @@ def test_final_red_on_coverage_failure(git_repo):
     assert any(f.startswith("G2 test") and "按退出码判" in f and "覆盖率" in f for f in out["failed"]), out["failed"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_baseline_red_on_coverage_failure(git_repo):
     # Given: gate.test 为 pytest；test_old 失败，且 tests/conftest.py 按 pytest-cov 做法报覆盖率未达标
     change = _repo(git_repo, PYTEST, files={"tests/test_old.py": OLD_RED, "tests/conftest.py": COVERAGE_FAIL})

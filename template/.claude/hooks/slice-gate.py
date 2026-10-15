@@ -14,13 +14,18 @@
 #   gate     S --change-dir DIR [--base REF]  跑 G1–G8；stdout 打印 JSON（含 base）；追加 gate-report.md；ok 时删标记，红时标记 red_count+1
 #   record   --change-dir DIR --json '<gate JSON>' | --slice S --commit SHA [--red] [--failed ...] [--warnings ...]
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
-#   final    --change-dir DIR                 全量 test / lint / typecheck（按基线差分）+ 全部 scenario 状态
-#   baseline --change-dir DIR                 起飞前预检：跑 gate.test / lint / typecheck 与每片 verify，写 gate-baseline.json；
+#   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
+#                                              G7 红不跑全量
+#   baseline --change-dir DIR                 起飞前预检：先把 gate-baseline.json 写成运行标记 {running, pid, started}，
+#                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              耗时写回 slices.json.gate.full_suite_sec；退出码按 ok
-#   preflight --change-dir DIR                lint_plan + 基线四项校验（存在 / ok / plan_sha / commit 在分支历史）；通过打印 waves
+#   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
+#                                              commit 在分支历史）；通过打印 waves
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
+#          gate.test 经 PYTEST_ADDOPTS 注入 --junitxml，可度量的 exit 1 按失败用例标识（classname::name）逐条差分：
+#          baseline 记 test.failed，final 只为基线外的失败判红；不可度量（非 pytest / 多次 pytest / 计数不一致 / exit≠1）按退出码判。
 #
 # JSON 契约：{"slice", "ok", "commit", "failed": [...], "warnings": [...],
 #             "ceilings": [[路径, 行号, 限制, 升级路径], ...], "summary"}；failed 每项以 G<n> 开头并点名对象。
@@ -32,10 +37,12 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 MAX_SLICES = 9
@@ -49,6 +56,9 @@ BASELINE = "gate-baseline.json"
 # verify 只跑测试；typecheck / lint 工具放 gate.typecheck / gate.lint，由门禁按基线差分
 VERIFY_TOOL_RE = re.compile(r"\b(tsc|typecheck|eslint|rustfmt|clippy|ruff|mypy|flake8|golangci)\b")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# pytest-cov 覆盖率未达标的输出标记（pytest-cov 7.1.0 pytest_cov/plugin.py：
+# 前者在 pytest_runtestloop 收尾打印，后者在 pytest_terminal_summary 打印）
+COVERAGE_FAIL_MARKS = ("Coverage failure: total of", "FAIL Required test coverage of")
 
 TEST_DIR_NAMES = {"tests", "test", "__tests__", "spec"}
 TEST_FILE_RE = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.py|[^/]*\.test\.[^/]+|[^/]*\.spec\.[^/]+)$")
@@ -59,6 +69,28 @@ PY_TEST_DEF = re.compile(r"^(\s*)(?:async\s+)?def\s+(test_\w+)\s*\(")
 JS_TEST_DEF = re.compile(r"^\s*(?:test|it)\s*\(\s*[\'\"`](.+?)[\'\"`]")
 JS_BLOCK_START = re.compile(r"^\s*(?:test|it|describe)\s*\(")
 MARK_RE = re.compile(r"xfail|skip", re.I)
+# G7 实跑用的临时 pytest 插件：直接记每个 report 的 nodeid 与结果，不依赖终端输出（addopts 含 -q / xdist 的 -n 都会改掉 -v 的逐条行）
+# junitxml 区分不出非 strict 的 XPASS（与 PASSED 同形），所以不用它
+G7_PLUGIN = '''import json, os
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "call":
+        if hasattr(report, "wasxfail"):
+            out = "XPASS" if report.passed else "XFAIL"
+        elif report.failed and isinstance(report.longrepr, str) and report.longrepr.startswith("[XPASS(strict)]"):
+            out = "XPASS"  # 严格 xfail 意外通过：pytest 记 failed、longrepr 带此前缀、不设 wasxfail
+        else:
+            out = report.outcome.upper()
+    elif report.failed:
+        out = "ERROR"
+    elif report.skipped:
+        out = "XFAIL" if hasattr(report, "wasxfail") else "SKIPPED"
+    else:
+        return
+    with open(os.environ["FLIGHT_G7_OUT"], "a", encoding="utf-8") as f:
+        f.write(json.dumps([report.nodeid, out]) + "\\n")
+'''
 # G8 天花板标记：行首注释紧跟标记，两段用 -> 或 → 分隔（形如 `限制 -> 升级条件/路径`）
 CEILING_RE = re.compile(r"^\s*(?:#|//|--|\*)+\s*ceiling\s*:\s*(.*)$", re.I)
 CEILING_SPLIT = re.compile(r"->|→")
@@ -113,13 +145,75 @@ def run_cmd_full(cmd, cwd):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
-def _tail(out):
-    return "\n".join(out.strip().splitlines()[-6:])
+def _tail(out, n=6):
+    return "\n".join(out.strip().splitlines()[-n:])
 
 
 def run_cmd(cmd, cwd):
     rc, out = run_cmd_full(cmd, cwd)
     return rc, _tail(out)
+
+
+# pytest 汇总行：`1 failed, 2 passed in 0.03s`，可带 `=` 包围与 `(0:01:02)` 时长
+PYTEST_SUMMARY_RE = re.compile(r"^=*\s*(\d+ [a-z]+(?:, \d+ [a-z]+)*) in [\d.]+s(?: \([^)]*\))?\s*=*$")
+
+
+def _summary_failed(line):
+    """汇总行里 failed + error(s) 的合计。"""
+    n = 0
+    for part in PYTEST_SUMMARY_RE.match(line).group(1).split(", "):
+        count, word = part.split(" ", 1)
+        if word in ("failed", "error", "errors"):
+            n += int(count)
+    return n
+
+
+def run_test_gate(cmd, root):
+    """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml。
+    返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None}；
+    failed 非 None ⇔ 可度量（rc 1、junit 可解析、汇总行恰一行、汇总与 junit 计数一致且非 0，
+    且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        junit = os.path.join(tmp, "junit.xml")
+        env = dict(os.environ)
+        env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
+        p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
+        rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
+        res = {"rc": rc, "out": out, "failed": None, "why": None}
+        if rc == 0:
+            return res
+        if rc != 1:
+            res["why"] = "exit %d" % rc
+            return res
+        if any(m in l for l in ANSI_RE.sub("", out).splitlines() for m in COVERAGE_FAIL_MARKS):
+            res["why"] = "覆盖率未达标（pytest-cov fail-under）；门禁不判覆盖率时在 gate.test 加 --no-cov"
+            return res
+        if not os.path.isfile(junit):
+            res["why"] = "没有 junit 输出（不是 pytest？）"
+            return res
+        try:
+            tree = ET.parse(junit).getroot()
+        except (ET.ParseError, OSError):
+            res["why"] = "junit 无法解析"
+            return res
+    summaries = [l.strip() for l in ANSI_RE.sub("", out).splitlines() if PYTEST_SUMMARY_RE.match(l.strip())]
+    if len(summaries) != 1:
+        res["why"] = "汇总行 %d 行（调用了多次 pytest？）" % len(summaries)
+        return res
+    junit_n = sum(int(s.get("failures") or 0) + int(s.get("errors") or 0) for s in tree.iter("testsuite"))
+    summary_n = _summary_failed(summaries[0])
+    if junit_n != summary_n:
+        res["why"] = "计数不一致（汇总行 %d，junit %d）" % (summary_n, junit_n)
+        return res
+    ids = set()
+    for tc in tree.iter("testcase"):
+        if tc.find("failure") is not None or tc.find("error") is not None:
+            ids.add("%s::%s" % (tc.get("classname") or "", tc.get("name") or ""))
+    if summary_n == 0 or not ids:
+        res["why"] = "exit 1 但没有失败用例（覆盖率门槛 / 插件判失败？）"
+        return res
+    res["failed"] = sorted(ids)
+    return res
 
 
 def normalize_lines(text):
@@ -176,6 +270,21 @@ def gate_cmd_verdict(kind, cmd, root, baseline):
     return "G2 %s: exit %d（新增 %d 行）\n%s" % (kind, rc, len(new), "\n".join(new[:6])), None
 
 
+def full_suite_verdict(cmd, root, baseline):
+    """跑 gate.test，返回 (failed_item, warning_item)。可度量的 exit 1 按基线 test.failed 逐条差分（缺失视为空集）。"""
+    tg = run_test_gate(cmd, root)
+    rc = tg["rc"]
+    if rc == 0:
+        return None, None
+    if tg["failed"] is None:
+        return "G2 test: exit %d（按退出码判：%s）\n%s" % (rc, tg["why"], _tail(tg["out"])), None
+    old = set(((baseline or {}).get("test") or {}).get("failed") or [])
+    new = [t for t in tg["failed"] if t not in old]
+    if not new:
+        return None, "G2 test: exit 1，失败均为基线预存红（%d 条已按基线排除）" % len(tg["failed"])
+    return "G2 test: exit 1（新增 %d 条失败）\n%s" % (len(new), "\n".join(new[:6])), None
+
+
 def glob_match(path, pattern):
     if path == pattern or fnmatch.fnmatchcase(path, pattern):
         return True
@@ -210,6 +319,8 @@ def compute_waves(slices):
 
 def lint_plan(data):
     errors = []
+    if not ((data.get("gate") or {}).get("test") or "").strip():
+        errors.append("gate: gate.test 缺失（须显式写出，baseline 不再自动探测写回）")
     slices = data.get("slices") or []
     ids = [s.get("id") for s in slices]
     if len(ids) != len(set(ids)):
@@ -375,6 +486,17 @@ def is_doc_or_config(path):
     return ext.lower() in DOC_EXT or ext.lower() in CONFIG_EXT
 
 
+def source_files(files, change_rel):
+    """改动里的源码：非测试、非文档 / 配置、不在 change 目录内、不是切片标记。"""
+    return [f for f in files if not is_test_path(f) and not is_doc_or_config(f)
+            and not f.startswith(change_rel + "/") and f != MARKER]
+
+
+def is_bytecode(path):
+    """Python 字节码（__pycache__ 目录或 .pyc）：未提交时是跑测试的副产物，不算切片改动；已提交的照常受所有权检查。"""
+    return "__pycache__" in path.split("/") or path.endswith(".pyc")
+
+
 def changed_files(root, base):
     head = git(root, "rev-parse", "HEAD")
     committed = set()
@@ -386,7 +508,7 @@ def changed_files(root, base):
     for line in porcelain.splitlines():
         if len(line) > 3:
             uncommitted.add(line[3:].split(" -> ")[-1].strip())
-    return committed, uncommitted
+    return committed, set(f for f in uncommitted if not is_bytecode(f))
 
 
 def added_lines(root, base):
@@ -537,14 +659,87 @@ def _py_decorators(source, func):
     return None
 
 
+def _g7_runner(gate):
+    """G7 实跑用的 pytest 命令前缀：gate.pytest > 从 gate.test 推导 > 退回本解释器（附 warning）。"""
+    if gate.get("pytest"):
+        return shlex.split(gate["pytest"]), None
+    try:
+        toks = shlex.split(gate.get("test") or "")
+    except ValueError:
+        toks = []
+    for i, tok in enumerate(toks):
+        if os.path.basename(tok) in ("pytest", "py.test") or (tok == "pytest" and i > 0 and toks[i - 1] == "-m"):
+            head = toks[:i + 1]
+            if not any(t in ("&&", "||", ";", "|", "cd") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t) for t in head):
+                return head, None
+            break
+    return [sys.executable, "-m", "pytest"], (
+        "G7：无法从 gate.test 推导 pytest 运行方式，已退回 %s -m pytest；可在 slices.json 的 gate.pytest 指定" % sys.executable)
+
+
+def _g7_timeout(gate):
+    try:
+        return float(os.environ["FLIGHT_G7_TIMEOUT"])
+    except (KeyError, ValueError):
+        pass
+    sec = gate.get("full_suite_sec")
+    if isinstance(sec, (int, float)) and not isinstance(sec, bool):
+        return max(120, 3 * sec)
+    return 600
+
+
+def _pytest_outcomes(root, targets, gate=None):
+    """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。"""
+    gate = gate or {}
+    prefix, _ = _g7_runner(gate)
+    timeout = _g7_timeout(gate)
+    with tempfile.TemporaryDirectory(prefix="flight-g7-") as tmp:
+        with open(os.path.join(tmp, "flight_g7_outcomes.py"), "w", encoding="utf-8") as f:
+            f.write(G7_PLUGIN)
+        out = os.path.join(tmp, "outcomes.jsonl")
+        # 不写字节码：__pycache__ 落进被测 worktree 会被当成改动（G5 起点测量、source 判定）
+        env = dict(os.environ, FLIGHT_G7_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+                   PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        argv = prefix + ["-p", "flight_g7_outcomes", "-p", "no:cacheprovider", "--rootdir", root, *targets]
+        timed_out, rc, text = False, None, ""
+        try:
+            # 独立进程组：超时整组杀掉，免得包装脚本的孙进程占住输出管道
+            p = subprocess.Popen(argv, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 text=True, start_new_session=True)
+        except OSError as e:
+            return [], None, str(e), False
+        try:
+            text, _ = p.communicate(timeout=timeout)
+            rc = p.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            try:
+                os.killpg(p.pid, 9)
+            except OSError:
+                pass
+            p.communicate()
+            rc = p.returncode
+        outcomes = []
+        if os.path.isfile(out):
+            with open(out, "r", encoding="utf-8") as f:
+                outcomes = [tuple(json.loads(line)) for line in f if line.strip()]
+        return outcomes, rc, text or "", timed_out
+
+
+def _g7_diag(text):
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    hit = next((ln for ln in lines if "Error" in ln), lines[-1] if lines else "")
+    return hit[:200]
+
+
 def scenario_status(root, data, slice_ids=None):
-    """返回 (violations, total, passed)。passed = 有映射、函数存在、且无 xfail/skip 标记。"""
+    """返回 (violations, total, passed)。passed = 有映射、函数存在、无 xfail/skip 标记，且 .py 目标实跑结果全为 PASSED。"""
     tests = data.get("scenario_tests") or {}
     wanted = []
     for s in data.get("slices") or []:
         if slice_ids is None or s["id"] in slice_ids:
             wanted.extend(s.get("scenarios") or [])
-    violations, passed = [], 0
+    violations, passed, py_targets = [], 0, []
     for sid in wanted:
         target = tests.get(sid)
         if not target or "::" not in target:
@@ -580,8 +775,30 @@ def scenario_status(root, data, slice_ids=None):
         if marked:
             violations.append("G7 scenario: %s → %s 仍标记 xfail/skip" % (sid, target))
             continue
-        passed += 1
-    return violations, len(wanted), passed
+        if rel.endswith(".py"):
+            py_targets.append((sid, target))
+        else:
+            passed += 1
+    warnings = []
+    if py_targets:
+        # 文本检查认不出别名装饰器 / 测试体内 pytest.skip()：对 .py 目标实跑一次，只认 PASSED
+        gate = data.get("gate") or {}
+        _, warn = _g7_runner(gate)
+        if warn:
+            warnings.append(warn)
+        outcomes, rc, text, timed_out = _pytest_outcomes(root, [t for _, t in py_targets], gate)
+        for sid, target in py_targets:
+            outs = [o for i, o in outcomes if i == target or i.startswith(target + "[")]
+            if timed_out:
+                violations.append("G7 scenario: %s → %s 运行超时（%g 秒）" % (sid, target, _g7_timeout(gate)))
+            elif not outs:
+                violations.append("G7 scenario: %s → %s 未被收集运行（pytest rc=%s：%s）" % (sid, target, rc, _g7_diag(text)))
+            elif any(o != "PASSED" for o in outs):
+                bad = next(o for o in outs if o != "PASSED")
+                violations.append("G7 scenario: %s → %s 实际结果 %s（未真正通过）" % (sid, target, bad))
+            else:
+                passed += 1
+    return violations, len(wanted), passed, warnings
 
 
 def detect_test_cmd(root):
@@ -634,6 +851,40 @@ def _ckpt_ref(change_dir, slice_id):
 def _ckpt_delete(root, ref):
     # 引用不存在时 update-ref -d 也可能非 0：一律忽略
     subprocess.run(["git", "update-ref", "-d", ref], cwd=root, capture_output=True, text=True)
+
+
+def _gate_ref(change_dir, slice_id):
+    return "refs/flight/%s/gate-%s" % (os.path.basename(os.path.abspath(change_dir).rstrip(os.sep)), slice_id)
+
+
+def _gate_save(root, change_dir, result):
+    """把门禁结论写成以切片 commit 为父的提交，挂到 gate ref。成功返回 None，失败返回 stderr 首行。"""
+    def g(args, stdin=None):
+        p = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, input=stdin)
+        if p.returncode != 0:
+            raise RuntimeError((p.stderr.strip().splitlines() or ["git %s exit %d" % (args[0], p.returncode)])[0])
+        return p.stdout.strip()
+
+    try:
+        blob = g(["hash-object", "-w", "--stdin"], json.dumps(result, ensure_ascii=False))
+        tree = g(["mktree"], "100644 blob %s\tgate.json\n" % blob)
+        sha = g(["commit-tree", tree, "-p", result["commit"], "-m",
+                 "flight: gate %s ok %s" % (result["slice"], result["commit"][:8])])
+        g(["update-ref", _gate_ref(change_dir, result["slice"]), sha])
+    except RuntimeError as e:
+        return str(e)
+    return None
+
+
+def _gate_load(root, ref):
+    p = subprocess.run(["git", "show", ref + ":gate.json"], cwd=root, capture_output=True, text=True)
+    if p.returncode != 0:
+        return None
+    try:
+        rec = json.loads(p.stdout)
+    except ValueError:
+        return None
+    return rec if isinstance(rec, dict) else None
 
 
 def _slice_owns(change_dir, slice_id):
@@ -756,6 +1007,14 @@ def cmd_start(args):
             print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": [msg],
                               "warnings": [], "summary": "基点校验未通过"}, ensure_ascii=False))
             sys.exit(1)
+    if args.resume_checkpoint:
+        # 上一轮执行体门禁已绿却没返回：基点吻合就直接交出留存的结论，不再重做
+        rec = _gate_load(root, _gate_ref(args.change_dir, args.slice))
+        if rec and rec.get("ok") and rec.get("slice") == args.slice and \
+                git(root, "rev-parse", "HEAD") in (rec.get("base"), rec.get("commit")):
+            timeline_record(args.change_dir, "slice-start", "%s (recovered gate)" % args.slice)
+            print(json.dumps(dict(rec, recovered=True), ensure_ascii=False))
+            sys.exit(3)
     existing = _read_marker(root)
     if existing and existing.get("slice") == args.slice:
         # 重试同一切片：区间起点与 red_count 都要保住，标记原样不动
@@ -772,6 +1031,7 @@ def cmd_start(args):
     else:
         # 首轮起跑：上一次飞行残留的快照不属于本轮，清掉免得被误恢复
         _ckpt_delete(root, ref)
+        _ckpt_delete(root, _gate_ref(args.change_dir, args.slice))
     marker = {"slice": args.slice, "change_dir": os.path.abspath(args.change_dir),
               "base": args.base or git(root, "rev-parse", "HEAD"), "started": now_iso()}
     with open(os.path.join(root, MARKER), "w", encoding="utf-8") as f:
@@ -825,8 +1085,8 @@ def cmd_gate(args):
             if w2:
                 warnings.append(w2)
 
-    source = [f for f in files if not is_test_path(f) and not is_doc_or_config(f) and not f.startswith(change_rel + "/")]
-    tests = [f for f in files if is_test_path(f)]
+    source = source_files(files, change_rel)
+    tests =[f for f in files if is_test_path(f)]
     if source and not tests:
         failed.append("G3 pairing: 改了源码 %s 但区间内没有测试文件改动" % ", ".join(sorted(source)[:6]))
     failed.extend(gwt_violations(root, tests))
@@ -839,8 +1099,9 @@ def cmd_gate(args):
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
-    v7, _, _ = scenario_status(root, data, {args.slice})
+    v7, _, _, w7 = scenario_status(root, data, {args.slice})
     failed.extend(v7)
+    warnings.extend(w7)
     v8, ceilings = ceiling_rows(root, base)
     failed.extend(v8)
 
@@ -848,6 +1109,10 @@ def cmd_gate(args):
               "failed": failed, "warnings": warnings, "hooks_missing": hooks_missing,
               "ceilings": [[rel, ln, limit, up] for rel, ln, limit, up in ceilings],
               "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files))}
+    if result["ok"]:
+        err = _gate_save(root, args.change_dir, result)
+        if err:
+            warnings.append("门禁结论未能留存：%s" % err)
     append_report(args.change_dir, result)
     record_ceilings(args.change_dir, args.slice, ceilings)
     timeline_record(args.change_dir, "gate", "%s %s" % (args.slice, "ok" if result["ok"] else "red"))
@@ -885,6 +1150,9 @@ def cmd_record(args):
                   "warnings": [x for x in (args.warnings or "").split(";") if x.strip()]}
     result.setdefault("failed", [])
     result.setdefault("warnings", [])
+    if result.get("slice"):
+        # 结论已交到 integrator 手里，留存的那份完成使命（不存在时静默）
+        _ckpt_delete(os.getcwd(), _gate_ref(args.change_dir, result["slice"]))
     if report_has_row(args.change_dir, result.get("slice", ""), result.get("commit", "")):
         print(json.dumps({"recorded": False, "reason": "already recorded"}, ensure_ascii=False))
         return
@@ -896,18 +1164,37 @@ def cmd_record(args):
     print(json.dumps({"recorded": True, "slice": result.get("slice"), "commit": result.get("commit")}, ensure_ascii=False))
 
 
+def _dirty_paths(root, change_dir):
+    """工作树里未提交 / 未跟踪的路径，排除本 change 的记账文件与 MARKER。"""
+    change_rel = os.path.relpath(os.path.abspath(change_dir), root).replace(os.sep, "/")
+    skip = {MARKER} | {"%s/%s" % (change_rel, b) for b in BOOKKEEPING}
+    raw = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all"], cwd=root,
+                         capture_output=True, text=True).stdout
+    paths, rename = [], False
+    for e in raw.split("\0"):
+        if rename:  # 重命名 / 复制项后随原路径
+            rename = False
+            continue
+        if len(e) < 4:
+            continue
+        rename = e[0] in "RC"
+        if e[3:] not in skip:
+            paths.append(e[3:])
+    return sorted(paths)
+
+
 def cmd_final(args):
     root = toplevel()
     data = load_plan(args.change_dir)
     gate = data.get("gate") or {}
     failed, warnings = [], []
-    test_cmd = gate.get("test") or detect_test_cmd(root)
-    if not test_cmd:
-        warnings.append("未配置也未探测到全量测试命令")
-    else:
-        rc, tail = run_cmd(test_cmd, root)
-        if rc != 0:
-            failed.append("G2 test: exit %d\n%s" % (rc, tail))
+    # 先于任何测试运行取证：测的是工作树，合回只带已提交内容
+    dirty = _dirty_paths(root, args.change_dir)
+    if dirty:
+        warnings.append("工作树有未提交改动，结论不对应 commit：%s" % ", ".join(dirty[:8]))
+    v7, total, passed, w7 = scenario_status(root, data)
+    failed.extend(v7)
+    warnings.extend(w7)
     baseline = load_baseline(args.change_dir)
     for key in ("lint", "typecheck"):
         cmd = gate.get(key)
@@ -917,12 +1204,24 @@ def cmd_final(args):
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
-    v7, total, passed = scenario_status(root, data)
-    failed.extend(v7)
+    if v7:
+        warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
+    else:
+        test_cmd = gate.get("test") or detect_test_cmd(root)
+        if not test_cmd:
+            warnings.append("未配置也未探测到全量测试命令")
+        else:
+            f2, w2 = full_suite_verdict(test_cmd, root, baseline)
+            if f2:
+                failed.append(f2)
+            if w2:
+                warnings.append(w2)
     result = {"slice": "final", "ok": not failed, "commit": git(root, "rev-parse", "HEAD"),
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
+    if dirty:
+        result["dirty"] = True
     append_report(args.change_dir, result)
     timeline_record(args.change_dir, "final", "ok" if result["ok"] else "red")
     print(json.dumps(result, ensure_ascii=False))
@@ -937,14 +1236,23 @@ def cmd_baseline(args):
     if not test_cmd:
         die("未配置也未探测到全量测试命令")
     gate["test"] = test_cmd
+    sha0 = plan_sha(data)
+    # 运行标记：preflight 据此分辨「还在跑」与「跑到一半中断」，不把半成品当缺基线
+    with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
+        json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
+        f.write("\n")
     t0 = time.time()
-    rc, out = run_cmd_full(test_cmd, root)
+    tg = run_test_gate(test_cmd, root)
+    rc, out = tg["rc"], tg["out"]
     gate["full_suite_sec"] = round(time.time() - t0, 1)
     reasons = []
-    if rc != 0:
-        reasons.append("全量测试在基线上红（exit %d）" % rc)
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons, "test": {"exit": rc, "sec": gate["full_suite_sec"]}}
+    if rc != 0 and tg["failed"] is not None:
+        bl["test"]["failed"] = tg["failed"]
+        bl["warnings"] = ["预存红 %d 条已记录，final 按基线差分" % len(tg["failed"])]
+    elif rc != 0:
+        reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
     for key in ("lint", "typecheck"):
         cmd = gate.get(key)
         if cmd:
@@ -958,8 +1266,16 @@ def cmd_baseline(args):
         bl["verify"][s["id"]] = {"exit": vrc}
         if vrc != 0:
             reasons.append("%s verify 在基线上红（exit %d）：命令不可运行或含既有错误" % (s["id"], vrc))
-    save_plan(args.change_dir, data)
-    bl["plan_sha"] = plan_sha(data)
+    # 后台跑期间人可能改了 slices.json：重读当前文件，只写回耗时，不拿开跑时的旧数据整份覆盖
+    cur = load_plan(args.change_dir)
+    cg = cur.setdefault("gate", {})
+    if not cg.get("test"):
+        cg["test"] = test_cmd
+    cg["full_suite_sec"] = gate["full_suite_sec"]
+    save_plan(args.change_dir, cur)
+    bl["plan_sha"] = sha0
+    if plan_sha(cur) != sha0:
+        reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
     bl["ok"] = not reasons
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump(bl, f, ensure_ascii=False, indent=2)
@@ -967,6 +1283,30 @@ def cmd_baseline(args):
     timeline_record(args.change_dir, "baseline", "exit %d, %ss %s" % (rc, gate["full_suite_sec"], "ok" if bl["ok"] else "red"))
     print(json.dumps(dict(bl, test_cmd=test_cmd, tail=_tail(out)), ensure_ascii=False))
     sys.exit(0 if bl["ok"] else 1)
+
+
+def _die_running_baseline(change_dir, bl, data):
+    """gate-baseline.json 仍是运行标记：进程活着 → 等；进程已不在 / pid 不合法 → 中断，重跑。"""
+    pid = bl.get("pid")
+    alive = False
+    if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except PermissionError:
+            alive = True
+        except OSError:  # ProcessLookupError 等：进程已不在
+            alive = False
+    if not alive:
+        die("基线中断（进程 %s 已不在）：重跑 slice-gate.py baseline --change-dir %s" % (pid, change_dir))
+    try:
+        started = datetime.strptime(bl.get("started") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        mins = "%d" % ((datetime.now(timezone.utc) - started).total_seconds() // 60)
+    except ValueError:
+        mins = "?"
+    sec = (data.get("gate") or {}).get("full_suite_sec")
+    est = "%s 秒" % sec if isinstance(sec, (int, float)) and not isinstance(sec, bool) else "未知"
+    die("基线仍在跑（已 %s 分钟，上次全量约 %s）：等它结束再起飞" % (mins, est))
 
 
 def cmd_preflight(args):
@@ -977,6 +1317,8 @@ def cmd_preflight(args):
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     bl = load_baseline(args.change_dir)
+    if isinstance(bl, dict) and bl.get("running") is True:
+        _die_running_baseline(args.change_dir, bl, data)
     if bl is None:
         die("缺基线：先运行 slice-gate.py baseline --change-dir %s" % args.change_dir)
     if not bl.get("ok"):
@@ -1005,20 +1347,28 @@ def report_latest(change_dir):
     return latest
 
 
-BOOKKEEPING = ("timeline.md", "gate-report.md", "evidence.log", "review-findings.json", "tasks.md")
+BOOKKEEPING = ("timeline.md", "gate-report.md", "evidence.log", "review-findings.json", "tasks.md",
+               "slices/_interfaces.md")
 
 
 def _final_fresh(root, change_dir, final_commit):
-    """final 之后的 commit 只改了 change 目录的记账文件 → 仍算新鲜；任一 git 调用失败 → 不新鲜。"""
+    """final 之后的 commit 只改了 changes 根下任一 change 的记账文件 → 仍算新鲜；任一 git 调用失败 → 不新鲜。"""
     if not _is_ancestor(root, final_commit, "HEAD"):
         return False
     try:
         names = git(root, "diff", "--name-only", final_commit, "HEAD").splitlines()
     except RuntimeError:
         return False
-    change_rel = os.path.relpath(os.path.abspath(change_dir), root).replace(os.sep, "/")
-    allowed = {"%s/%s" % (change_rel, n) for n in BOOKKEEPING}
-    return all(n in allowed for n in names if n)
+    changes_rel = os.path.relpath(os.path.dirname(os.path.abspath(change_dir)), root).replace(os.sep, "/")
+    prefix = changes_rel + "/"
+
+    def bookkeeping(n):
+        if not n.startswith(prefix):
+            return False
+        parts = n[len(prefix):].split("/", 1)
+        return len(parts) == 2 and parts[1] in BOOKKEEPING
+
+    return all(bookkeeping(n) for n in names if n)
 
 
 def cmd_ship(args):

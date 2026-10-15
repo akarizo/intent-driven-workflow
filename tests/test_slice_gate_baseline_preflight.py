@@ -35,7 +35,6 @@ def _repo(git_repo, gate_test="touch ran-g2"):
     return change
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_final_marks_dirty_worktree(git_repo):
     # Given: 已提交的单片计划；工作树另有未跟踪的 src/extra.py
     change = _repo(git_repo)
@@ -62,7 +61,6 @@ def test_final_ignores_bookkeeping_dirt(git_repo):
     assert not any("未提交改动" in w for w in out["warnings"]), out["warnings"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_lint_requires_gate_test(tmp_path):
     # Given: slices.json 合法，但 gate 里没有 test
     data = plan([slice_("S1", ["a/**"])], gate={"test": None, "lint": None, "typecheck": None, "full_suite_sec": None})
@@ -76,7 +74,6 @@ def test_lint_requires_gate_test(tmp_path):
     assert "gate.test" in p.stderr, p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_baseline_marks_running(git_repo):
     # Given: gate.test 是一个读取 gate-baseline.json、running 为 true 才退出 0 的脚本
     write(git_repo / "check_running.py", CHECK_RUNNING)
@@ -103,7 +100,6 @@ def _edit_plan_script(git_repo, field, value):
     return "%s edit_plan.py" % shlex.quote(sys.executable)
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_baseline_keeps_plan_edits_made_while_running(git_repo):
     # Given: gate.test 运行时把 S1 的 owns 改成 ["src/**", "tests/**", "docs/**"]
     change = _repo(git_repo, gate_test=_edit_plan_script(git_repo, "owns", ["src/**", "tests/**", "docs/**"]))
@@ -118,7 +114,6 @@ def test_baseline_keeps_plan_edits_made_while_running(git_repo):
     assert isinstance(data["gate"]["full_suite_sec"], (int, float)), data["gate"]
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_baseline_red_when_verify_edited_while_running(git_repo):
     # Given: gate.test 运行时把 S1 的 verify 改成 "test -d src"
     change = _repo(git_repo, gate_test=_edit_plan_script(git_repo, "verify", "test -d src"))
@@ -136,7 +131,6 @@ def test_baseline_red_when_verify_edited_while_running(git_repo):
     assert pre.returncode != 0
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_preflight_reports_running_baseline(git_repo):
     # Given: gate-baseline.json 为 running 标记，pid 是当前仍存活的进程
     change = _repo(git_repo)
@@ -150,7 +144,6 @@ def test_preflight_reports_running_baseline(git_repo):
     assert "仍在跑" in p.stderr, p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
 def test_preflight_reports_interrupted_baseline(git_repo):
     # Given: gate-baseline.json 为 running 标记，pid 是一个已经退出的进程
     change = _repo(git_repo)
