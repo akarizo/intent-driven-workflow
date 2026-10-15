@@ -178,7 +178,6 @@ def record_approve(d):
 # ---------------------------------------------------------------- 基线记录内容指纹
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：基线记录内容指纹")
 def test_baseline_records_snapshot(git_repo):
     # Given: change c 的计划已提交；未跟踪的 tests/test_new.py 含一个 strict-xfail 用例；gate.test 是本 change 目录下的全量脚本
     d = setup_change(git_repo)
@@ -198,7 +197,6 @@ def test_baseline_records_snapshot(git_repo):
     assert bl["verify"]["S1"]["cmd"] == read_plan(d)["slices"][0]["verify"], bl["verify"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：运行期间改动判红")
 def test_baseline_red_when_tracked_file_edited_while_running(git_repo):
     # Given: gate.test 运行时会改写已跟踪的 src/mod.py
     d = setup_change(git_repo, full_body=full_with("pathlib.Path('src/mod.py').write_text('x = 2\\n')\n"))
@@ -212,7 +210,6 @@ def test_baseline_red_when_tracked_file_edited_while_running(git_repo):
     assert any("src/mod.py" in r and "重跑 baseline" in r for r in bl["reasons"]), bl["reasons"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：运行副产物登记")
 def test_baseline_tolerates_new_byproduct(git_repo):
     # Given: gate.test 运行时在仓库里新建未跟踪的 out/report.txt
     d = setup_change(git_repo, full_body=full_with(BYPRODUCT))
@@ -228,7 +225,6 @@ def test_baseline_tolerates_new_byproduct(git_repo):
     assert "out/report.txt" in bl["byproducts"], bl
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：上一次的副产物被改写只警告")
 def test_baseline_tolerates_rewritten_byproduct(git_repo):
     # Given: gate.test 每次运行都把当前时间写进未跟踪的 out/report.txt；change c 已有一次全量绿基线
     d = setup_change(git_repo, full_body=full_with(BYPRODUCT))
@@ -244,7 +240,6 @@ def test_baseline_tolerates_rewritten_byproduct(git_repo):
     assert "out/report.txt" in bl["byproducts"], bl
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：运行期改动判定排除其他 change 目录")
 def test_baseline_ignores_other_change_edits_while_running(git_repo):
     # Given: 已提交的 openspec/changes/other/proposal.md；gate.test 运行时往它末尾追加一行
     other = "openspec/changes/other/proposal.md"
@@ -261,7 +256,6 @@ def test_baseline_ignores_other_change_edits_while_running(git_repo):
     assert not any(other in x for x in (bl.get("reasons") or []) + (bl.get("warnings") or [])), bl
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：软链按链接文本取 blob")
 def test_baseline_records_symlink_as_git_does(git_repo):
     # Given: 仓库根有未跟踪的符号链接 data，指向不存在的 ../outside-target
     d = setup_change(git_repo)
@@ -284,7 +278,6 @@ def test_baseline_records_symlink_as_git_does(git_repo):
 # ---------------------------------------------------------------- 只改测试文件时复用全量
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：只改测试文件时增量")
 def test_incremental_when_only_test_file_changed(git_repo):
     # Given: change c 已有一次全量绿基线（预存红 1 条在 tests/test_old.py）；之后只往 tests/test_cap.py 末尾追加一个 strict-xfail 用例；
     #        gate.lint 运行时写标记
@@ -309,7 +302,6 @@ def test_incremental_when_only_test_file_changed(git_repo):
     assert read_plan(d)["gate"]["full_suite_sec"] == sec0
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：只改计划工件时增量")
 def test_incremental_noop_when_only_plan_changed(git_repo):
     # Given: change c 已有一次全量绿基线；之后只改了 proposal.md、specs 下的 spec.md 与 slices/S1.md
     d = setup_change(git_repo)
@@ -328,7 +320,6 @@ def test_incremental_noop_when_only_plan_changed(git_repo):
     assert bl["mode"] == "incremental" and bl["incremental"]["files"] == [], bl
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：非测试改动回全量并记理由")
 def test_full_when_non_test_file_changed(git_repo):
     # Given: change c 已有一次全量绿基线；之后改了 src/mod.py
     d = setup_change(git_repo)
@@ -346,7 +337,6 @@ def test_full_when_non_test_file_changed(git_repo):
                for s in bl.get("reuse_skipped") or []), bl
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：补跑红回全量")
 def test_full_when_changed_test_file_fails(git_repo):
     # Given: change c 已有一次全量绿基线；之后往 tests/test_cap.py 追加一个会失败的用例（不带 xfail）
     d = setup_change(git_repo)
@@ -363,7 +353,6 @@ def test_full_when_changed_test_file_fails(git_repo):
     assert any(f.endswith("::test_bad") for f in bl["test"]["failed"]), bl["test"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：改到预存红所在文件回全量")
 def test_full_when_test_file_had_preexisting_red(git_repo):
     # Given: change c 已有一次全量绿基线（预存红 1 条在 tests/test_old.py）；之后往 tests/test_old.py 追加一个通过的用例
     d = setup_change(git_repo)
@@ -378,7 +367,6 @@ def test_full_when_test_file_had_preexisting_red(git_repo):
     assert read_bl(d)["mode"] == "full"
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：--full")
 def test_full_flag_forces_full(git_repo):
     # Given: change c 已有一次全量绿基线，之后没有任何改动
     d = setup_change(git_repo)
@@ -393,7 +381,6 @@ def test_full_flag_forces_full(git_repo):
     assert read_bl(d)["mode"] == "full"
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：门禁脚本内容变了回全量")
 def test_full_when_gate_script_changed(git_repo):
     # Given: change c 已有一次全量绿基线；之后改了 gate.test 引用的本 change 目录下全量脚本的内容（命令文本不变）
     d = setup_change(git_repo)
@@ -408,7 +395,6 @@ def test_full_when_gate_script_changed(git_repo):
     assert read_bl(d)["mode"] == "full"
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：跨 change 脚本不同则全量")
 def test_cross_change_refused_when_script_differs(git_repo):
     # Given: change c 跑过一次全量绿基线，没有预存红；change d 的全量脚本比 c 的多一行注释
     c, d = two_changes(git_repo, d_full=FULL + "# d 自己的一行注释\n", old_red=False)
@@ -422,7 +408,6 @@ def test_cross_change_refused_when_script_differs(git_repo):
     assert read_bl(d)["mode"] == "full"
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：跨 change 候选有预存红则全量")
 def test_cross_change_refused_when_candidate_has_preexisting_red(git_repo):
     # Given: change c 跑过一次全量绿基线，预存红 1 条；change d 的全量脚本与 c 的内容相同，代码树与 c 所测的相同
     c, d = two_changes(git_repo, old_red=True)
@@ -457,7 +442,6 @@ def setup_three(git_repo):
                         extra={"tests/test_a.py": PASSING, "tests/test_b.py": PASSING})
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：verify 只重跑受影响的片")
 def test_verify_rerun_only_covering_slices(git_repo):
     # Given: S1 verify 只跑 tests/test_a.py、S2 只跑 tests/test_b.py、S3 命令里没有路径，各写自己的标记；
     #        已有一次全量绿基线，之后只往 tests/test_a.py 追加一个 strict-xfail 用例，并清掉三个标记
@@ -477,7 +461,6 @@ def test_verify_rerun_only_covering_slices(git_repo):
     assert bl["verify"]["S2"].get("reused") is True and bl["verify"]["S2"]["exit"] == 0, bl["verify"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：verify 命令变了重跑")
 def test_verify_rerun_when_command_changed(git_repo):
     # Given: 同上的三片与一次全量绿基线；之后只把 S2 的 verify 命令改成多带一个 -q，并清掉三个标记
     d = setup_three(git_repo)
@@ -501,7 +484,6 @@ def test_verify_rerun_when_command_changed(git_repo):
 # ---------------------------------------------------------------- preflight 按内容判过期
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：preflight 按内容判过期")
 def test_preflight_stale_when_test_file_changed_after_baseline(git_repo):
     # Given: change c 有一次全量绿基线，之后往 tests/test_cap.py 追加了一个用例；gate 与 verify 命令都没变
     d = setup_change(git_repo)
@@ -580,7 +562,6 @@ def test_preflight_ignores_removed_byproduct(git_repo):
 # ---------------------------------------------------------------- 记录
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：timeline 标出增量基线")
 def test_timeline_marks_incremental_baseline(git_repo):
     # Given: change alpha 已有一次全量绿基线；之后只往 tests/test_cap.py 追加一个 strict-xfail 用例
     d = setup_change(git_repo, change="alpha")
