@@ -1,5 +1,4 @@
 """pytest-cov 覆盖率未达标时全量测试不可度量、按退出码判红（摘自原仓 #60；scenario: gate-full-suite-baseline#*-on-coverage-failure）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；workflow-edition S2 实现后去掉标记即解锁。
 COVERAGE_FAIL 按 pytest-cov 7.1.0 源码（pytest_cov/plugin.py）的做法构造：测试跑完后打印两行标记，并让 session.testsfailed 加 1。"""
 import json
 

@@ -984,7 +984,6 @@ def test_start_resume_drops_renamed_source(git_repo, tmp_path):
 
 
 # ---------------------------------------------------------------- 摘自原仓 #36（flight-integrity-fixes）· scenario: workflow-engine-recovery#gate-* / resume-* / record-* · gate-scenario-run#g7-*
-# 骨架（workflow-edition S2）：门禁结论留存与找回、G7 看实际运行结果，实现后逐条去掉 xfail 标记。
 
 GATE_REF = "refs/flight/c/gate-S1"
 

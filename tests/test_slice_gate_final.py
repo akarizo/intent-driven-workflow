@@ -1,5 +1,4 @@
-"""slice-gate final 先判 G7、gate.test 按基线逐条差分（摘自原仓 #45；scenario: gate-full-suite-baseline#final-* / baseline-records-* / diff-* / non-pytest-* / exit-1-*）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；workflow-edition S2 实现后去掉标记即解锁。"""
+"""slice-gate final 先判 G7、gate.test 按基线逐条差分（摘自原仓 #45；scenario: gate-full-suite-baseline#final-* / baseline-records-* / diff-* / non-pytest-* / exit-1-*）。"""
 import json
 import shlex
 import sys

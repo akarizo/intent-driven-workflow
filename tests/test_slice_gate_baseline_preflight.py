@@ -1,6 +1,5 @@
 """slice-gate final 的脏工作树标注、baseline 运行标记、preflight 识别、gate.test 必填（摘自原仓 #45，不含读账本的 --reuse-fix）
-（scenario: gate-full-suite-baseline#final-marks-* / final-ignores-* / lint-requires-gate-test / baseline-* / preflight-*）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；workflow-edition S2 实现后去掉标记即解锁。"""
+（scenario: gate-full-suite-baseline#final-marks-* / final-ignores-* / lint-requires-gate-test / baseline-* / preflight-*）。"""
 import json
 import os
 import shlex
