@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, load_hook
 
 AGENTS = ROOT / "template" / ".claude" / "agents"
 WORKFLOW = ROOT / "template" / ".claude" / "workflows" / "opsx-apply.js"
@@ -633,3 +633,24 @@ def test_apply_docs_mirror_agent_failure_handling():
     for f in fallbacks:
         assert "integrator 与 final" in f, f
         assert "评审未返回" in f and "不重派" in f, f
+
+
+# ---------------------------------------------------------------- label 契约（scenario: route-audit-role-resolution#label-contract-matches-workflow-script）
+
+
+def test_label_contract_matches_workflow_script():
+    # Given: template/.claude/workflows/opsx-apply.js 与 template/.claude/hooks/session-decompose.py
+    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    decompose = load_hook("session-decompose")
+
+    # When: 读出脚本里 integrator 与 code-reviewer 的 label 模板所在的派发调用；把样例 label 交给对账的 label 判定
+    templates = {"`integrate:w${i + 1}`": "integrator", "'final-gate'": "integrator", "`review:${s}`": "code-reviewer"}
+    calls = {t: [line for line in lines if "label:" in line and t in line] for t in templates}
+    samples = {"integrate:w1": "integrator", "integrate:w1:retry": "integrator", "final-gate": "integrator",
+               "final-gate:retry": "integrator", "review:S1": "reviewer"}
+
+    # Then: 每个模板都和它对应的 typed(...) 写在同一个派发调用里；前四个样例判为 integrator，review:S1 判为 reviewer
+    for t, agent_type in templates.items():
+        assert len(calls[t]) == 1 and ("typed('%s')" % agent_type) in calls[t][0], (t, calls[t])
+    for label, role in samples.items():
+        assert decompose.label_role(label) == role, (label, decompose.label_role(label))

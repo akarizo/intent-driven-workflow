@@ -384,3 +384,68 @@ def test_evidence_single_candidate_fallback(git_repo):  # 既有行为守卫：�
     assert (git_repo / "openspec" / "changes" / "a" / "evidence.log").exists()
     line = (change_c / "evidence.log").read_text(encoding="utf-8").strip().splitlines()[-1]
     assert "\tS1\t" in line
+
+
+# ---------------------------------------------------------------- 无 agentType 时按 label 判角色（scenario: route-audit-role-resolution#*）
+
+
+def test_integrator_label_without_agent_type_matches(tmp_path):
+    # Given: 一个 workflow journal，各 agent 的 meta 都没有 agentType：S1（Implement，claude-opus-5）、integrate:w1（Implement，claude-sonnet-5）、
+    #        integrate:w2:retry（Implement，claude-sonnet-5）、review:S1（Review，claude-opus-5）
+    wf = tmp_path / "wf"
+    wf.mkdir()
+    wf_agent(wf, "a1", "claude-opus-5", "Implement", "S1")
+    wf_agent(wf, "a2", "claude-sonnet-5", "Implement", "integrate:w1")
+    wf_agent(wf, "a3", "claude-sonnet-5", "Implement", "integrate:w2:retry")
+    wf_agent(wf, "a4", "claude-opus-5", "Review", "review:S1")
+    sess = tmp_path / "sess.jsonl"
+    sess.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in FIXTURE) + "\n", encoding="utf-8")
+
+    # When: 带路由表运行收口对账
+    p = run_hook("session-decompose", "--session", str(sess), "--workflow", str(wf), "--expect-models", ROUTE)
+
+    # Then: 退出 0；输出没有 ❌；对账结论把 integrator 记成 sonnet
+    assert p.returncode == 0, p.stdout
+    assert "❌" not in p.stdout, p.stdout
+    assert "integrator=sonnet" in p.stdout, p.stdout
+
+
+def test_integrator_label_on_wrong_model_flagged(tmp_path):
+    # Given: 一个 workflow journal，各 agent 的 meta 都没有 agentType：S1（Implement，claude-opus-5）、integrate:w1（Implement，claude-opus-5）、
+    #        review:S1（Review，claude-opus-5）
+    wf = tmp_path / "wf"
+    wf.mkdir()
+    wf_agent(wf, "a1", "claude-opus-5", "Implement", "S1")
+    wf_agent(wf, "a2", "claude-opus-5", "Implement", "integrate:w1")
+    wf_agent(wf, "a3", "claude-opus-5", "Review", "review:S1")
+    sess = tmp_path / "sess.jsonl"
+    sess.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in FIXTURE) + "\n", encoding="utf-8")
+
+    # When: 带同一路由表运行收口对账
+    p = run_hook("session-decompose", "--session", str(sess), "--workflow", str(wf), "--expect-models", ROUTE)
+
+    # Then: 退出非 0；有一条 ❌ 行点名 integrate:w1，期望 sonnet，实际 claude-opus-5
+    assert p.returncode != 0, p.stdout
+    bad = [line for line in p.stdout.splitlines() if "❌" in line]
+    assert any("integrate:w1" in line and "期望 sonnet" in line and "claude-opus-5" in line for line in bad), p.stdout
+
+
+def test_unknown_label_falls_back_to_phase(tmp_path):
+    # Given: 一个 workflow journal，各 agent 的 meta 都没有 agentType，label 都不匹配显式格式：S1（Implement，claude-opus-5）、
+    #        fix（Fix，claude-opus-5）、judge（Review，claude-opus-5）、final（Finalize，claude-sonnet-5）
+    wf = tmp_path / "wf"
+    wf.mkdir()
+    wf_agent(wf, "a1", "claude-opus-5", "Implement", "S1")
+    wf_agent(wf, "a2", "claude-opus-5", "Fix", "fix")
+    wf_agent(wf, "a3", "claude-opus-5", "Review", "judge")
+    wf_agent(wf, "a4", "claude-sonnet-5", "Finalize", "final")
+    sess = tmp_path / "sess.jsonl"
+    sess.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in FIXTURE) + "\n", encoding="utf-8")
+
+    # When: 带同一路由表运行收口对账
+    p = run_hook("session-decompose", "--session", str(sess), "--workflow", str(wf), "--expect-models", ROUTE)
+
+    # Then: 退出 0；输出没有 ❌；对账结论同时记有 executor=opus、reviewer=opus、integrator=sonnet
+    assert p.returncode == 0, p.stdout
+    assert "❌" not in p.stdout, p.stdout
+    assert all(s in p.stdout for s in ("executor=opus", "reviewer=opus", "integrator=sonnet")), p.stdout

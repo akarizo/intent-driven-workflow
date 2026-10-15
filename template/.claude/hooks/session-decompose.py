@@ -19,9 +19,12 @@ import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
+# 角色判定三级顺序：agentType → label 前缀 → 阶段（前一级判不出才看后一级）
 # agentType → 路由角色（主键：wave integrator 在 Implement 阶段派发，只看阶段会误判成 executor）
 AGENT_ROLE = {"slice-executor": "executor", "code-reviewer": "reviewer", "integrator": "integrator"}
-# 阶段 → 路由角色（兜底：useAgentTypes=false 的回退路径下 meta 无 agentType）
+# label 前缀 → 路由角色（次键：meta 无 agentType 时，按 opsx-apply.js 派发 label 的显式格式判；含 :retry 后缀）
+LABEL_ROLE = (("integrate:", "integrator"), ("final-gate", "integrator"), ("review:", "reviewer"))
+# 阶段 → 路由角色（兜底：agentType 缺失且 label 不匹配显式格式）
 PHASE_ROLE = {"Implement": "executor", "Fix": "executor", "Review": "reviewer", "Finalize": "integrator"}
 ROLE_ORDER = ("executor", "reviewer", "integrator")
 EXIT_ROUTE_MISMATCH = 3
@@ -206,13 +209,23 @@ def load_alias_of():
         return None
 
 
+def label_role(label):
+    """label 按 LABEL_ROLE 前缀判路由角色；为空或不匹配返回 None。"""
+    if not label:
+        return None
+    for prefix, role in LABEL_ROLE:
+        if label.startswith(prefix):
+            return role
+    return None
+
+
 def audit_routes(agents, expect, alias_of):
-    """按 agentType→角色（缺失才退回阶段）比对别名（比别名不比原始 id）。
+    """角色按 agentType → label 前缀 → 阶段 三级判定（前一级判不出才看后一级），比对别名（比别名不比原始 id）。
     返回 (不符项, 已对账角色→期望别名, 未采样到的角色, 空 attempt)——零覆盖必须红，不能当一致。
     没有 assistant 轮次的转录（被重试掉的空 attempt，模型为 "?"）不算跑错模型，只作未采样告警。"""
     bad, seen, empty = [], {}, []
     for label, phase, model, _turns, _wall, atype in agents:
-        role = AGENT_ROLE.get(atype) or PHASE_ROLE.get(phase)
+        role = AGENT_ROLE.get(atype) or label_role(label) or PHASE_ROLE.get(phase)
         if role is None or role not in expect:
             continue
         if not model or model == "?":

@@ -1,0 +1,21 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_agents_workflow.py",
+      "line": 647,
+      "summary": "label 契约测试只做单向检查：确认 3 个已知模板存在，并和对应的 typed(...) 写在同一调用里。反方向没有守住，即 opsx-apply.js 里每个 typed('integrator') / typed('code-reviewer') 派发的 label 是否都被 LABEL_ROLE 覆盖。以后若新增一个 integrator 派发，label 又不以 integrate:/final-gate 开头（比如 'merge'），测试仍然全绿，而对账在无 agentType 的回退路径下会按 Implement 阶段把它误判成 executor。这正是本 change 要修的那类漂移，spec 要求的「一一对应」只守住了一半。",
+      "fix": "在 test_label_contract_matches_workflow_script 里补反向断言：收集 WORKFLOW 中所有同时含 'label:' 与 typed('integrator') 或 typed('code-reviewer') 的行，断言这些行的集合恰好等于 calls 中三条模板所在的行（目前是 3 行：:180、:189、:235）。这样新增派发而未登记 LABEL_ROLE 时，测试会变红。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/changes/decompose-role-by-label/evidence.log",
+      "line": 1,
+      "summary": "需进一步确认：prompt 指定的 evidence.log 在本 worktree 和主仓库的 change 目录下都不存在（change 目录里只有 design/gate-baseline/gate-report/proposal/slices/specs/tasks/timeline 等文件），评审无法按 TDD 留痕抽查「先红后绿」。门禁 JSON 已判 ok，所以这里不判为门禁误判，只记录留痕缺位，或者留痕落在了别的路径。",
+      "fix": "确认 test-run 留痕 hook 在 Workflow 隔离 worktree 下的写入位置。若 evidence.log 只写在执行体的临时 worktree 中、integrate 后丢失，应让 integrate 一并带回，或在 gate-report 里写明留痕的实际路径。"
+    }
+  ],
+  "fix": null
+}
