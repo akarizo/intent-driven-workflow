@@ -253,6 +253,8 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 | `gate`（每切片收尾） | G1 `verify` 通过 / G2 lint·typecheck / G3 源码改动必配对测试 / G4 GWT 三段注释 / G5 RED 先于 GREEN 留痕 / G6 只写 `owns` 内文件 / G7 scenario 测试已映射且不再 xfail/skip |
 | `final`（全部切片完成） | 全量 test/lint/typecheck + 全部 scenario 状态 |
 
+**基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
+
 **TDD 仍是硬约束**（详见 `.claude/skills/test-driven-development/SKILL.md`）：
 
 ```

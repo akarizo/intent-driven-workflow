@@ -1,0 +1,119 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1667,
+      "summary": "有一种情况会让基线一直红、重跑也不会好：开跑前就有一个没被 gitignore 的未跟踪非测试文件，它又不在旧基线 byproducts 里（例如旧格式基线没有 byproducts 字段，或人手动跑过 pytest 留下的输出），gate.test 每次运行都改写它。这时按 s0 规则判红，红的分支又不把它登记进 byproducts，下一次照样红。原因文案却说「重跑 baseline」。从旧格式基线升级上来的 change 必然会遇到。（字面上符合 spec D6 的写法，需进一步确认是否接受）",
+      "fix": "至少把原因文案改成可收敛的指引：对 s0 里存在、HEAD 未跟踪、又不是测试文件的路径，原因写「…被修改；删掉它或加入 .gitignore 后重跑 baseline」。另一种做法：旧基线没有 byproducts 字段时（迁移场景），把 s0 里未跟踪的非测试路径改为只警告并登记。后者要先改 design D6 与 spec。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_baseline_skip.py",
+      "line": 37,
+      "summary": "S1 落地后 lint 每次都会重跑，S3 的两条 strict xfail（test_lint_rerun_when_other_change_edited、test_lint_rerun_when_referenced_plan_file_changed）随之变成 XPASS(strict)。从 S1 合回到 S3 合回之间，全仓 pytest 是红的，违反「python3 -m pytest -q tests 全绿」。这不是 S1 代码的错，而是计划把这两条断言标成了 xfail，但它们在 S1 之后本来就成立。",
+      "fix": "文件不在 S1 owns 内，交 S3 或 integrator 处理：S3 去掉这两条的 xfail 标记，并在 S3 中加一条能区分「沿用」与「重跑」的前置断言，避免它们一开始就是绿的。也可以在 final 前确认 S3 已经合回。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_baseline_incremental.py",
+      "line": 411,
+      "summary": "S1 阶段 _baseline_candidates 只返回本 change 的旧基线。test_cross_change_refused_when_candidate_has_preexisting_red 与 test_cross_change_refused_when_script_differs 里的 change d 根本没有候选，「mode 为 full」必然成立，_try_reuse 里拒绝跨 change 预存红的分支在 S1 一行都没跑到。两条测试是空过的，S2 接入池之后也只验证「走了全量」，不验证「为什么走全量」。",
+      "fix": "Then 段补断言：d 的 reuse_skipped 有一项 change 为 c，reason 分别含「预存红」与「cmd_key 不同」。S1 阶段可以用 strict xfail 标注「S2 接池后成立」，或者把这两条用例的所有权移给 S2；不能让它们在 S1 空过。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1407,
+      "summary": "D12 的 fail-closed 路径都没有测试覆盖：开跑前快照失败时 die 且不写运行标记、结束快照失败时判红、preflight 比对失败时 die。补跑去重缓存与 abort 后跳出候选循环（_try_reuse 第三个返回值）也没有覆盖。这些都是安全相关的停下路径，回归了也不会有测试报警。",
+      "fix": "在 tests/test_baseline_incremental.py 补定向用例：把 PATH 指向一个对 status / ls-tree 返回非 0 的 git 包装脚本，或者 monkeypatch load_hook 得到的模块里的 _git_raw。断言三件事：baseline 失败后 gate-baseline.json 保持原样，没有变成运行标记；结束快照失败时 reasons 含「重跑 baseline」；preflight 退出非 0，stderr 含「基线内容比对失败」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1348,
+      "summary": "timeline 增量行里的「补跑 n 个测试文件」用的是 len(hit[\"files\"])，也就是整个 Δ，包括已删除、实际没补跑的测试文件，数字会偏大。",
+      "fix": "hit 里另记实际补跑的文件数，比如 _try_reuse 返回 {\"rerun\": len(files)}，timeline 用这个数；或者在 note 里只统计 os.path.isfile 成立的 Δ 路径。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1509,
+      "summary": "_snapshot 在 git status 之后对软链调用 os.readlink。如果软链在这之间被删，抛的是 OSError 而不是 RuntimeError。结束快照那里只捕获 RuntimeError，结果 gate-baseline.json 停在运行标记，与 D12「不留半成品」不一致。概率低。",
+      "fix": "_snapshot 里把 os.readlink 的 OSError 转成 RuntimeError（或者把该路径按删除记成 None）；也可以在 cmd_baseline 结束快照处一并捕获 OSError。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1674,
+      "summary": "_verify_paths 把命令里的包装脚本本身（例如 `python3 tools/run_tests.py`、`bash scripts/verify.sh`）也算作「认得出的路径」。结果是：verify 实际通过脚本跑 tests/ 时，Δ 里的测试文件不在这些路径下，于是不重跑，直接沿用旧 exit。增量前已经补跑了 Δ 测试并要求它们不红，所以误判风险低。行为与 #65 一致。",
+      "fix": "可以只把 is_test_path 成立的词，或指向目录的词，算作「覆盖范围」路径；其余脚本类路径不参与判断。全部是脚本类路径时，按「认不出路径」处理，重跑。改动前需在 design D7 里明确。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 69,
+      "summary": "第 5 步原句「它跑一次全量测试，把耗时写回 slices.json.gate.full_suite_sec」没有改，和新加的增量段对不上。按 spec，增量时不跑 gate.test，也不改已有的 full_suite_sec（只在本 change 还没有该值时写入候选的耗时）。SKILL.md 第 77 行有同样的问题。",
+      "fix": "两份文件把该句改成「默认跑一次全量测试并把耗时写回 `slices.json.gate.full_suite_sec`（走增量时不跑全量，见下）」，两份逐字相同，保留 test_template_docs 校验的关键字。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 76,
+      "summary": "文档写的 verify 推导条件比 spec 宽。spec 还要求：路径都是已存在的 test_*.py 或 *_test.py 文件、不带 `::` 选择、全量里这些用例都通过，并且增量基线不推导。文档只写了「全量是直接的 pytest 调用」，读者可能以为带 `::` 或 `-k` 的 verify 也会被推导。SKILL.md 第 84 行有同样的问题。",
+      "fix": "两份文件把该行补成「全量是直接的 pytest 调用、verify 只列测试文件（不带 `::` / `-k`）且这些用例在全量里都通过时，从全量 junit 推导，不再单独运行；增量基线不推导」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1626,
+      "summary": "清理排序时，读不出的条目（坏 JSON）以文件名作排序键。像 bad.json 这种字母开头的文件名，在倒序排序里比所有以数字开头的时间戳都大，于是被当成「最新」永远保留，还占掉 POOL_KEEP 的名额。spec 要求「按 at 保留最新 30 条」，坏文件本身没有 at。scenario pool-pruned-and-tolerant 能过，只是因为总数刚好等于 30：实际留下的是 bad.json、c 和 28 条旧条目，真实条目只有 29 条。坏文件越积越多，有效池容量就越小，而且这些坏文件永远清不掉。",
+      "fix": "在 _pool_write 的清理阶段，_pool_read 返回 None 的文件直接放进 drop（写入走 mkstemp + os.replace，是原子的，并发写入方不会被误删）。或者给它们的排序键用空串 \"\"，让它们排在最旧、最先被裁掉。_pool_order 的文件名回退只留给 at 缺失但 JSON 合法的条目。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1610,
+      "summary": "_baseline_candidates 没有去重：本 change 旧基线（cands[0]）在池里有一份同 change、同 commit、同 at 的副本，会作为池候选再判一遍。旧基线因非 abort 理由（例如有非测试文件改动、不是祖先）被拒时，副本会重复跑 git diff/ls-tree，并且在 skipped 里留下重复理由。reuse_skipped 只截前 5 条，重复项会挤掉真正有用的跨 change 拒绝理由。",
+      "fix": "在 _pool_candidates 的结果里过滤掉与 old 的 (change, commit, at) 相同的条目，再拼到 cands 后面。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_baseline_pool.py",
+      "line": 89,
+      "summary": "骨架 Given 有改动，已在 summary 里申报：d 的 S1 verify 改成了 python -c pass。理由成立：走全量时 verify 必然重跑，如果它运行 test_cap.py，计数就会多一个字符，这与「补跑 1 次、全量 1 次」的意图无关；断言也没改。但 spec.md 的 scenario failed-rerun-not-repeated-across-candidates 的 GIVEN 没有同步，规格和测试的 Given 已经对不上，违背「规格即验收」的一致性。另外要注意：补跑红会 abort 并直接 break，第二个候选根本不会被尝试，所以这条用例实际验证的是 abort，不是 rerun_cache 跨候选去重。",
+      "fix": "在 specs/baseline-incremental-reuse/spec.md 第 168 行的 GIVEN 里补一句「d 的 verify 不运行 tests/test_cap.py」，并顺带说明 Then 的计数不含 verify。由 spec 的所有者在收口前统一修改。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/changes/baseline-incremental-reuse/evidence.log",
+      "line": 1,
+      "summary": "需进一步确认：prompt 指定的 evidence.log 在 worktree 和主仓的对应路径下都不存在，评审员没法抽查 S2 先红后绿的测试留痕，只能以门禁 JSON 的 ok 为准。",
+      "fix": "确认 evidence.log 的实际落盘路径（是否写到了别的目录或尚未提交），确保 hook 留痕可以被 grep 到；如果路径变了，同步更新派发 prompt。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1378,
+      "summary": "判断全量是否可推导时，没有排除 gate.test 路径中带 `::` 的 node id，可能把红判成绿。`_derive_paths` 把 `tests/test_a.py::test_one` 当普通路径收下（`:` 不在 DERIVE_UNSAFE 里），于是 full_head 成立。全量只跑了 test_one，cases 里却已有 `tests.test_a`。verify 为 `pytest -q tests/test_a.py` 时会推导为 exit 0，同文件其余用例从未运行。这违反切片包「推导只会少跑 verify，不能把红判成绿」的约束。",
+      "fix": "算 full_head 时，除了要求 `_derive_paths(fh[1]) is not None`，再要求返回的每个路径都不含 `::`，带 `::` 就令 full_head = None，照跑 verify。补一条护栏测试：gate.test 用 `tests/test_cap.py::test_x` 形式，S1 的 verify 为同一前缀加 tests/test_cap.py，断言 verify 被实际运行、没有 derived。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 729,
+      "summary": "（需进一步确认）模块判定 `m = 路径去 .py 后 / 换 .` 默认 pytest rootdir 就是仓库根。design D11 说 rootdir 不同时只会「找不到 m 而多跑」，但它也可能匹配到另一个文件的 classname。例：仓库根下没有 ini，`gate.test = pytest -q tests`，rootdir 被推断为 tests/，tests/test_a.py 的 classname 是 `test_a`。若仓库根另有一个 test_a.py 被某片 verify 引用，m=`test_a` 会命中 cases，这个从未被全量运行的文件就被判为绿。另一种情形是子目录 ini 让 rootdir 下移，classname 与根下同名路径撞上。",
+      "fix": "推导时再加一道保守条件：每个 verify 路径必须落在全量 gate.test 的某个路径之下（路径相等或以它加 `/` 开头）；全量没有写路径时，要求仓库根有 pytest 配置（pytest.ini / pyproject 的 tool.pytest / tox.ini / setup.cfg），能确定 rootdir 就是根，否则不推导。同时在 design D11 的「为什么 classname 对不上就照跑」一段补写这种撞名的边界。"
+    },
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 25,
+      "summary": "路由不符 · session-decompose --expect-models exit 3：integrate:w1（两轮各一次）与 integrate:w2 角色判为 executor · 期望 opus · 实际 claude-sonnet-5-5。成因：本次以 useAgentTypes=false 起飞（template/.claude/agents 未注册为 agent 类型），Workflow agent 不带 agentType，session-decompose.py:25 按阶段回退，把 Implement 阶段派发的 integrator 判成 executor；integrator 按路由表应为 sonnet，实际即 sonnet。 ‖ 2026-10-15 人类放行（「放行路由那条」）：属对账脚本误判，非本 PR 代码。实测两轮 Workflow agent：executor / reviewer 8 个均 claude-opus-5-5，integrator（integrate:w1 ×2、integrate:w2、final-gate ×2）5 个均 claude-sonnet-5-5，与路由表一致。",
+      "fix": "另开 change：role 判定改为 agentType → label（integrate:* / final-gate* → integrator，review:* → reviewer，其余 → executor）→ 阶段；补两条测试锁误报与漏报（无 agentType 的 integrate:w1 跑 sonnet 判一致、跑 opus 判不符）。"
+    }
+  ],
+  "fix": null
+}

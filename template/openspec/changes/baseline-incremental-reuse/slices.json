@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "change": "baseline-incremental-reuse",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 63.2
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定器：基线内容指纹、同一 change 增量复用、verify 按需重跑、preflight 按内容判过期（摘自 #65；起飞判据改用 approve，修副产物 / 软链 / 补跑去重 / 不复用理由）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_baseline_incremental.py",
+        "tests/test_slice_gate.py",
+        "tests/test_slice_gate_baseline_preflight.py",
+        "tests/test_slice_gate_final.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_baseline_incremental.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate_final.py",
+      "scenarios": [
+        "baseline-incremental-reuse#baseline-records-snapshot",
+        "baseline-incremental-reuse#baseline-red-when-tracked-file-edited-while-running",
+        "baseline-incremental-reuse#baseline-tolerates-new-byproduct",
+        "baseline-incremental-reuse#baseline-tolerates-rewritten-byproduct",
+        "baseline-incremental-reuse#baseline-ignores-other-change-edits-while-running",
+        "baseline-incremental-reuse#baseline-records-symlink-as-git-does",
+        "baseline-incremental-reuse#incremental-when-only-test-file-changed",
+        "baseline-incremental-reuse#incremental-noop-when-only-plan-changed",
+        "baseline-incremental-reuse#full-when-non-test-file-changed",
+        "baseline-incremental-reuse#full-when-changed-test-file-fails",
+        "baseline-incremental-reuse#full-when-test-file-had-preexisting-red",
+        "baseline-incremental-reuse#full-flag-forces-full",
+        "baseline-incremental-reuse#full-when-gate-script-changed",
+        "baseline-incremental-reuse#cross-change-refused-when-script-differs",
+        "baseline-incremental-reuse#cross-change-refused-when-candidate-has-preexisting-red",
+        "baseline-incremental-reuse#verify-rerun-only-covering-slices",
+        "baseline-incremental-reuse#verify-rerun-when-command-changed",
+        "baseline-incremental-reuse#preflight-stale-when-test-file-changed-after-baseline",
+        "baseline-incremental-reuse#preflight-passes-after-artifact-commit",
+        "baseline-incremental-reuse#preflight-skips-content-check-after-approve",
+        "baseline-incremental-reuse#preflight-old-baseline-compatible",
+        "baseline-incremental-reuse#preflight-ignores-removed-byproduct",
+        "baseline-incremental-reuse#timeline-marks-incremental-baseline"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "判定器：基线池与跨 change 复用（只收全绿全量、指纹为空不入池、清理孤儿临时文件、写池失败只警告）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_baseline_pool.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_baseline_pool.py tests/test_baseline_incremental.py",
+      "scenarios": [
+        "baseline-incremental-reuse#cross-change-reuse-same-tree",
+        "baseline-incremental-reuse#cross-change-reuse-after-test-only-commit",
+        "baseline-incremental-reuse#cross-change-ignores-sourced-files",
+        "baseline-incremental-reuse#failed-rerun-not-repeated-across-candidates",
+        "baseline-incremental-reuse#pool-pruned-and-tolerant",
+        "baseline-incremental-reuse#pool-write-failure-only-warns"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "判定器：代码树没变时 lint / typecheck 沿用、全量可度量时 verify 从全量 junit 推导",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_baseline_skip.py",
+        "tests/test_slice_gate.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_baseline_skip.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_slice_gate.py",
+      "scenarios": [
+        "baseline-redundant-run-skip#lint-reused-when-tree-unchanged",
+        "baseline-redundant-run-skip#lint-rerun-when-other-change-edited",
+        "baseline-redundant-run-skip#lint-rerun-when-referenced-plan-file-changed",
+        "baseline-redundant-run-skip#verify-derived-from-full-suite",
+        "baseline-redundant-run-skip#verify-run-when-scope-has-preexisting-red",
+        "baseline-redundant-run-skip#verify-run-when-not-derivable",
+        "baseline-redundant-run-skip#verify-run-when-gate-test-not-plain-pytest"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "文档：propose 命令与同名 skill 的基线步骤、README 写明增量基线、跨 change、推导与沿用",
+      "owns": [
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "README.md",
+        "tests/test_baseline_incremental_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_baseline_incremental_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py",
+      "scenarios": [
+        "baseline-incremental-reuse#propose-docs-describe-incremental"
+      ],
+      "packet": "slices/S4.md"
+    }
+  ],
+  "scenario_tests": {
+    "baseline-incremental-reuse#baseline-records-snapshot": "tests/test_baseline_incremental.py::test_baseline_records_snapshot",
+    "baseline-incremental-reuse#baseline-red-when-tracked-file-edited-while-running": "tests/test_baseline_incremental.py::test_baseline_red_when_tracked_file_edited_while_running",
+    "baseline-incremental-reuse#baseline-tolerates-new-byproduct": "tests/test_baseline_incremental.py::test_baseline_tolerates_new_byproduct",
+    "baseline-incremental-reuse#baseline-tolerates-rewritten-byproduct": "tests/test_baseline_incremental.py::test_baseline_tolerates_rewritten_byproduct",
+    "baseline-incremental-reuse#baseline-ignores-other-change-edits-while-running": "tests/test_baseline_incremental.py::test_baseline_ignores_other_change_edits_while_running",
+    "baseline-incremental-reuse#baseline-records-symlink-as-git-does": "tests/test_baseline_incremental.py::test_baseline_records_symlink_as_git_does",
+    "baseline-incremental-reuse#incremental-when-only-test-file-changed": "tests/test_baseline_incremental.py::test_incremental_when_only_test_file_changed",
+    "baseline-incremental-reuse#incremental-noop-when-only-plan-changed": "tests/test_baseline_incremental.py::test_incremental_noop_when_only_plan_changed",
+    "baseline-incremental-reuse#full-when-non-test-file-changed": "tests/test_baseline_incremental.py::test_full_when_non_test_file_changed",
+    "baseline-incremental-reuse#full-when-changed-test-file-fails": "tests/test_baseline_incremental.py::test_full_when_changed_test_file_fails",
+    "baseline-incremental-reuse#full-when-test-file-had-preexisting-red": "tests/test_baseline_incremental.py::test_full_when_test_file_had_preexisting_red",
+    "baseline-incremental-reuse#full-flag-forces-full": "tests/test_baseline_incremental.py::test_full_flag_forces_full",
+    "baseline-incremental-reuse#full-when-gate-script-changed": "tests/test_baseline_incremental.py::test_full_when_gate_script_changed",
+    "baseline-incremental-reuse#cross-change-refused-when-script-differs": "tests/test_baseline_incremental.py::test_cross_change_refused_when_script_differs",
+    "baseline-incremental-reuse#cross-change-refused-when-candidate-has-preexisting-red": "tests/test_baseline_incremental.py::test_cross_change_refused_when_candidate_has_preexisting_red",
+    "baseline-incremental-reuse#verify-rerun-only-covering-slices": "tests/test_baseline_incremental.py::test_verify_rerun_only_covering_slices",
+    "baseline-incremental-reuse#verify-rerun-when-command-changed": "tests/test_baseline_incremental.py::test_verify_rerun_when_command_changed",
+    "baseline-incremental-reuse#preflight-stale-when-test-file-changed-after-baseline": "tests/test_baseline_incremental.py::test_preflight_stale_when_test_file_changed_after_baseline",
+    "baseline-incremental-reuse#preflight-passes-after-artifact-commit": "tests/test_baseline_incremental.py::test_preflight_passes_after_artifact_commit",
+    "baseline-incremental-reuse#preflight-skips-content-check-after-approve": "tests/test_baseline_incremental.py::test_preflight_skips_content_check_after_approve",
+    "baseline-incremental-reuse#preflight-old-baseline-compatible": "tests/test_baseline_incremental.py::test_preflight_old_baseline_compatible",
+    "baseline-incremental-reuse#preflight-ignores-removed-byproduct": "tests/test_baseline_incremental.py::test_preflight_ignores_removed_byproduct",
+    "baseline-incremental-reuse#timeline-marks-incremental-baseline": "tests/test_baseline_incremental.py::test_timeline_marks_incremental_baseline",
+    "baseline-incremental-reuse#cross-change-reuse-same-tree": "tests/test_baseline_pool.py::test_cross_change_reuse_same_tree",
+    "baseline-incremental-reuse#cross-change-reuse-after-test-only-commit": "tests/test_baseline_pool.py::test_cross_change_reuse_after_test_only_commit",
+    "baseline-incremental-reuse#cross-change-ignores-sourced-files": "tests/test_baseline_pool.py::test_cross_change_ignores_sourced_files",
+    "baseline-incremental-reuse#failed-rerun-not-repeated-across-candidates": "tests/test_baseline_pool.py::test_failed_rerun_not_repeated_across_candidates",
+    "baseline-incremental-reuse#pool-pruned-and-tolerant": "tests/test_baseline_pool.py::test_pool_pruned_and_tolerant",
+    "baseline-incremental-reuse#pool-write-failure-only-warns": "tests/test_baseline_pool.py::test_pool_write_failure_only_warns",
+    "baseline-redundant-run-skip#lint-reused-when-tree-unchanged": "tests/test_baseline_skip.py::test_lint_reused_when_tree_unchanged",
+    "baseline-redundant-run-skip#lint-rerun-when-other-change-edited": "tests/test_baseline_skip.py::test_lint_rerun_when_other_change_edited",
+    "baseline-redundant-run-skip#lint-rerun-when-referenced-plan-file-changed": "tests/test_baseline_skip.py::test_lint_rerun_when_referenced_plan_file_changed",
+    "baseline-redundant-run-skip#verify-derived-from-full-suite": "tests/test_baseline_skip.py::test_verify_derived_from_full_suite",
+    "baseline-redundant-run-skip#verify-run-when-scope-has-preexisting-red": "tests/test_baseline_skip.py::test_verify_run_when_scope_has_preexisting_red",
+    "baseline-redundant-run-skip#verify-run-when-not-derivable": "tests/test_baseline_skip.py::test_verify_run_when_not_derivable",
+    "baseline-redundant-run-skip#verify-run-when-gate-test-not-plain-pytest": "tests/test_baseline_skip.py::test_verify_run_when_gate_test_not_plain_pytest",
+    "baseline-incremental-reuse#propose-docs-describe-incremental": "tests/test_baseline_incremental_docs.py::test_propose_docs_describe_incremental"
+  }
+}

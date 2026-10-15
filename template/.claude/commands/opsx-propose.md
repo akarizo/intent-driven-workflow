@@ -69,8 +69,15 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。它跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
    verify 在基线上必须绿（骨架是 strict-xfail）。
    baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
+   脚本自己判断跑全量还是**增量**，并跳过重复的运行：
+   - 自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；
+   - **跨 change** 复用：同一仓库其他 change 跑过的全绿全量（没有预存红），命令指纹相同、代码树之差只有测试文件时同样复用；基线池在 git common dir 下；
+   - 代码树完全没变、命令也没变时，lint / typecheck 沿用上次结论；
+   - 全量是直接的 pytest 调用时，只跑若干测试文件的 verify 从全量的 junit 推导，不再单独运行。
+   **改完计划后重跑 `slice-gate.py baseline`**，由脚本判全量或增量；模型不自行判断要不要重跑，preflight 会按内容判基线是否过期。
+   `--full` 强制全量：仓外环境（数据仓、解释器）变了、被 source 的门禁脚本改了，或 lint 扫描本 change 计划工件目录时用。
    baseline 结束（后台通知）时只报告一行：
-   - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」；
+   - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」或「基线绿（增量：复用 <change> 的全量，补跑 n 个测试文件 t 秒；预存红 k 条）」；
    - 退出非 0 → **停下报告** stdout 的 `reasons`，并说明：人类修 `gate.test` / `verify` / 环境后重跑本步；修改涉及计划文件（proposal / design / slices.json / specs / 切片包）时重新渲染 spec.html（step 4）并重新批准。
 
 6. **收尾**

@@ -487,7 +487,7 @@ def test_baseline_writes_gate_baseline(git_repo):
     bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
     assert bl["ok"] is True and bl["commit"] == git(git_repo, "rev-parse", "HEAD")
     assert len(bl["plan_sha"]) == 40
-    assert bl["verify"] == {"S1": {"exit": 0}, "S2": {"exit": 0}}
+    assert {k: v["exit"] for k, v in bl["verify"].items()} == {"S1": 0, "S2": 0}
     assert bl["lint"]["exit"] == 1 and any("a.ts(#,#): error TS# x" == l for l in bl["lint"]["lines"])
     assert json.loads((change / "slices.json").read_text(encoding="utf-8"))["gate"]["full_suite_sec"] is not None
 
@@ -665,10 +665,11 @@ def test_baseline_records_empty_lines_for_green_lint(git_repo):
     # When: 运行 slice-gate.py baseline
     p = run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo)
 
-    # Then: 退出 0；gate-baseline.json 的 lint 为 {"exit": 0, "lines": []}，成功输出不记进基线行
+    # Then: 退出 0；gate-baseline.json 的 lint 的 exit 为 0、lines 为 []，成功输出不记进基线行
     assert p.returncode == 0, p.stderr
     bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
-    assert bl["lint"] == {"exit": 0, "lines": []}
+    assert bl["lint"]["exit"] == 0
+    assert bl["lint"]["lines"] == []
 
 
 def test_final_typecheck_excludes_baseline_lines(git_repo):
