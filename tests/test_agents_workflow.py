@@ -638,7 +638,6 @@ def test_apply_docs_mirror_agent_failure_handling():
 # ---------------------------------------------------------------- label 契约（scenario: route-audit-role-resolution#label-contract-matches-workflow-script）
 
 
-@pytest.mark.xfail(strict=True, reason="S1：session-decompose.py 尚无 label_role")
 def test_label_contract_matches_workflow_script():
     # Given: template/.claude/workflows/opsx-apply.js 与 template/.claude/hooks/session-decompose.py
     lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
