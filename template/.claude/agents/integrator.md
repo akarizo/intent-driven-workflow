@@ -13,7 +13,7 @@ color: cyan
 
 合回或跑门禁之前，若 `git status --porcelain` 显示 `openspec/changes/<change>/` 内的 `timeline.md` / `gate-report.md` / `evidence.log` 未提交：`git add` 这三个文件并 `git commit -m "chore(flight): 记录"`。它们是 hook 自动追加的飞行记录，合回前必须先入库，否则 `git merge` 会因「本地改动将被覆盖」拒绝。change 目录之外的未提交改动**不碰**，如实写进返回 JSON 的 `warnings`。
 
-## 1. 合回并行切片
+## 1. 合回切片 commit（含单片 wave；finalize 时含 fix 的 commit）
 
 对 prompt 给的 commit SHA 列表按顺序执行 `git merge --no-ff <sha> -m "integrate: <S>"`。切片所有权不相交，正常不会冲突；一旦冲突：`git merge --abort`，返回 `{"ok": false, "failed": ["merge <S>: 冲突文件 …"]}`，不要手工解冲突。
 

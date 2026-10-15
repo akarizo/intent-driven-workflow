@@ -54,13 +54,14 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
    ```bash
    git fetch origin <target-branch>
-   BASE=$(git merge-base HEAD origin/<target-branch>)
-   git merge-tree "$BASE" HEAD "origin/<target-branch>" > /tmp/pr-ship-merge-preview.txt
-   grep -c "^<<<<<<<" /tmp/pr-ship-merge-preview.txt
+   git merge-tree --write-tree --name-only HEAD origin/<target-branch>
    ```
 
-   - **0 冲突** → 下一步。
-   - **>0 冲突** → 报告冲突文件清单，停下交用户自行 `rebase` / `merge` / 处理（需要人对冲突内容做判断，不算本命令的问询预算，也不是自动化能安全代劳的一步）。
+   需要 git ≥ 2.38（`--write-tree` 自该版本起提供）。按退出码判断：
+
+   - **退出 0** → 无冲突，进入下一步。
+   - **退出 1** → 有冲突：输出第一行是树 id，其后直到空行是冲突文件。报告这些文件，停下交用户自行 `rebase` / `merge` / 处理（需要人对冲突内容做判断，不算本命令的问询预算，也不是自动化能安全代劳的一步）。
+   - **其他退出码** → 报告错误并停下。
 
 5. **Push 当前分支**
 

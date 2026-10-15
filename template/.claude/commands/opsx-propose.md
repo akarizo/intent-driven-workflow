@@ -2,7 +2,7 @@
 description: 一次成稿：一步生成完整 change 的全部工件（含切片计划），收尾把 spec.html 交给人类审批，起飞需人类自己发 /opsx-apply
 ---
 
-一次成稿：并行读完全部待建工件的 instruction，再一次性写出全部工件（含切片计划），最后跑一次 `openspec status`。工件写完后渲染审批面板，然后硬交接给人类：本命令到此结束，起飞由人类自己发出 `/opsx-apply`（`takeoff-gate.py` 机械校验这条批准）。
+一次成稿：并行读完全部待建工件的 instruction，再一次性写出全部工件（含切片计划），最后跑一次 `openspec status`。工件写完后渲染审批面板、在后台跑基线门禁，然后硬交接给人类：本命令到此结束，起飞由人类自己发出 `/opsx-apply`（`takeoff-gate.py` 机械校验这条批准）。
 
 ---
 
@@ -56,29 +56,33 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
      ```
      红 → 修 `slices.json` 直到绿。
 
-4. **基线门禁**
-   ```bash
-   python3 .claude/hooks/slice-gate.py baseline --change-dir openspec/changes/<name>
-   ```
-   跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
-   退出非 0 → **停下报告** stdout 的 `reasons`，不渲染、不交接；人类修 `gate.test` / `verify` / 环境后重跑本步。
-   verify 在基线上必须绿（骨架是 strict-xfail）。
-
-5. **渲染审批面板**
+4. **渲染审批面板**
    ```bash
    python3 .claude/hooks/spec_html.py --change-dir openspec/changes/<name>
    ```
    一次性生成 `openspec/changes/<name>/spec.html`（模型不逐字渲染 HTML）。失败不阻塞主流程：捕获异常只 warn 一行，继续下一步。
 
+5. **基线门禁（后台运行）**
+   ```bash
+   python3 .claude/hooks/slice-gate.py baseline --change-dir openspec/changes/<name>
+   ```
+   用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。它跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
+   verify 在基线上必须绿（骨架是 strict-xfail）。
+   baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
+   baseline 结束（后台通知）时只报告一行：
+   - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」；
+   - 退出非 0 → **停下报告** stdout 的 `reasons`，并说明：人类修 `gate.test` / `verify` / 环境后重跑本步；修改涉及计划文件（proposal / design / slices.json / specs / 切片包）时重新渲染 spec.html（step 4）并重新批准。
+
 6. **收尾**
    ```bash
    openspec status --change "<name>"
    ```
-   然后**硬交接**（三件事缺一不可）：
+   然后**硬交接**（四件事缺一不可）：
 
    1. 打印 `spec.html` 的**绝对路径**（`openspec/changes/<name>/spec.html`，用 `pwd` 拼成绝对路径再打印），请人类打开审阅飞行计划。
    2. 明确一行：**本命令到此结束。不得在同一轮继续 `/opsx-apply`；起飞需要你自己发出 `/opsx-apply <name>`（`takeoff-gate.py` 会在转录里核验这条人类批准 + 计划新鲜度，模型自证无效）。**
-   3. 提示用户把工件单独 commit（artifacts-only commit）。
+   3. 说明 baseline 仍在后台跑：跑完前起飞会被 preflight 拒绝（报「仍在跑」），等 baseline 报告一行后再起飞。
+   4. 提示用户在 baseline 报告之后再把工件单独 commit（artifacts-only commit；baseline 结束会改写 `gate-baseline.json` 与 `slices.json` 的耗时）。
 
 **Output**
 

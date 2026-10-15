@@ -1,5 +1,7 @@
 """slice-gate.py：切片规划 lint 与切片门禁（scenario: slice-gate#*）。"""
 import json
+import os
+import sys
 
 import pytest
 
@@ -979,3 +981,368 @@ def test_start_resume_drops_renamed_source(git_repo, tmp_path):
     assert not (wt / "src" / "old.py").exists()
     assert (wt / "src" / "new.py").read_text(encoding="utf-8") == "OLD = 1\n"
     assert sorted(json.loads(p.stdout)["checkpoint"]["restored"]) == ["src/new.py", "src/old.py"], p.stdout
+
+
+# ---------------------------------------------------------------- 摘自原仓 #36（flight-integrity-fixes）· scenario: workflow-engine-recovery#gate-* / resume-* / record-* · gate-scenario-run#g7-*
+
+GATE_REF = "refs/flight/c/gate-S1"
+
+
+def _gate(change, repo):
+    return json.loads(run_hook("slice-gate", "gate", "S1", "--change-dir", str(change), cwd=repo).stdout)
+
+
+def test_gate_ok_records_result_ref(git_repo):
+    # Given: 已 start 且实现完整的切片 S1（门禁会绿）
+    change = gate_repo(git_repo)
+
+    # When: 运行切片门禁
+    out = _gate(change, git_repo)
+
+    # Then: 门禁绿；refs/flight/c/gate-S1 的父提交是门禁输出里的 commit，其 gate.json 的 slice / ok / commit / base 与门禁输出一致
+    assert out["ok"] is True, out
+    assert _ref(git_repo, GATE_REF), "门禁结论引用不存在"
+    rec = json.loads(git(git_repo, "show", GATE_REF + ":gate.json"))
+    keys = ("slice", "ok", "commit", "base")
+    assert {k: rec.get(k) for k in keys} == {k: out[k] for k in keys}, rec
+    assert git(git_repo, "rev-parse", GATE_REF + "^") == out["commit"]
+
+
+def test_resume_start_returns_recorded_gate(git_repo, tmp_path):
+    # Given: 切片 S1 在基点 X 上提交并门禁通过（结论已留存），随后从 X 新开一个干净 worktree（模拟隔离模式重派）
+    change = gate_repo(git_repo)
+    base = git(git_repo, "rev-parse", "HEAD~1")
+    gated = _gate(change, git_repo)
+    wt = tmp_path / "wt"
+    git(git_repo, "worktree", "add", "-q", "--detach", str(wt), base)
+
+    # When: 在新 worktree 里运行 start S1 --resume-checkpoint
+    p = run_hook("slice-gate", "start", "S1", "--change-dir", str(wt / "openspec" / "changes" / "c"), "--resume-checkpoint", cwd=wt)
+
+    # Then: 以 3 退出；stdout 是留存的门禁结论（ok 为 true、commit 为原切片 commit、recovered 为 true）；新 worktree 里没有切片标记
+    assert gated["ok"] is True and gated["base"] == base, gated
+    assert p.returncode == 3, (p.returncode, p.stdout, p.stderr)
+    out = json.loads(p.stdout)
+    assert out["ok"] is True and out["commit"] == gated["commit"] and out.get("recovered") is True, out
+    assert not (wt / ".openspec-slice").exists()
+
+
+def test_resume_start_ignores_foreign_gate_record(git_repo, tmp_path):
+    # Given: 切片 S1 的门禁结论已留存（base X、commit C）；C 之后又有提交 Y，在 Y 上新开 worktree
+    change = gate_repo(git_repo)
+    _gate(change, git_repo)
+    recorded = _ref(git_repo, GATE_REF)
+    write(git_repo / "notes.txt", "y\n")
+    other = commit_all(git_repo, "elsewhere")
+    wt = tmp_path / "wt"
+    git(git_repo, "worktree", "add", "-q", "--detach", str(wt), other)
+
+    # When: 在 Y 上运行 start S1 --resume-checkpoint
+    p = run_hook("slice-gate", "start", "S1", "--change-dir", str(wt / "openspec" / "changes" / "c"), "--resume-checkpoint", cwd=wt)
+
+    # Then: 以 0 退出并按原有逻辑起跑（输出含 checkpoint、不含 recovered）；留存的门禁结论引用保持不变
+    assert recorded, "门禁结论引用不存在"
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    out = json.loads(p.stdout)
+    assert "checkpoint" in out and "recovered" not in out, out
+    assert _ref(git_repo, GATE_REF) == recorded
+
+
+def test_record_and_fresh_start_clear_gate_ref(git_repo):
+    # Given: 切片 S1 门禁通过、结论已留存
+    change = gate_repo(git_repo)
+    gated = _gate(change, git_repo)
+    recorded = _ref(git_repo, GATE_REF)
+    assert recorded, "门禁结论引用不存在"
+
+    # When: integrator 以 record 写回该结论；之后人为放回一份旧结论，再首轮 start S1
+    rec = run_hook("slice-gate", "record", "--change-dir", str(change), "--json", json.dumps(gated), cwd=git_repo)
+    after_record = _ref(git_repo, GATE_REF)
+    git(git_repo, "update-ref", GATE_REF, recorded)
+    start = run_hook("slice-gate", "start", "S1", "--change-dir", str(change), cwd=git_repo)
+
+    # Then: 写回后引用已不存在；首轮 start 后旧结论也被清掉
+    assert rec.returncode == 0 and after_record == "", (rec.stdout, rec.stderr, after_record)
+    assert start.returncode == 0 and _ref(git_repo, GATE_REF) == "", start.stderr
+
+
+ALIASED_XFAIL_TEST = '''
+import sys, pathlib
+import pytest
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from src.mod import add
+
+XF = pytest.mark.xfail(strict=True, reason="尚未实现")
+
+
+@XF
+def test_mod_adds():
+    # Given: 两个整数 1 与 2
+    a, b = 1, 2
+    # When: 调用 add
+    result = add(a, b)
+    # Then: 返回 4（故意错，让 xfail 成立）
+    assert result == 4
+'''
+
+IMPERATIVE_SKIP_TEST = '''
+import sys, pathlib
+import pytest
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from src.mod import add
+
+
+def test_mod_adds():
+    # Given: 两个整数 1 与 2
+    a, b = 1, 2
+    # When: 测试体内直接跳过
+    pytest.skip("尚未实现")
+    # Then: 返回 3
+    assert add(a, b) == 3
+'''
+
+
+def test_g7_rejects_aliased_xfail(git_repo):
+    # Given: scenario cap#adds 映射的测试用别名装饰器 XF = pytest.mark.xfail(strict=True) 标记，断言尚未满足
+    change = gate_repo(git_repo, test_body=ALIASED_XFAIL_TEST)
+
+    # When: 运行 slice-gate.py final
+    out = json.loads(run_hook("slice-gate", "final", "--change-dir", str(change), cwd=git_repo).stdout)
+
+    # Then: ok 为 false，failed 里有一条 G7 点名 cap#adds 并含实际结果 XFAIL
+    assert out["ok"] is False, out
+    assert any(f.startswith("G7") and "cap#adds" in f and "XFAIL" in f for f in out["failed"]), out["failed"]
+
+
+def test_g7_rejects_imperative_skip(git_repo):
+    # Given: scenario cap#adds 映射的测试在测试体内调用 pytest.skip()
+    change = gate_repo(git_repo, test_body=IMPERATIVE_SKIP_TEST)
+
+    # When: 运行 slice-gate.py final
+    out = json.loads(run_hook("slice-gate", "final", "--change-dir", str(change), cwd=git_repo).stdout)
+
+    # Then: ok 为 false，failed 里有一条 G7 点名 cap#adds 并含实际结果 SKIPPED
+    assert out["ok"] is False, out
+    assert any(f.startswith("G7") and "cap#adds" in f and "SKIPPED" in f for f in out["failed"]), out["failed"]
+
+
+def test_g7_gate_checks_own_slice_outcome(git_repo):
+    # Given: 切片 S1 的 scenario 测试用别名装饰器标成 xfail，断言尚未满足
+    change = gate_repo(git_repo, test_body=ALIASED_XFAIL_TEST)
+
+    # When: 运行 slice-gate.py gate S1
+    out = _gate(change, git_repo)
+
+    # Then: ok 为 false，failed 里有一条 G7 含实际结果 XFAIL
+    assert out["ok"] is False, out
+    assert any(f.startswith("G7") and "XFAIL" in f for f in out["failed"]), out["failed"]
+
+
+def test_g7_reads_outcome_despite_addopts_quiet(git_repo):
+    # Given: 仓库根有 pytest.ini 写 addopts = -q；切片 S1 的 scenario 测试 test_mod_adds 无标记、断言成立
+    write(git_repo / "pytest.ini", "[pytest]\naddopts = -q\n")
+    change = gate_repo(git_repo)
+
+    # When: 运行 slice-gate.py final
+    out = json.loads(run_hook("slice-gate", "final", "--change-dir", str(change), cwd=git_repo).stdout)
+
+    # Then: failed 里没有任何 G7 条目
+    assert not [f for f in out["failed"] if f.startswith("G7")], out["failed"]
+
+
+# ---------------------------------------------------------------- 摘自原仓 #37（flight-integrity-followups）· scenario: workflow-engine-recovery#resume-start-refuses-record-after-replan
+
+def test_resume_start_refuses_record_after_replan(git_repo, tmp_path):  # 既有行为守卫：基点核对已挡住该路径，故不标 xfail
+    # Given: 切片 S1 门禁绿、结论已留存，随后飞行中断；人改了计划（proposal.md）并提交，又按批准提交了一次，再从新的分支尖端开 worktree
+    change = gate_repo(git_repo)
+    gated = _gate(change, git_repo)
+    write(change / "proposal.md", "## Why\n\n改过的计划。\n")
+    commit_all(git_repo, "replan")
+    write(change / "timeline.md", "approve\n")
+    tip = commit_all(git_repo, "chore(flight): approve")
+    wt = tmp_path / "wt"
+    git(git_repo, "worktree", "add", "-q", "--detach", str(wt), tip)
+
+    # When: 新一轮飞行里，首轮执行体未返回，重派在新 worktree 里运行 start S1 --resume-checkpoint
+    p = run_hook("slice-gate", "start", "S1", "--change-dir", str(wt / "openspec" / "changes" / "c"), "--resume-checkpoint", cwd=wt)
+
+    # Then: 结论确实还留着；但不找回（以 0 退出、输出不含 recovered），旧计划下的 commit 不会被交出
+    assert gated["ok"] is True and _ref(git_repo, GATE_REF), gated
+    assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+    out = json.loads(p.stdout)
+    assert "recovered" not in out and out.get("commit") != gated["commit"], out
+
+
+# ---------------------------------------------------------------- 摘自原仓 #37（flight-integrity-followups）· scenario: gate-scenario-run#g7-uses-* / g7-prefers-* / g7-falls-back-* / g7-times-out / g7-reports-*
+
+def _update_gate(change, **fields):
+    path = change / "slices.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["gate"].update(fields)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _pytest_wrapper(path, before="", pythonpath=None):
+    """写一个可执行的 pytest 包装脚本：先执行 before 这段 shell，再用当前解释器跑 pytest（可在原 PYTHONPATH 前追加一段）。"""
+    lines = ["#!/bin/sh", before]
+    if pythonpath:
+        lines.append('export PYTHONPATH="%s${PYTHONPATH:+:$PYTHONPATH}"' % pythonpath)
+    lines.append('exec "%s" -m pytest "$@"' % sys.executable)
+    write(path, "\n".join(lines) + "\n")
+    os.chmod(path, 0o755)
+    return path
+
+
+def _final(change, repo, env=None):
+    return json.loads(run_hook("slice-gate", "final", "--change-dir", str(change), cwd=repo, env=env).stdout)
+
+
+ENVONLY_TEST = '''
+import envonly
+
+
+def test_mod_adds():
+    # Given: 只在项目测试环境里可导入的模块 envonly
+    module = envonly
+    # When: 读取它的常量 VALUE
+    value = module.VALUE
+    # Then: 等于 1
+    assert value == 1
+'''
+
+COLLECT_ERROR_TEST = '''
+raise RuntimeError("故意的收集错误")
+
+
+def test_mod_adds():
+    # Given: 模块级已经抛错
+    # When: 收集本文件
+    # Then: 不会走到这里
+    assert False
+'''
+
+
+def test_g7_uses_runner_from_gate_test(git_repo):
+    # Given: scenario 测试导入的 envonly 只在 venv-bin/pytest 这个项目测试环境里可用；gate.test 是它加 -q tests
+    change = gate_repo(git_repo, test_body=ENVONLY_TEST)
+    write(git_repo / "envlib" / "envonly.py", "VALUE = 1\n")
+    runner = _pytest_wrapper(git_repo / "venv-bin" / "pytest", pythonpath=git_repo / "envlib")
+    _update_gate(change, test="%s -q tests" % runner)
+
+    # When: 运行 slice-gate.py final
+    out = _final(change, git_repo)
+
+    # Then: ok 为 true，scenarios.passed 为 1
+    assert out["ok"] is True, out
+    assert out["scenarios"]["passed"] == 1, out
+
+
+def test_g7_prefers_explicit_pytest_config(git_repo):
+    # Given: gate.pytest 指向会留下调用记录的 pytest 包装脚本，gate.test 仍是 python3 -m pytest -q tests
+    change = gate_repo(git_repo)
+    log = git_repo / "runner-used.log"
+    runner = _pytest_wrapper(git_repo / "bin" / "logged-pytest", before='echo used >> "%s"' % log)
+    _update_gate(change, pytest=str(runner))
+
+    # When: 运行 slice-gate.py final
+    out = _final(change, git_repo)
+
+    # Then: 包装脚本被调用过；ok 为 true
+    assert log.exists(), "gate.pytest 没有被使用"
+    assert out["ok"] is True, out
+
+
+def test_g7_falls_back_with_warning(git_repo):
+    # Given: gate.test 是 cd . && python3 -m pytest -q tests（含 shell 语法），没有 gate.pytest
+    change = gate_repo(git_repo)
+    _update_gate(change, test="cd . && python3 -m pytest -q tests")
+
+    # When: 运行 slice-gate.py final
+    out = _final(change, git_repo)
+
+    # Then: ok 为 true；warnings 里有一条以 G7 开头、含 gate.pytest 的说明
+    assert out["ok"] is True, out
+    assert any(w.startswith("G7") and "gate.pytest" in w for w in out["warnings"]), out["warnings"]
+
+
+def test_g7_times_out(git_repo):
+    # Given: gate.pytest 指向先睡 5 秒再运行的 pytest 包装脚本；环境变量 FLIGHT_G7_TIMEOUT 为 1
+    change = gate_repo(git_repo)
+    runner = _pytest_wrapper(git_repo / "bin" / "slow-pytest", before="sleep 5")
+    _update_gate(change, pytest=str(runner))
+
+    # When: 运行 slice-gate.py final
+    out = _final(change, git_repo, env={"FLIGHT_G7_TIMEOUT": "1"})
+
+    # Then: ok 为 false，failed 里有一条 G7 含「运行超时」
+    assert out["ok"] is False, out
+    assert any(f.startswith("G7") and "运行超时" in f for f in out["failed"]), out["failed"]
+
+
+def test_g7_reports_collection_failure_detail(git_repo):
+    # Given: scenario 测试所在文件在模块级抛出 RuntimeError，收集即失败
+    change = gate_repo(git_repo, test_body=COLLECT_ERROR_TEST)
+
+    # When: 运行 slice-gate.py final
+    out = _final(change, git_repo)
+
+    # Then: ok 为 false，failed 里有一条 G7 含「未被收集运行」、rc= 与 RuntimeError
+    assert out["ok"] is False, out
+    assert any(f.startswith("G7") and "未被收集运行" in f and "rc=" in f and "RuntimeError" in f
+               for f in out["failed"]), out["failed"]
+
+# ---------------------------------------------------------------- 摘自原仓 #41（flight-envelope S1）· scenario: gate-change-scope#gate-pairing-ignores-marker
+# flight-envelope S1 的 scenario 测试。
+
+
+def test_gate_pairing_ignores_marker(git_repo):
+    # Given: 切片 S1 已 start，区间内没有任何提交，工作树里只有未提交的 .openspec-slice 标记
+    change = git_repo / "openspec" / "changes" / "c"
+    data = plan(
+        [slice_("S1", ["src/mod.py", "tests/test_mod.py"], verify="true", scenarios=["cap#adds"])],
+        scenario_tests={"cap#adds": "tests/test_mod.py::test_mod_adds"},
+    )
+    write_plan(change, data)
+    write(change / "tasks.md", "- [ ] S1 x\n")
+    write(git_repo / "src" / "mod.py", DEFAULT_SRC)
+    write(git_repo / "tests" / "test_mod.py", GOOD_TEST)
+    commit_all(git_repo, "artifacts")
+    p = run_hook("slice-gate", "start", "S1", "--change-dir", str(change), cwd=git_repo)
+    assert p.returncode == 0, p.stderr
+
+    # When: 运行 slice-gate.py gate S1
+    p = run_hook("slice-gate", "gate", "S1", "--change-dir", str(change), cwd=git_repo)
+
+    # Then: 输出 JSON 的 failed 里没有以「G3」开头的项
+    out = json.loads(p.stdout)
+    assert not any(f.startswith("G3") for f in out["failed"]), out["failed"]
+
+
+# ---------------------------------------------------------------- 摘自原仓 #46（评审修复）· scenario: gate-change-scope#gate-*-bytecode
+
+
+def test_gate_flags_committed_bytecode(git_repo):
+    # Given: 切片 S1 的提交里夹带了 src/__pycache__/mod.cpython-39.pyc（git add -f），owns 不含它
+    change = gate_repo(git_repo)
+    write(git_repo / "src" / "__pycache__" / "mod.cpython-39.pyc", "x")
+    git(git_repo, "add", "-f", "src/__pycache__/mod.cpython-39.pyc")
+    git(git_repo, "commit", "-q", "-m", "pyc")
+
+    # When: 运行 gate S1
+    out = json.loads(run_hook("slice-gate", "gate", "S1", "--change-dir", str(change), cwd=git_repo).stdout)
+
+    # Then: G6 点名这个已提交的字节码（只有未提交的副产物才被忽略）
+    assert any(f.startswith("G6") and "__pycache__" in f for f in out["failed"]), out["failed"]
+
+
+def test_gate_ignores_uncommitted_bytecode(git_repo):
+    # Given: 切片 S1 已提交合规的实现与测试；工作树另有未提交、未被 git 忽略的 src/__pycache__/mod.cpython-39.pyc，owns 不含它
+    change = gate_repo(git_repo)
+    write(git_repo / "src" / "__pycache__" / "mod.cpython-39.pyc", "x")
+
+    # When: 运行 gate S1
+    out = json.loads(run_hook("slice-gate", "gate", "S1", "--change-dir", str(change), cwd=git_repo).stdout)
+
+    # Then: 门禁绿，failed 里没有点名这个字节码文件的项
+    assert out["ok"] is True, out["failed"]
+    assert not any("__pycache__" in f for f in out["failed"]), out["failed"]

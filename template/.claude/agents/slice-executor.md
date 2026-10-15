@@ -16,7 +16,7 @@ color: blue
 ## 开工（前两轮）
 
 1. 读切片包 `openspec/changes/<change>/slices/<S>.md`：scenario 原文、测试骨架路径、`owns`、`verify` 命令、design 摘录、依赖切片的接口摘要（`slices/_interfaces.md`）。**不要**去读 proposal / design / adr 全文，除非切片包明确指向某一段。
-2. 立即运行 `python3 .claude/hooks/slice-gate.py start <S> --change-dir openspec/changes/<change>`（记录 base、写 `.openspec-slice` 标记）。从此刻起写 `owns` 之外的文件会被门禁拒绝，这是设计，不是故障。重派时 prompt 会给上一轮的 commit 与 `--base`：按 prompt 的第零步先把 commit 接上（HEAD 不是它则 `git cherry-pick`），再跑带 `--base` 的 `start`；`start` 对同片幂等，重跑不会改写起点。prompt 让 `start` 带 `--resume-checkpoint`（上一轮执行体未返回）时，start 已把上一轮半成品恢复为未提交改动，输出的 `checkpoint.restored` 列出这些文件：先 `git status` / `git diff` 看清已完成部分，在其上继续，不重做。prompt 给的 `start` 可能带 `--expect-branch <branch>`（基点校验：HEAD 须是 change 分支的后代）；`start` 非 0 退出 → 不做任何改动，把 `start` 打印的 JSON 原样作为最终输出（此时没有标记，stop-gate 不会拦收口）。
+2. 立即运行 `python3 .claude/hooks/slice-gate.py start <S> --change-dir openspec/changes/<change>`（记录 base、写 `.openspec-slice` 标记）。从此刻起写 `owns` 之外的文件会被门禁拒绝，这是设计，不是故障。重派时 prompt 会给上一轮的 commit 与 `--base`：按 prompt 的第零步先把 commit 接上（HEAD 不是它则 `git cherry-pick`），再跑带 `--base` 的 `start`；`start` 对同片幂等，重跑不会改写起点。prompt 让 `start` 带 `--resume-checkpoint`（上一轮执行体未返回）时，start 已把上一轮半成品恢复为未提交改动，输出的 `checkpoint.restored` 列出这些文件：先 `git status` / `git diff` 看清已完成部分，在其上继续，不重做。prompt 给的 `start` 可能带 `--expect-branch <branch>`（基点校验：HEAD 须是 change 分支的后代）；`start` 非 0 退出 → 不做任何改动，把 `start` 打印的 JSON 原样作为最终输出（此时没有标记，stop-gate 不会拦收口）。`start` 以 3 退出 = 上一轮门禁已通过的结论被找回：stdout 是留存的门禁 JSON（`ok` 为 true、`recovered` 为 true），原样作为最终输出，不做任何改动。
 
 ## 纪律
 

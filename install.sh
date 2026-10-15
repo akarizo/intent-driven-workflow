@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# intent-driven-claude-code installer
+# intent-driven-workflow installer
 #
 # 用法 / Usage
 #   首次安装 / Install : ./install.sh [TARGET_DIR]
 #   升级     / Upgrade : ./install.sh --upgrade [TARGET_DIR]
 #   管道     / Pipe    : curl -fsSL <raw-url>/install.sh | bash -s -- [--upgrade] [TARGET_DIR]
+#                        IDT_BRANCH=<分支或 tag> 指定版本（缺省 main）；下载后交给归档自带的 install.sh 执行
 #
 # TARGET_DIR 缺省为当前工作目录；不存在会自动创建。
 #
@@ -13,7 +14,8 @@
 #   --upgrade    ：刷新「库自有文件」(.claude/ 与 openspec/schemas/)，
 #                  迁移根 adr/ → openspec/adr/，刷新 CLAUDE.md 的 intent-driven 段；
 #                  「用户数据」(openspec/changes、specs、adr、superpower、config.yaml、
-#                  ADR 风格 preferences.md、CLAUDE.md 正文) 一律保留不动。
+#                  ADR 风格 preferences.md、.claude/settings.json、CLAUDE.md 正文) 一律保留不动；
+#                  settings.json 升级只补模板里用户缺失的顶层键（已有键不动）。
 #
 # 退出码:
 #   0  成功
@@ -28,7 +30,7 @@ set -euo pipefail
 # 这是 curl | bash 模式下载 tarball 的来源。
 # 也可在调用前设置环境变量 IDT_REPO_URL 覆盖。
 # ---------------------------------------------------------------------------
-REPO_URL="${IDT_REPO_URL:-https://github.com/akarizo/intent-driven-claude-code}"
+REPO_URL="${IDT_REPO_URL:-https://github.com/akarizo/intent-driven-workflow}"
 BRANCH="${IDT_BRANCH:-main}"
 
 # ---------------------------------------------------------------------------
@@ -58,7 +60,7 @@ log_err()  { printf '%s[err]%s     %s\n' "$C_RED"    "$C_RESET" "$1" >&2; }
 # ---------------------------------------------------------------------------
 usage() {
   cat <<EOF
-intent-driven-claude-code installer
+intent-driven-workflow installer
 
 用法:
   ./install.sh [TARGET_DIR]              # 首次安装(只增不改)
@@ -76,7 +78,7 @@ intent-driven-claude-code installer
 
 环境变量:
   IDT_REPO_URL   pipe 模式下载 tarball 的仓库地址 (默认 $REPO_URL)
-  IDT_BRANCH     pipe 模式下载的分支             (默认 $BRANCH)
+  IDT_BRANCH     pipe 模式下载的分支或 tag       (默认 ${BRANCH}；先按分支找，再按 tag 找)
 EOF
 }
 
@@ -146,12 +148,33 @@ if [[ -z "$TEMPLATE_SRC" ]]; then
   CLEANUP_TMP="$TMP"
   trap 'rm -rf "$CLEANUP_TMP"' EXIT
   log_info "pipe 模式：下载 $REPO_URL@$BRANCH"
-  if ! curl -fsSL "$REPO_URL/archive/refs/heads/$BRANCH.tar.gz" \
-       | tar -xz -C "$TMP" --strip-components=1; then
-    log_err "下载或解压失败：$REPO_URL@$BRANCH"
+  # 先按分支、再按 tag 取归档；先落盘再解压，避免第一个地址失败时留下半截内容
+  url_heads="$REPO_URL/archive/refs/heads/$BRANCH.tar.gz"
+  url_tags="$REPO_URL/archive/refs/tags/$BRANCH.tar.gz"
+  got=""
+  for url in "$url_heads" "$url_tags"; do
+    if curl -fsSL -o "$TMP/src.tar.gz" "$url" 2>/dev/null; then got="$url"; break; fi
+  done
+  if [[ -z "$got" ]]; then
+    log_err "下载失败（分支与 tag 都没有找到 ${BRANCH}）：$url_heads ；$url_tags"
     exit 4
   fi
-  TEMPLATE_SRC="$TMP/template"
+  mkdir -p "$TMP/src"
+  tar -xzf "$TMP/src.tar.gz" -C "$TMP/src" --strip-components=1 \
+    || { log_err "解压失败：$got"; exit 4; }
+  [[ -f "$TMP/src/install.sh" ]] || { log_err "归档里没有 install.sh：$got"; exit 4; }
+  # 缺 template/ 时子进程判不出本地模式，会按同一 ref 再下载、再交接，无界递归
+  [[ -d "$TMP/src/template" ]] || { log_err "归档里没有 template/：$got"; exit 4; }
+
+  # 交给归档自带的 install.sh（本地模式）执行：参数与退出码透传；
+  # 不用 exec（保留 EXIT trap 清理 $TMP），</dev/null 防止子进程吞掉 curl | bash 的剩余脚本
+  rc=0
+  if [[ "$UPGRADE" == 1 ]]; then
+    bash "$TMP/src/install.sh" --upgrade "$TARGET" </dev/null || rc=$?
+  else
+    bash "$TMP/src/install.sh" "$TARGET" </dev/null || rc=$?
+  fi
+  exit "$rc"
 fi
 
 [[ -d "$TEMPLATE_SRC" ]] || { log_err "找不到模板目录: $TEMPLATE_SRC"; exit 4; }
@@ -186,7 +209,7 @@ MOVE_COUNT=0
 # ---------------------------------------------------------------------------
 # 幂等复制：BSD/GNU 双兼容；统计在循环外维护
 #   注意：用 process substitution 而非 pipe，以便 while 体里能修改外层变量
-#   $3 overwrite=1 时覆盖已存在文件(升级用)；$4 preserve 命中的 basename 永不覆盖
+#   $3 overwrite=1 时覆盖已存在文件(升级用)；$4 preserve（空格分隔）命中的 basename 永不覆盖
 # ---------------------------------------------------------------------------
 copy_tree() {
   local src="$1" dst="$2" overwrite="${3:-0}" preserve="${4:-}" rel out base
@@ -199,7 +222,7 @@ copy_tree() {
       mkdir -p "$out"
     elif [[ -e "$out" ]]; then
       base="$(basename "$rel")"
-      if [[ "$overwrite" == 1 && ( -z "$preserve" || "$base" != "$preserve" ) ]]; then
+      if [[ "$overwrite" == 1 && " $preserve " != *" $base "* ]]; then
         cp "$src/$rel" "$out"
         log_upd "${out#$TARGET/}"
         UPD_COUNT=$((UPD_COUNT+1))
@@ -269,10 +292,12 @@ refresh_marker_block() {
 # settings.json hooks 合并：把 .claude/hooks/hooks.json 的 hooks 幂等并入目标 settings.json
 #   settings.json 属用户数据，绝不 copy_tree 覆盖——故 hooks 配置以独立 fragment 下发再合并
 #   按 command 串去重，保留用户其余 key；install / upgrade 都跑；缺 python3 则打印手动指引
+#   另补模板 settings.json 中用户缺失的顶层键（hooks 除外；已有键不动、不深合并）
 # ---------------------------------------------------------------------------
 merge_settings() {
   local settings="$TARGET/.claude/settings.json"
   local fragment="$TARGET/.claude/hooks/hooks.json"
+  local template_settings="$TEMPLATE_SRC/.claude/settings.json"
   [[ -f "$fragment" ]] || return 0
   if [[ "${PYTHON_OK:-0}" != 1 ]]; then
     log_info ".claude/settings.json: 无 python3，跳过 hooks 自动合并（门禁/提醒暂不生效）"
@@ -280,9 +305,9 @@ merge_settings() {
     return 0
   fi
   local status
-  status=$(python3 - "$settings" "$fragment" <<'PY'
-import json, os, sys
-settings_path, fragment_path = sys.argv[1], sys.argv[2]
+  status=$(python3 - "$settings" "$fragment" "$template_settings" <<'PY'
+import copy, json, os, sys
+settings_path, fragment_path, template_path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(fragment_path, encoding="utf-8") as f:
     frag = json.load(f)
 existed = os.path.isfile(settings_path)
@@ -309,6 +334,15 @@ for event, entries in frag.get("hooks", {}).items():
         if key(e) not in seen:
             bucket.append(e)
             seen.add(key(e))
+            changed = True
+
+# 补模板中用户缺失的顶层键（只补顶层，已存在的键原样保留）
+if os.path.isfile(template_path):
+    with open(template_path, encoding="utf-8") as f:
+        tmpl = json.load(f)
+    for k, v in tmpl.items():
+        if k != "hooks" and k not in data:
+            data[k] = copy.deepcopy(v)
             changed = True
 
 if not existed:
@@ -338,12 +372,25 @@ PY
 # ---------------------------------------------------------------------------
 # 复制：库自有文件 vs 用户数据
 # ---------------------------------------------------------------------------
-# .claude/：库代码，升级时刷新（但保留用户的 ADR 风格 preferences.md）
+# .claude/：库代码，升级时刷新（但保留用户的 ADR 风格 preferences.md 与用户数据 settings.json）
 # 递归复制已覆盖 commands/ · skills/（含 legacy/）· agents/（slice-executor / integrator / code-reviewer）
 # · workflows/（opsx-apply.js 飞行调度器）· hooks/（含 slice-gate.py 等飞行门禁），--upgrade 时一并刷新
-copy_tree "$TEMPLATE_SRC/.claude"  "$TARGET/.claude"  "$UPGRADE" "preferences.md"
-# openspec/：用户数据 + 种子目录，绝不覆盖
-copy_tree "$TEMPLATE_SRC/openspec" "$TARGET/openspec" 0
+copy_tree "$TEMPLATE_SRC/.claude"  "$TARGET/.claude"  "$UPGRADE" "preferences.md settings.json"
+# openspec/：只按清单下发种子，绝不覆盖用户数据
+#   template/openspec 兼作本仓自己的 openspec 工作区，changes/ 与 adr/ 下的条目不属于模板；
+#   新增种子须显式加进下面的清单
+for rel in .gitignore config.yaml changes/.gitkeep adr/.gitkeep superpower/.gitkeep; do
+  if [[ -e "$TARGET/openspec/$rel" ]]; then
+    log_skip "openspec/$rel"
+    SKIP_COUNT=$((SKIP_COUNT+1))
+  else
+    mkdir -p "$(dirname "$TARGET/openspec/$rel")"
+    cp "$TEMPLATE_SRC/openspec/$rel" "$TARGET/openspec/$rel"
+    log_add "openspec/$rel"
+    ADD_COUNT=$((ADD_COUNT+1))
+  fi
+done
+copy_tree "$TEMPLATE_SRC/openspec/schemas" "$TARGET/openspec/schemas" 0
 # openspec/.gitignore：已装项目不会被 copy_tree 覆盖，幂等补飞行起飞记录规则（整行匹配）
 OPENSPEC_GITIGNORE="$TARGET/openspec/.gitignore"
 if grep -qxF 'changes/*/.flight' "$OPENSPEC_GITIGNORE" 2>/dev/null; then
@@ -454,3 +501,54 @@ cat <<EOF
   - apply 默认走飞行模式（.claude/workflows/opsx-apply.js + slice-gate.py 门禁）：把测试命令（如 pytest/npm test）
     加进 .claude/settings.json 的 allow 规则，避免 Workflow 并行跑切片时被权限提示逐个暂停
 EOF
+
+# 从 Mod 版切换：flight 插件仍启用时会接管 /opsx-apply，与本版冲突；只提示、打印卸载命令，不代执行、不改退出码
+flight_plugin_enabled() {
+  local settings="$TARGET/.claude/settings.json"
+  [[ -f "$settings" ]] || return 1
+  if [[ "${PYTHON_OK:-0}" == 1 ]]; then
+    python3 -c 'import json,sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+except (ValueError, OSError):
+    sys.exit(1)
+ok = isinstance(d, dict) and isinstance(d.get("enabledPlugins"), dict) and d["enabledPlugins"].get("flight@intent-driven") is True
+sys.exit(0 if ok else 1)' "$settings"
+  else
+    grep -q '"flight@intent-driven": *true' "$settings"
+  fi
+}
+if flight_plugin_enabled; then
+  echo
+  log_info "⚠ 本项目仍启用着 flight@intent-driven 插件（Mod 版）：它会接管 /opsx-apply，与本版的 Workflow 引擎冲突。"
+  log_info "  请在 $TARGET 内依次执行（安装器不代执行），然后重开 Claude Code 会话："
+  log_info "    claude plugin uninstall flight@intent-driven -s project"
+  log_info "    claude plugin marketplace remove intent-driven --scope project"
+fi
+
+# Mod 版遗留的 hook 模块：本版不再使用，只列出、提示可手动删除，不替用户删
+mod_found=()
+for rel in .claude/hooks/ledger.py .claude/hooks/plan_fp.py; do
+  if [[ -e "$TARGET/$rel" ]]; then mod_found+=("$rel"); fi
+done
+if [[ ${#mod_found[@]} -gt 0 ]]; then
+  echo
+  log_info "以下文件是 Mod 版留下的，本版不再使用，可手动删除（安装器不代删）："
+  for rel in "${mod_found[@]}"; do
+    log_info "  $rel"
+  done
+fi
+
+# 疑似旧版安装器误拷的本库开发工件：按名字匹配，只列出、提示可手动删除，不替用户删
+suspect_found=()
+for src in "$TEMPLATE_SRC"/openspec/changes/* "$TEMPLATE_SRC"/openspec/adr/*; do
+  rel="openspec/${src#"$TEMPLATE_SRC"/openspec/}"
+  if [[ -e "$TARGET/$rel" ]]; then suspect_found+=("$rel"); fi
+done
+if [[ ${#suspect_found[@]} -gt 0 ]]; then
+  echo
+  log_info "以下条目与本库自己的开发工件同名，多半是旧版安装器误拷进来的；确认不是你的 change / ADR 后可手动删除（安装器不代删）："
+  for rel in "${suspect_found[@]}"; do
+    log_info "  $rel"
+  done
+fi
