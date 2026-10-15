@@ -284,7 +284,6 @@ def test_reviewer_diff_empty_vs_unreachable():
 
 # ---------------------------------------------------------------- 摘自原仓 #45（flight-gate-speedup）· scenario: propose-parallel-baseline#*
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
 def test_propose_renders_panel_before_baseline():
     # Given: opsx-propose.md 与 openspec-propose/SKILL.md
     cmd = read(CMD / "opsx-propose.md")
@@ -305,7 +304,6 @@ def test_propose_renders_panel_before_baseline():
     assert hooks(cmd) == hooks(skill)
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
 def test_schema_requires_gate_test():
     # Given: schema.yaml 的 tasks 工件 instruction
     schema = read(SCHEMA / "schema.yaml")
@@ -321,7 +319,6 @@ def test_schema_requires_gate_test():
 # ---------------------------------------------------------------- 摘自原仓 #47 / #51 · scenario: pr-ship-premerge-check#* · legacy-review-routing#*
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
 def test_pr_ship_premerge_uses_merge_tree_exit_code():
     # Given: template/.claude/commands/pr-ship.md
     text = read(CMD / "pr-ship.md")
@@ -335,7 +332,6 @@ def test_pr_ship_premerge_uses_merge_tree_exit_code():
     assert 'grep -c "^<<<<<<<"' not in step4
 
 
-@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
 def test_legacy_review_dispatch_names_model():
     # Given: legacy 逐 task 守门 skill
     text = read(SKILLS / "legacy" / "openspec-subagent-apply-change" / "SKILL.md")

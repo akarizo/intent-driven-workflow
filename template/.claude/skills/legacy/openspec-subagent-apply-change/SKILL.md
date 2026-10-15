@@ -146,7 +146,7 @@ prompt 必须**自包含**（subagent 不带主会话上下文）：
 
 #### 4b. 派 code-reviewer subagent 守门
 
-实现 subagent 返回后（它已 commit 本 task），用 **Agent 工具**（`subagent_type: code-reviewer`）派发。**本 task 净 diff 就是那个 commit**——用两点 diff 精确圈定，不再有歧义：
+实现 subagent 返回后（它已 commit 本 task），先跑 `python3 .claude/hooks/session-model.py` 判定 `<main>`（stdout 即别名；exit 3 = 判不出 → 停下交人工给出别名，禁模型自述），再用 **Agent 工具**（`subagent_type: code-reviewer`、`model: "<main>"`，写法同 `/pr-ship` 第 8 步）派发。**本 task 净 diff 就是那个 commit**——用两点 diff 精确圈定，不再有歧义：
 
 ```
 背景：review 一个 OpenSpec change 里单个 task 的实现。这是 intent-driven 工作流的逐 task 守门。
@@ -188,7 +188,7 @@ RED→GREEN 证据：<实现 subagent 报告里的测试输出摘要——据此
   完成后报告：改了什么、新增哪些复现测试、RED→GREEN 输出、最终 commit SHA。
   ```
 
-  修完派一个 fresh `code-reviewer` 做**聚焦复核**——**不重审整个 task**，只看修复增量与原 finding 是否闭环：
+  修完派一个 fresh `code-reviewer`（`model: "<main>"`，`<main>` 同 4b 由 `python3 .claude/hooks/session-model.py` 判定，exit 3 则停下交人工）做**聚焦复核**——**不重审整个 task**，只看修复增量与原 finding 是否闭环：
 
   ```
   背景：复核一个 OpenSpec change 里某 task 的修复补丁，判断上一轮 code review 挡下的问题是否已闭环。
@@ -240,7 +240,7 @@ RED→GREEN 证据：<实现 subagent 报告里的测试输出摘要——据此
   - `暂不 ship，先在本地整合审` — 现在跑一次本地整合审（见下），之后再决定是否 ship。
   - `都跳过` — 直接收口（用户自负其责，收口报告里注明整合审未执行）。
 
-选「暂不 ship」时，派一个 `code-reviewer` subagent 审**整个 change 的累计 diff**（`git diff <BASE_REF>..HEAD`，**两点**——比 apply 开始到现在的全部 commit）：
+选「暂不 ship」时，派一个 `code-reviewer` subagent（`model: "<main>"`，`<main>` 同 4b 由 `python3 .claude/hooks/session-model.py` 判定，exit 3 则停下交人工）审**整个 change 的累计 diff**（`git diff <BASE_REF>..HEAD`，**两点**——比 apply 开始到现在的全部 commit）：
 
 ```
 背景：对一个 OpenSpec change 做整合审——全部 task 已逐个通过守门，现在只看它们拼起来有没有问题。

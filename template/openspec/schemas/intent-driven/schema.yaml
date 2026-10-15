@@ -284,6 +284,11 @@ artifacts:
       globs it exclusively writes; `deps` names slices it depends on;
       `verify` is a single runnable command that decides pass/fail for that
       slice alone.
+      `gate.pytest`（可选）：G7 实跑 scenario 测试用的 pytest
+      命令前缀（如 `uv run pytest`）；缺省从 `gate.test` 推导。
+      `gate.test`（全量测试命令）**必填**，由 `slice-gate.py lint` 校验。
+      pytest 的预存红由 baseline 记录到 `gate-baseline.json`，final 按基线逐条差分，
+      只有新增的失败才算红，**无需手写 deselect**。
 
 
       2. `slices/<S>.md` — one packet per slice: what it does, the exact
