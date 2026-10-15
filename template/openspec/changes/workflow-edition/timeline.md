@@ -7,3 +7,4 @@
 2026-10-15T01:51:23Z	gate	S4 ok
 2026-10-15T01:54:11Z	final	ok
 2026-10-15T02:02:07Z	final	ok
+2026-10-15T02:03:04Z	ship	ready
