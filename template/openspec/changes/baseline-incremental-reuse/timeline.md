@@ -12,3 +12,6 @@
 2026-10-15T06:33:04Z	approve	2026-10-15T06:32:55Z · 起飞（续飞：只重跑 S3 + final）
 2026-10-15T06:37:31Z	gate	S3 ok
 2026-10-15T06:37:42Z	integrate	wave 1
+2026-10-15T06:41:02Z	review	findings=2 blocking=0 deferred=2
+2026-10-15T06:42:39Z	final	ok
+2026-10-15T06:42:43Z	apply-done	blocked=0 blocking=0
