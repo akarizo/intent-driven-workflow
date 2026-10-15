@@ -8,3 +8,4 @@
 | 2026-10-15T06:29:34Z | final | red | d7e2650109 | G7 scenario: baseline-redundant-run-skip#lint-reused-when-tree-unchanged → tests/test_baseline_skip.py::test_lint_reused_when_tree_unchanged 仍标记 xfail/skip; G7 scenario: baseline-redundant-run-skip#lint-rerun-when-other-change-edited → tests/test_baseline_skip.py::test_lint_rerun_when_other_change_edited 仍标记 xfail/skip; G7 scenario: baseline-redundant-run-skip#lint-rerun-when-referenced-plan-file-changed → tests/test_baseline_skip.py::test_lint_rerun_when_referenced_plan_file_changed 仍标记 xfail/skip; G7 scenario: baseline-redundant-run-skip#verify-derived-from-full-suite → tests/test_baseline_skip.py::test_verify_derived_from_full_suite 仍标记 xfail/skip | G2 全量未跑：G7 已红，scenario 全绿后重跑 final |
 | 2026-10-15T06:37:31Z | S3 | ok | 5bf21144db | - | G5 evidence: 未见 RED 先于 GREEN 的测试运行记录 |
 | 2026-10-15T06:42:39Z | final | ok | c8132ed81b | - | - |
+| 2026-10-15T06:55:15Z | final | ok | 0d24cfb0a0 | - | - |

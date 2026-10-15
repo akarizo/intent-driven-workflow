@@ -16,3 +16,7 @@
 2026-10-15T06:42:39Z	final	ok
 2026-10-15T06:42:43Z	apply-done	blocked=0 blocking=0
 2026-10-15T06:43:20Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-10-15T06:45:03Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-10-15T06:45:31Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/2
+2026-10-15T06:55:15Z	final	ok
+2026-10-15T06:56:38Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
