@@ -20,4 +20,4 @@
 
 ## R 收口后评审修复（2026-10-15 经用户授权）
 
-- [ ] R1 按独立评审修：README tag 警告改准（老 tag 脚本缺省从原仓下载、装上的是 Mod 版）并补「老 tag 安装器带老缺陷，`--upgrade` 会覆盖 settings.json」；删 3 个测试文件里无用的 `import pytest`（G7 不写字节码缺测试覆盖，记入 PR 作跟进）
+- [x] R1 按独立评审修：README tag 警告改准（老 tag 脚本缺省从原仓下载、装上的是 Mod 版）并补「老 tag 安装器带老缺陷，`--upgrade` 会覆盖 settings.json」；删 3 个测试文件里无用的 `import pytest`（G7 不写字节码缺测试覆盖，记入 PR 作跟进）
