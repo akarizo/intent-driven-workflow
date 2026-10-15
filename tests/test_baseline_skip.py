@@ -16,7 +16,6 @@ PLAIN_VERIFY = "%s -m pytest -q -p no:cacheprovider" % PY
 # ---------------------------------------------------------------- 代码树没变时 lint / typecheck 沿用
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：代码树没变时 lint 沿用")
 def test_lint_reused_when_tree_unchanged(git_repo):
     # Given: change c 已有一次全量绿基线，gate.lint 运行时会写一个标记文件；之后只改了本 change 的 proposal.md，并清掉 lint 标记
     d = setup_change(git_repo, lint=True)
@@ -33,7 +32,6 @@ def test_lint_reused_when_tree_unchanged(git_repo):
     assert bl["lint"].get("reused") is True and bl["lint"]["exit"] == first["lint"]["exit"], bl["lint"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：严格差异含其他 change 目录")
 def test_lint_rerun_when_other_change_edited(git_repo):
     # Given: change c 已有一次全量绿基线，gate.lint 运行时会写一个标记文件；之后在 openspec/changes/other/verify/ 下新建了一个文件，
     #        并清掉 lint 标记
@@ -52,7 +50,6 @@ def test_lint_rerun_when_other_change_edited(git_repo):
     assert "reused" not in bl["lint"], bl["lint"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：lint 命令指纹含直接写出的计划工件")
 def test_lint_rerun_when_referenced_plan_file_changed(git_repo):
     # Given: gate.lint 的命令里直接写出了本 change 的 proposal.md，运行时会写一个标记文件；change c 已有一次全量绿基线；
     #        之后只改了 proposal.md，并清掉 lint 标记
@@ -76,7 +73,6 @@ def test_lint_rerun_when_referenced_plan_file_changed(git_repo):
 # ---------------------------------------------------------------- verify 从全量 junit 推导
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：verify 从全量 junit 推导")
 def test_verify_derived_from_full_suite(git_repo):
     # Given: gate.test 是直接的 python -m pytest -q -p no:cacheprovider tests；S1 的 verify 是同一前缀加 tests/test_cap.py；
     #        tests/test_cap.py 的用例每运行一次就往仓外计数文件追加一个字符，且会通过

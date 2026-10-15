@@ -175,17 +175,22 @@ def _summary_failed(line):
 
 def run_test_gate(cmd, root):
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml。
-    返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None}；
+    返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None}；
     failed 非 None ⇔ 可度量（rc 1、junit 可解析、汇总行恰一行、汇总与 junit 计数一致且非 0，
-    且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。"""
+    且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
+    cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。"""
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
         env = dict(os.environ)
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
-        res = {"rc": rc, "out": out, "failed": None, "why": None}
+        res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None}
         if rc == 0:
+            try:
+                res["cases"] = {tc.get("classname") or "" for tc in ET.parse(junit).getroot().iter("testcase")}
+            except (ET.ParseError, OSError):
+                pass
             return res
         if rc != 1:
             res["why"] = "exit %d" % rc
@@ -218,6 +223,7 @@ def run_test_gate(cmd, root):
         res["why"] = "exit 1 但没有失败用例（覆盖率门槛 / 插件判失败？）"
         return res
     res["failed"] = sorted(ids)
+    res["cases"] = {tc.get("classname") or "" for tc in tree.iter("testcase")}
     return res
 
 
@@ -664,20 +670,77 @@ def _py_decorators(source, func):
     return None
 
 
-def _g7_runner(gate):
-    """G7 实跑用的 pytest 命令前缀：gate.pytest > 从 gate.test 推导 > 退回本解释器（附 warning）。"""
-    if gate.get("pytest"):
-        return shlex.split(gate["pytest"]), None
+def _pytest_head(cmd):
+    """命令切成 (pytest 前缀词, 其后的词)：前缀止于第一个 pytest / py.test 词（或 -m pytest），
+    其前不能有 &&、||、;、|、cd、VAR= 赋值；认不出 / 切词失败 → None。"""
     try:
-        toks = shlex.split(gate.get("test") or "")
+        toks = shlex.split(cmd or "")
     except ValueError:
-        toks = []
+        return None
     for i, tok in enumerate(toks):
         if os.path.basename(tok) in ("pytest", "py.test") or (tok == "pytest" and i > 0 and toks[i - 1] == "-m"):
             head = toks[:i + 1]
             if not any(t in ("&&", "||", ";", "|", "cd") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t) for t in head):
-                return head, None
-            break
+                return head, toks[i + 1:]
+            return None
+    return None
+
+
+# verify 推导（design D11）：pytest 前缀之后只允许这些词与路径；成对的 -p no:cacheprovider 另认
+DERIVE_WHITELIST = {"-q", "-qq", "-v", "-vv", "-x", "-s", "--no-header"}
+# 路径词里出现这些字符就不当路径（shell 运算符 / 重定向 / 展开 / 赋值），一律照跑
+DERIVE_UNSAFE = re.compile(r"[;&|<>$`()*?!{}\[\]=~\\]")
+
+
+def _derive_paths(rest):
+    """rest 只含白名单与路径 → 路径列表；含其他词 → None。"""
+    paths, i = [], 0
+    while i < len(rest):
+        t = rest[i]
+        if t == "-p" and i + 1 < len(rest) and rest[i + 1] == "no:cacheprovider":
+            i += 1
+        elif t in DERIVE_WHITELIST or t.startswith("--tb="):
+            pass
+        elif t and not t.startswith("-") and not DERIVE_UNSAFE.search(t):
+            paths.append(t)
+        else:
+            return None
+        i += 1
+    return paths
+
+
+def _derive_verify(root, full_head, vcmd, cases, failed):
+    """全量 junit 能否替这片 verify 判绿：前缀与全量逐词相同、rest 只含白名单与至少一个测试文件路径（不含 ::），
+    且每个文件对应的模块在全量里有用例、没有失败。任何不确定 → False（照跑）。"""
+    if full_head is None or cases is None:
+        return False
+    h = _pytest_head(vcmd)
+    if h is None or h[0] != full_head:
+        return False
+    paths = _derive_paths(h[1])
+    if not paths:
+        return False
+    failed_mods = [str(f).split("::", 1)[0] for f in failed or []]
+    for p in paths:
+        name = p.rsplit("/", 1)[-1]
+        if "::" in p or not os.path.isfile(os.path.join(root, p)) or not (
+                fnmatch.fnmatchcase(name, "test_*.py") or fnmatch.fnmatchcase(name, "*_test.py")):
+            return False
+        m = p[:-3].replace("/", ".")
+        if not any(c == m or c.startswith(m + ".") for c in cases):
+            return False
+        if any(c == m or c.startswith(m + ".") for c in failed_mods):
+            return False
+    return True
+
+
+def _g7_runner(gate):
+    """G7 实跑用的 pytest 命令前缀：gate.pytest > 从 gate.test 推导 > 退回本解释器（附 warning）。"""
+    if gate.get("pytest"):
+        return shlex.split(gate["pytest"]), None
+    h = _pytest_head(gate.get("test") or "")
+    if h is not None:
+        return h[0], None
     return [sys.executable, "-m", "pytest"], (
         "G7：无法从 gate.test 推导 pytest 运行方式，已退回 %s -m pytest；可在 slices.json 的 gate.pytest 指定" % sys.executable)
 
@@ -1288,21 +1351,43 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条已记录，final 按基线差分" % len(tg["failed"]))
         elif rc != 0:
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
+    # lint / typecheck 沿用（design D10）：只看本 change 旧基线；严格差异（含其他 change 目录）为空且命令与指纹不变
+    strict_delta = None
+    if hit is not None and src is own:
+        strict_delta = _delta(root, own, s0, bl["commit"], change_rel, True, strict=True)
     for kind in ("lint", "typecheck"):
         cmd = gate.get(kind)
         if cmd:
+            kkey = cmd_key(root, change_rel, cmd)
+            ok_ = old.get(kind) if isinstance(old, dict) else None
+            if (strict_delta == [] and kkey and isinstance(ok_, dict) and "exit" in ok_
+                    and ok_.get("cmd") == cmd and ok_.get("key") == kkey):
+                bl[kind] = {"exit": ok_["exit"], "lines": ok_.get("lines") or [], "cmd": cmd, "key": kkey,
+                            "reused": True}
+                continue
             krc, kout = run_cmd_full(cmd, root)
-            bl[kind] = {"exit": krc, "lines": normalize_lines(kout) if krc != 0 else []}
+            bl[kind] = {"exit": krc, "lines": normalize_lines(kout) if krc != 0 else [], "cmd": cmd, "key": kkey}
         else:
             bl[kind] = None
     bl["verify"] = {}
     # 增量时只有候选是本 change 的旧基线才有上一次的 verify 可沿用（design D7）；跨 change 候选全部重跑
     prev = (old.get("verify") or {}) if hit is not None and src is own else {}
+    # 本次跑了全量且 gate.test 是可推导的直接 pytest 调用 → 可推导的 verify 按全量 junit 判（design D11）
+    full_head = None
+    if hit is None:
+        fh = _pytest_head(test_cmd)
+        if fh is not None and _derive_paths(fh[1]) is not None:
+            full_head = fh[0]
+    derived = 0
     for s in data.get("slices") or []:
         vcmd = s.get("verify")
         pv = prev.get(s["id"])
         if hit is not None and not _verify_rerun(root, vcmd, pv, hit["files"]):
             bl["verify"][s["id"]] = {"exit": pv.get("exit"), "cmd": vcmd, "reused": True}
+            continue
+        if hit is None and _derive_verify(root, full_head, vcmd, tg.get("cases"), tg["failed"]):
+            bl["verify"][s["id"]] = {"exit": 0, "cmd": vcmd, "derived": "full"}
+            derived += 1
             continue
         vrc, _ = run_cmd_full(vcmd or "false", root)
         bl["verify"][s["id"]] = {"exit": vrc, "cmd": vcmd}
@@ -1355,6 +1440,8 @@ def cmd_baseline(args):
             hit["from"].get("change"), t.get("exit"), t.get("sec"), len(hit["files"]), hit["sec"], verdict)
     else:
         note = "exit %s, %ss %s" % (t.get("exit"), t.get("sec"), verdict)
+        if derived:
+            note += "；verify 推导 %d 片" % derived
     timeline_record(args.change_dir, "baseline", note)
     print(json.dumps(dict(bl, test_cmd=test_cmd, tail=_tail(out)), ensure_ascii=False))
     sys.exit(0 if bl["ok"] else 1)
@@ -1576,9 +1663,9 @@ def cmd_key(root, change_rel, cmd):
                         .encode("utf-8")).hexdigest()
 
 
-def _delta(root, cand, cur_snap, head, change_rel, same_change):
+def _delta(root, cand, cur_snap, head, change_rel, same_change, strict=False):
     """候选所测代码树 vs 当前代码树按 blob 比较（design D1、D2）；候选 commit 不是 HEAD 的祖先或 git 失败 → None。
-    候选 byproducts 里在候选 commit 与 HEAD 都未跟踪的路径不计。"""
+    候选 byproducts 里在候选 commit 与 HEAD 都未跟踪的路径不计；strict=True 时 <changes 根> 下其他 change 的路径也计入（design D10）。"""
     commit = cand.get("commit")
     if not isinstance(commit, str) or not commit or not _is_ancestor(root, commit, head):
         return None
@@ -1589,7 +1676,7 @@ def _delta(root, cand, cur_snap, head, change_rel, same_change):
     except RuntimeError:
         return None
     keep = [p for p in set(names) | set(old_snap) | set(cur_snap)
-            if not (_ignored(p) or _plan_file(p, change_rel) or _other_change(p, change_rel, same_change))]
+            if not (_ignored(p) or _plan_file(p, change_rel) or (not strict and _other_change(p, change_rel, same_change)))]
     try:
         old_b = _blobs_at(root, commit, [p for p in keep if p not in old_snap or p in byp])
         new_b = _blobs_at(root, head, [p for p in keep if p not in cur_snap or p in byp])

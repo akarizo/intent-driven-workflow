@@ -665,10 +665,11 @@ def test_baseline_records_empty_lines_for_green_lint(git_repo):
     # When: 运行 slice-gate.py baseline
     p = run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo)
 
-    # Then: 退出 0；gate-baseline.json 的 lint 为 {"exit": 0, "lines": []}，成功输出不记进基线行
+    # Then: 退出 0；gate-baseline.json 的 lint 的 exit 为 0、lines 为 []，成功输出不记进基线行
     assert p.returncode == 0, p.stderr
     bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
-    assert bl["lint"] == {"exit": 0, "lines": []}
+    assert bl["lint"]["exit"] == 0
+    assert bl["lint"]["lines"] == []
 
 
 def test_final_typecheck_excludes_baseline_lines(git_repo):
