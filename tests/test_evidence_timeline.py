@@ -389,7 +389,6 @@ def test_evidence_single_candidate_fallback(git_repo):  # 既有行为守卫：�
 # ---------------------------------------------------------------- 无 agentType 时按 label 判角色（scenario: route-audit-role-resolution#*）
 
 
-@pytest.mark.xfail(strict=True, reason="S1：对账按 label 判 integrator 尚未实现")
 def test_integrator_label_without_agent_type_matches(tmp_path):
     # Given: 一个 workflow journal，各 agent 的 meta 都没有 agentType：S1（Implement，claude-opus-5）、integrate:w1（Implement，claude-sonnet-5）、
     #        integrate:w2:retry（Implement，claude-sonnet-5）、review:S1（Review，claude-opus-5）
@@ -411,7 +410,6 @@ def test_integrator_label_without_agent_type_matches(tmp_path):
     assert "integrator=sonnet" in p.stdout, p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S1：对账按 label 判 integrator 尚未实现")
 def test_integrator_label_on_wrong_model_flagged(tmp_path):
     # Given: 一个 workflow journal，各 agent 的 meta 都没有 agentType：S1（Implement，claude-opus-5）、integrate:w1（Implement，claude-opus-5）、
     #        review:S1（Review，claude-opus-5）
