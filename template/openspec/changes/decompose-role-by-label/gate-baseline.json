@@ -1,0 +1,33 @@
+{
+  "commit": "20ba98478b053967682d7b42bdf9eca926eb06c1",
+  "at": "2026-10-15T07:17:16Z",
+  "plan_sha": "c58e70050868adab7071d0df3882854dd5d2b6ec",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 91.8
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_evidence_timeline.py tests/test_agents_workflow.py",
+      "derived": "full"
+    }
+  },
+  "change": "decompose-role-by-label",
+  "mode": "full",
+  "snapshot": {
+    "tests/test_agents_workflow.py": "7e15fc92e1cd4038ed22ff9b68024dd2cb5d4514",
+    "tests/test_evidence_timeline.py": "02eeeb35504c01d7c0479f98625fb4ddf48b1032"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": []
+}
