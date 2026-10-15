@@ -186,9 +186,11 @@ def test_propose_baseline_red_stops():
     cmd = read(CMD / "opsx-propose.md")
     skill = read(SKILLS / "openspec-propose" / "SKILL.md")
 
-    # When: 取两者的 step 4 段
+    # When: 取两者的 baseline 步骤段（从 slice-gate.py baseline 到下一个步骤标题）
     def step4(t):
-        return t[t.index("slice-gate.py baseline"):t.index("spec_html.py")]
+        at = t.index("slice-gate.py baseline")
+        nxt = re.search(r"\n\d+(?:\.\d+)?\.? \*\*", t[at:])
+        return t[at:at + nxt.start()]
 
     # Then: 两者都含 gate-baseline.json 与「停下报告」，并说明 verify 在基线上必须绿；hook 脚本集合一致
     for t in (cmd, skill):
@@ -278,3 +280,78 @@ def test_reviewer_diff_empty_vs_unreachable():
     # Then: 同时含「无变更」（diff 为空时）与「取 diff 失败」（拉不到时）；不再出现「为空或拉不到」这种合并写法
     assert "无变更" in flow and "取 diff 失败" in flow
     assert "为空或拉不到" not in flow
+
+
+# ---------------------------------------------------------------- 摘自原仓 #45（flight-gate-speedup）· scenario: propose-parallel-baseline#*
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
+def test_propose_renders_panel_before_baseline():
+    # Given: opsx-propose.md 与 openspec-propose/SKILL.md
+    cmd = read(CMD / "opsx-propose.md")
+    skill = read(SKILLS / "openspec-propose" / "SKILL.md")
+
+    # When: 定位两者里 spec_html.py 与 slice-gate.py baseline 首次出现的位置，取 baseline 之后的正文
+    def parts(t):
+        at = t.index("slice-gate.py baseline")
+        return t.index("spec_html.py"), at, t[at:]
+
+    # Then: 两者都是 spec_html.py 在前；baseline 之后写明后台运行、跑完报告一行、跑完前起飞会被 preflight 拒绝；hook 集合一致
+    for t in (cmd, skill):
+        html_at, base_at, tail = parts(t)
+        assert html_at < base_at
+        assert "后台" in tail and "报告一行" in tail
+        assert "preflight" in tail and "拒绝" in tail
+    hooks = lambda t: set(re.findall(r"(slice-gate\.py|spec_html\.py|timeline\.py|session-decompose\.py)", t))
+    assert hooks(cmd) == hooks(skill)
+
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
+def test_schema_requires_gate_test():
+    # Given: schema.yaml 的 tasks 工件 instruction
+    schema = read(SCHEMA / "schema.yaml")
+
+    # When: 取 tasks 工件段
+    tasks = schema[schema.index("- id: tasks"):schema.index("apply:")]
+
+    # Then: 写明 gate.test 必填；写明预存红按基线差分、无需手写 deselect
+    assert "gate.test" in tasks and "必填" in tasks
+    assert "预存红" in tasks and "差分" in tasks and "deselect" in tasks
+
+
+# ---------------------------------------------------------------- 摘自原仓 #47 / #51 · scenario: pr-ship-premerge-check#* · legacy-review-routing#*
+
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
+def test_pr_ship_premerge_uses_merge_tree_exit_code():
+    # Given: template/.claude/commands/pr-ship.md
+    text = read(CMD / "pr-ship.md")
+
+    # When: 取第 4 步「预合并冲突检查」到第 5 步之间的内容
+    step4 = text[text.index("4. **预合并冲突检查**"):text.index("5. **")]
+
+    # Then: 含 merge-tree --write-tree --name-only、「退出 0」「退出 1」与 2.38；不含旧的 grep 统计
+    assert "git merge-tree --write-tree --name-only" in step4
+    assert "退出 0" in step4 and "退出 1" in step4 and "2.38" in step4
+    assert 'grep -c "^<<<<<<<"' not in step4
+
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S3 尚未实现")
+def test_legacy_review_dispatch_names_model():
+    # Given: legacy 逐 task 守门 skill
+    text = read(SKILLS / "legacy" / "openspec-subagent-apply-change" / "SKILL.md")
+
+    # When: 取每一处派发 code-reviewer 的位置（4b 守门、修复后的聚焦复核、整个 change 的累计评审）所在的整段
+    sites = [m.start() for m in re.finditer(r"subagent_type: code-reviewer|派一个 fresh `code-reviewer`|派一个 `code-reviewer` subagent", text)]
+
+    def para(at):
+        end = text.find("\n\n", at)
+        return text[text.rfind("\n\n", 0, at) + 2:end if end != -1 else len(text)]
+
+    paras = [para(at) for at in sites]
+
+    # Then: 三处都带 model: "<main>"，且写明 <main> 由 session-model.py 判定（或同 4b）；全文没有 flight: 前缀的 agent 名
+    assert len(paras) == 3, sites
+    for p in paras:
+        assert 'model: "<main>"' in p, p
+        assert "session-model.py" in p or "同 4b" in p, p
+    assert "flight:" not in text

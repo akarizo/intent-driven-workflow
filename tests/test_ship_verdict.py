@@ -321,3 +321,40 @@ def test_ship_stale_after_plan_change(git_repo):  # 既有行为守卫：同上
     out = json.loads(p.stdout)
     assert out["ready"] is False
     assert any("过期" in r for r in out["reasons"]), out["reasons"]
+
+# ---------------------------------------------------------------- 摘自原仓 #40（flight-hardening）· scenario: gate-change-scope#final-fresh-*
+# flight-hardening S1 的 scenario 测试。
+
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
+def test_final_fresh_ignores_other_change_bookkeeping(git_repo):
+    # Given: changes 下有 c、b 两个 change；c 的 final 记在提交 X 且 ok；X 之后一次提交只改了 b 的 gate-report.md 与 timeline.md
+    c = ship_repo(git_repo)
+    b = git_repo / "openspec" / "changes" / "b"
+    write(b / "gate-report.md", "# Gate Report\n")
+    write(b / "timeline.md", "2026-10-10T00:00:00Z\tfinal\tok\n")
+    commit_all(git_repo, "chore(flight): 记录 b")
+
+    # When: 对 c 运行 ship；之后再提交一次代码改动，再对 c 运行 ship
+    before = json.loads(ship(git_repo, c).stdout)["reasons"]
+    write(git_repo / "src" / "x.py", "x = 1\n")
+    commit_all(git_repo, "feat: x")
+    after = json.loads(ship(git_repo, c).stdout)["reasons"]
+
+    # Then: 前者 reasons 没有「过期」；代码改动之后 reasons 含「过期」
+    assert not any("过期" in r for r in before), before
+    assert any("过期" in r for r in after), after
+
+
+@pytest.mark.xfail(strict=True, reason="workflow-edition S2 尚未实现")
+def test_final_fresh_ignores_interfaces_summary(git_repo):
+    # Given: change c 的 final 记在提交 X 且 ok；X 之后一次提交只改了 c 的 slices/_interfaces.md
+    c = ship_repo(git_repo)
+    write(c / "slices" / "_interfaces.md", "## S1\n- def run(x):\n")
+    commit_all(git_repo, "chore(flight): 记录")
+
+    # When: 对 c 运行 ship
+    reasons = json.loads(ship(git_repo, c).stdout)["reasons"]
+
+    # Then: reasons 没有「过期」
+    assert not any("过期" in r for r in reasons), reasons
