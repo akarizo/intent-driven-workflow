@@ -693,7 +693,8 @@ DERIVE_UNSAFE = re.compile(r"[;&|<>$`()*?!{}\[\]=~\\]")
 
 
 def _derive_paths(rest):
-    """rest 只含白名单与路径 → 路径列表；含其他词 → None。"""
+    """rest 只含白名单与路径 → 路径列表；含其他词 → None。带 `::` 的节点选择不是路径：
+    全量只跑了某个节点时，它的 junit 不能替整个文件判绿（gate.test 与 verify 同走此函数）。"""
     paths, i = [], 0
     while i < len(rest):
         t = rest[i]
@@ -701,7 +702,7 @@ def _derive_paths(rest):
             i += 1
         elif t in DERIVE_WHITELIST or t.startswith("--tb="):
             pass
-        elif t and not t.startswith("-") and not DERIVE_UNSAFE.search(t):
+        elif t and not t.startswith("-") and "::" not in t and not DERIVE_UNSAFE.search(t):
             paths.append(t)
         else:
             return None
@@ -723,7 +724,7 @@ def _derive_verify(root, full_head, vcmd, cases, failed):
     failed_mods = [str(f).split("::", 1)[0] for f in failed or []]
     for p in paths:
         name = p.rsplit("/", 1)[-1]
-        if "::" in p or not os.path.isfile(os.path.join(root, p)) or not (
+        if not os.path.isfile(os.path.join(root, p)) or not (
                 fnmatch.fnmatchcase(name, "test_*.py") or fnmatch.fnmatchcase(name, "*_test.py")):
             return False
         m = p[:-3].replace("/", ".")

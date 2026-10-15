@@ -127,6 +127,23 @@ def test_verify_run_when_not_derivable(git_repo):
     assert all("derived" not in vs[s] for s in ("S1", "S2", "S3")), vs
 
 
+def test_verify_run_when_gate_test_selects_node_id(git_repo):
+    # Given: gate.test 是直接的 pytest 调用，但只选了 tests/test_cap.py::test_adds 一个节点；S1 的 verify 是同一前缀加整个 tests/test_cap.py；
+    #        tests/test_cap.py 的用例每运行一次就往仓外计数文件追加一个字符
+    counter = marker(git_repo, "count")
+    d = setup_change(git_repo, old_red=False, gate_test=PLAIN_VERIFY + " tests/test_cap.py::test_adds",
+                     cap_body=counting_test(counter), slices=[{"id": "S1", "verify": PLAIN_VERIFY + " tests/test_cap.py"}])
+
+    # When: 运行 slice-gate.py baseline
+    p = baseline(git_repo, d)
+
+    # Then: 退出 0；计数文件恰好 2 个字符（全量节点 1 次 + verify 实跑 1 次）；verify.S1 没有 derived——全量只跑了一个节点，不能替整个文件判绿
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert counter.read_text() == "xx", counter.read_text()
+    v = read_bl(d)["verify"]["S1"]
+    assert "derived" not in v, v
+
+
 def test_verify_run_when_gate_test_not_plain_pytest(git_repo):
     # Given: gate.test 是本 change 目录下的包装脚本（内部调用 pytest 跑 tests）；S1 的 verify 是直接的 pytest 加 tests/test_cap.py；
     #        tests/test_cap.py 的用例每运行一次就往仓外计数文件追加一个字符
