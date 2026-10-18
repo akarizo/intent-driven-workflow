@@ -15,3 +15,6 @@
 - `_run_check(cmd, root, env, timeout)`：运行单个检查命令，返回结果
 - `_check_log(cdir, phase, out)`：把检查输出写入日志
 - `_check_msg(head, log, out)`：拼装检查失败消息
+
+## S3 · template/.claude/hooks/slice-gate.py
+- `_final_checks(root, change_dir, checks, baseline)`：final 半（G9），按 gate.checks 顺序先核对基线记录再运行 final，返回 failed 项列表；G7 红时 final 不跑并给 warning
