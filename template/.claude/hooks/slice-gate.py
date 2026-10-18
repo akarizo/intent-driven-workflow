@@ -3,6 +3,7 @@
 #
 # 子命令：
 #   lint     --change-dir DIR                 校验 slices.json；stdout 打印 waves JSON；违规 exit 2 并在 stderr 点名规则
+#                                              含 gate.checks（name/baseline/final/timeout_sec）与 checks_skip 形状，并对账 <openspec 根>/gate-checks.json 默认检查
 #   waves    --change-dir DIR                 只打印 waves JSON
 #   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH]
 #                                              在 git toplevel 写 .openspec-slice 标记（slice / change_dir / base / started）；
@@ -328,7 +329,88 @@ def compute_waves(slices):
     return waves, []
 
 
-def lint_plan(data):
+CHECK_FIELDS = ("name", "baseline", "final", "timeout_sec")
+CHECK_NAME_RE = re.compile(r"[a-z0-9-]+")
+DEFAULT_CHECKS = "gate-checks.json"
+
+
+def _nonblank(v):
+    return isinstance(v, str) and bool(v.strip())
+
+
+def _lint_checks(gate):
+    """gate.checks / gate.checks_skip 的形状校验；返回 (errors, checks 里出现的 name 集合, checks_skip 的键集合)。"""
+    errors, names, skip_keys = [], set(), set()
+    checks = gate.get("checks")
+    if checks is not None and not isinstance(checks, list):
+        errors.append("checks: gate.checks 须是列表")
+        checks = []
+    dup = set()
+    for i, c in enumerate(checks or []):
+        if not isinstance(c, dict):
+            errors.append("checks: gate.checks 第 %d 项须是对象" % (i + 1))
+            continue
+        name = c.get("name")
+        label = name if isinstance(name, str) else "第 %d 项" % (i + 1)
+        if not (isinstance(name, str) and CHECK_NAME_RE.fullmatch(name)):
+            errors.append("checks: 检查名 %r 不合法（须匹配 [a-z0-9-]+）" % (name,))
+        elif name in names and name not in dup:
+            dup.add(name)
+            errors.append("checks: 检查名 %s 重复" % name)
+        if isinstance(name, str):
+            names.add(name)
+        extra = sorted(k for k in c if k not in CHECK_FIELDS)
+        if extra:
+            errors.append("checks: %s 有未知字段 %s" % (label, ", ".join(map(str, extra))))
+        if not _nonblank(c.get("final")):
+            errors.append("checks: %s 缺少 final 命令（须是非空字符串）" % label)
+        if c.get("baseline") is not None and not _nonblank(c.get("baseline")):
+            errors.append("checks: %s 的 baseline 须缺省、null 或非空字符串" % label)
+        t = c.get("timeout_sec")
+        if "timeout_sec" in c and not (isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0):
+            errors.append("checks: %s 的 timeout_sec 须是正数" % label)
+    skip = gate.get("checks_skip")
+    if skip is not None and not isinstance(skip, dict):
+        errors.append("checks: gate.checks_skip 须是对象（检查名 → 理由）")
+        skip = {}
+    for k, reason in (skip or {}).items():
+        skip_keys.add(k)
+        if not _nonblank(reason):
+            errors.append("checks: checks_skip 的 %s 理由须是非空字符串" % k)
+        if k in names:
+            errors.append("checks: %s 同时出现在 gate.checks 与 gate.checks_skip" % k)
+    return errors, names, skip_keys
+
+
+def _repo_default_checks(change_dir):
+    """读 <openspec 根>/gate-checks.json；返回 (默认检查 name 列表 | None, 错误文本 | None)。文件不存在 → (None, None)。"""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), DEFAULT_CHECKS)
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            items = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, e)
+    if not isinstance(items, list):
+        return None, "checks: 仓库默认检查文件 %s 无法解析：顶层须是列表" % path
+    names = []
+    for i, c in enumerate(items):
+        name = c.get("name") if isinstance(c, dict) else None
+        if not isinstance(c, dict):
+            why = "第 %d 项不是对象" % (i + 1)
+        elif not (isinstance(name, str) and CHECK_NAME_RE.fullmatch(name)):
+            why = "检查名 %r 不合法" % (name,)
+        elif name in names:
+            why = "检查名 %s 重复" % name
+        else:
+            names.append(name)
+            continue
+        return None, "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, why)
+    return names, None
+
+
+def lint_plan(data, change_dir=None):
     errors = []
     if not ((data.get("gate") or {}).get("test") or "").strip():
         errors.append("gate: gate.test 缺失（须显式写出，baseline 不再自动探测写回）")
@@ -362,6 +444,15 @@ def lint_plan(data):
                     for pb in by_id[b].get("owns") or []:
                         if globs_intersect(pa, pb):
                             errors.append("overlap: 同一 wave 的 %s 与 %s 都覆盖 %s / %s" % (a, b, pa, pb))
+    check_errors, check_names, skip_keys = _lint_checks(data.get("gate") or {})
+    errors.extend(check_errors)
+    if change_dir is not None:
+        defaults, err = _repo_default_checks(change_dir)
+        if err:
+            errors.append(err)
+        for name in defaults or []:
+            if name not in check_names and name not in skip_keys:
+                errors.append("checks: 仓库默认检查 %s 未出现在 gate.checks，也没有在 gate.checks_skip 写理由" % name)
     return errors, waves
 
 
@@ -886,7 +977,7 @@ def detect_test_cmd(root):
 
 def cmd_lint(args, print_waves=True):
     data = load_plan(args.change_dir)
-    errors, waves = lint_plan(data)
+    errors, waves = lint_plan(data, args.change_dir)
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     if print_waves:
@@ -1476,7 +1567,7 @@ def cmd_preflight(args):
     """起飞前四项校验：计划合法、基线存在且绿、基线未过期、基线 commit 在当前分支历史。通过打印 waves。"""
     root = toplevel()
     data = load_plan(args.change_dir)
-    errors, waves = lint_plan(data)
+    errors, waves = lint_plan(data, args.change_dir)
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     bl = load_baseline(args.change_dir)
