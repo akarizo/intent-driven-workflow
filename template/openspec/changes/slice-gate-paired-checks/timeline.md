@@ -14,3 +14,7 @@
 2026-10-18T01:09:40Z	apply-done	
 2026-10-18T01:09:47Z	ship	ready
 2026-10-18T01:09:56Z	ship	ready
+2026-10-18T01:10:22Z	ship	ready
+2026-10-18T01:11:01Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/4
+2026-10-18T01:20:58Z	final	ok
+2026-10-18T01:22:51Z	ship	ready
