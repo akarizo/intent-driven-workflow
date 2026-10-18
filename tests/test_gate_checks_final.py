@@ -1,12 +1,10 @@
 """final 运行检查并以 G9 判定、baseline 与 final 共用目录与环境变量
 （scenario: gate-paired-checks#check-env-and-dir-shared-across-phases、#final-*）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。夹具来自 test_gate_checks_baseline.py（S2）。"""
+夹具来自 test_gate_checks_baseline.py（S2）。"""
 import json
 import os
 import pathlib
 import shlex
-
-import pytest
 
 from conftest import commit_all, git, write
 from test_baseline_incremental import baseline, first_full, marker, read_bl, setup_change
@@ -17,7 +15,6 @@ from test_slice_gate_final import STILL_XFAIL, _repo as final_repo
 # ---------------------------------------------------------------- 运行契约：两阶段共用目录与环境
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_check_env_and_dir_shared_across_phases(git_repo):
     # Given: 在仓库的另一个 worktree 里有 change c，检查 parity 的 baseline 命令把收到的环境变量与工作目录写进 $GATE_CHECK_DIR，
     #        并写一个 seed.txt；final 命令同样记录环境变量，seed.txt 不存在就退出 4
@@ -48,7 +45,6 @@ def test_check_env_and_dir_shared_across_phases(git_repo):
 # ---------------------------------------------------------------- final 运行检查并以 G9 判定
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_final_red_when_check_fails(git_repo):
     # Given: 检查 parity 的 baseline 绿；final 命令依次打印 line-01 到 line-30 后退出 1；基线已绿
     d = setup_checks(git_repo, [parity(git_repo, f_action="noisy")])
@@ -67,7 +63,6 @@ def test_final_red_when_check_fails(git_repo):
     assert "line-01" in log.read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_final_skips_checks_when_g7_red(git_repo):
     # Given: scenario 测试仍带 strict xfail；检查 parity 的 final 命令运行时会写一个标记文件
     flag = marker(git_repo, "ran-check")
@@ -85,7 +80,6 @@ def test_final_skips_checks_when_g7_red(git_repo):
     assert any("G2 全量未跑" in w for w in out["warnings"]), out["warnings"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_final_runs_checks_when_full_suite_red(git_repo):
     # Given: 基线已绿，检查 parity 的 final 命令运行时会记一笔；之后新增了一个失败的测试并提交；scenario 全绿
     d = setup_checks(git_repo, [parity(git_repo)])
@@ -102,7 +96,6 @@ def test_final_runs_checks_when_full_suite_red(git_repo):
     assert runs(git_repo).count("final ok") == 1, runs(git_repo)
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_final_red_when_baseline_record_missing(git_repo):
     # Given: change c 的基线是在计划里还没有检查时跑的；之后加了两个检查：a 的 baseline 为 true、final 运行时写标记 A；
     #        b 的 baseline 为 null、final 运行时写标记 B
