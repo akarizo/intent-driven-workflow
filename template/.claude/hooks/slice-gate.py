@@ -16,7 +16,7 @@
 #   record   --change-dir DIR --json '<gate JSON>' | --slice S --commit SHA [--red] [--failed ...] [--warnings ...]
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
-#                                              G7 红不跑全量
+#                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
 #   baseline --change-dir DIR [--full]        起飞前预检：先把 gate-baseline.json 写成运行标记 {running, pid, started}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              耗时写回 slices.json.gate.full_suite_sec；退出码按 ok；
@@ -1384,6 +1384,11 @@ def cmd_final(args):
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
+    checks = gate.get("checks") or []
+    if checks and v7:
+        warnings.append("G9 检查未跑：G7 已红，scenario 全绿后重跑 final")
+    elif checks:
+        failed.extend(_final_checks(root, args.change_dir, checks, baseline))
     result = {"slice": "final", "ok": not failed, "commit": git(root, "rev-parse", "HEAD"),
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
@@ -1893,6 +1898,31 @@ def _check_msg(head, log, out):
     msg = head + ("；日志 %s" % path if path else "；日志未能写入：%s" % err)
     tail = _tail(out or "", 20)
     return msg + ("\n" + tail if tail else "")
+
+
+def _final_checks(root, change_dir, checks, baseline):
+    """成对检查的 final 半（G9，design D8）：按 gate.checks 顺序运行，先核对基线记录；返回 failed 项列表。"""
+    change = os.path.basename(os.path.realpath(change_dir))
+    base = (baseline or {}).get("commit")
+    recs = (baseline or {}).get("checks") or {}
+    failed = []
+    for c in checks:
+        cname = c["name"]
+        bcmd = c.get("baseline")
+        rec = recs.get(cname) if isinstance(recs, dict) else None
+        if not base or (bcmd and not (isinstance(rec, dict) and rec.get("exit") == 0 and rec.get("cmd") == bcmd)):
+            failed.append("G9 check %s：基线缺记录或与计划不符，重跑 baseline" % cname)
+            continue
+        cdir = _check_dir(root, change, cname)
+        os.makedirs(cdir, exist_ok=True)
+        rc, out, _, timed_out = _run_check(c["final"], root, _check_env("final", change, base, cdir),
+                                           c.get("timeout_sec"))
+        log = _check_log(cdir, "final", out)
+        if timed_out:
+            failed.append(_check_msg("G9 check %s：超时 %s 秒" % (cname, c.get("timeout_sec")), log, out))
+        elif rc != 0:
+            failed.append(_check_msg("G9 check %s：exit %d" % (cname, rc), log, out))
+    return failed
 
 
 def _pool_order(name, entry):
