@@ -24,6 +24,7 @@ metadata:
    python3 .claude/hooks/slice-gate.py final --change-dir openspec/changes/<name>
    ```
    拿到 JSON：全量 test/lint/typecheck 结果 + `scenarios{total, passed}`。
+   配置了 `gate.checks` 时，final 在全量之后运行每个检查的 `final` 命令（G7 红时不跑），红记 `G9 check <name>`，完整输出在 `$GATE_CHECK_DIR/.gate-final.log`。
 
 3. **打印 scenario 映射状态**
    对照 `openspec/changes/<name>/slices.json` 的 `scenario_tests`，逐条列出每个 scenario 的当前状态：

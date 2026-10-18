@@ -289,6 +289,12 @@ artifacts:
       `gate.test`（全量测试命令）**必填**，由 `slice-gate.py lint` 校验。
       pytest 的预存红由 baseline 记录到 `gate-baseline.json`，final 按基线逐条差分，
       只有新增的失败才算红，**无需手写 deselect**。
+      `gate.checks`（可选）：仓库自定义的成对检查，数组，每项
+      `{name, baseline, final, timeout_sec}`；baseline 运行 `baseline` 命令
+      （为 null 时 baseline 不跑），final 运行 `final` 命令，判定只看退出码。
+      `gate.checks_skip`（可选）：`{<name>: <理由>}`。openspec 根目录下有
+      `gate-checks.json`（仓库默认检查）时，把其中每个检查抄进 `gate.checks`，
+      或在 `gate.checks_skip` 写明理由；由 `slice-gate.py lint` 校验。
 
 
       2. `slices/<S>.md` — one packet per slice: what it does, the exact

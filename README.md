@@ -251,7 +251,15 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 | --- | --- |
 | `lint` | 切片数 1–9、DAG 深度 ≤ 3、同 wave `owns` 不相交、每片 `verify` 必填 |
 | `gate`（每切片收尾） | G1 `verify` 通过 / G2 lint·typecheck / G3 源码改动必配对测试 / G4 GWT 三段注释 / G5 RED 先于 GREEN 留痕 / G6 只写 `owns` 内文件 / G7 scenario 测试已映射且不再 xfail/skip |
-| `final`（全部切片完成） | 全量 test/lint/typecheck + 全部 scenario 状态 |
+| `final`（全部切片完成） | 全量 test/lint/typecheck + 全部 scenario 状态 + 检查 final（G9） |
+
+**成对检查（`gate.checks`）**：仓库自定义的检查，每项 `{name, baseline, final, timeout_sec}`，写在 `slices.json` 的 `gate` 里。
+- **时机**：`baseline` 在全量 / lint / verify 之后运行各检查的 `baseline` 命令（为 null 不跑），红即基线红；代码树没变时按与 lint 相同的条件沿用上次结果 · `final` 在 G7 绿时、全量之后运行各检查的 `final` 命令，红记 `G9 check <name>`
+- **判定**：`gate.checks` 的检查只看退出码，0 绿、其余红，slice-gate 不解析输出；工作目录是 git toplevel，经 shell 执行；完整输出写 `$GATE_CHECK_DIR/.gate-<phase>.log`，红的提示带末尾 20 行
+- **环境变量**：`GATE_PHASE`（`baseline` / `final`）· `GATE_CHANGE`（change 目录名）· `GATE_BASE_COMMIT`（`gate-baseline.json` 的 `commit`）· `GATE_CHECK_DIR`（该检查的共用目录）
+- **共用目录**：`<git common dir>/flight-gate-checks/<change>/<name>/`，各 worktree 是同一处，baseline 与 final 借它交接；baseline 实跑前清空重建，final 不清空
+- **`timeout_sec`**：可选；到时结束检查所在的整个进程组并判红；不配置不设超时
+- **仓库默认检查**：openspec 根目录下的 `gate-checks.json` 列出的每个检查，须抄进本 change 的 `gate.checks`，或在 `gate.checks_skip` 写明理由，由 `slice-gate.py lint` 校验
 
 **基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
 

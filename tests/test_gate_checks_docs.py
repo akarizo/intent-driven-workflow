@@ -1,5 +1,5 @@
 """schema、propose / verify 命令与同名 skill、README 写明检查的配置、时机与契约（scenario: gate-paired-checks#docs-describe-paired-checks）。
-骨架：strict xfail，断言是真实的；切片 S4 改完文档后去掉标记即解锁。"""
+切片 S4 已解锁。"""
 import pytest
 
 from conftest import ROOT
@@ -16,7 +16,6 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_docs_describe_paired_checks():
     # Given: schema.yaml、opsx-propose 与 opsx-verify 两个命令及其同名 skill、README.md
     schema = read(SCHEMA)
