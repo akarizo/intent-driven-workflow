@@ -3,8 +3,6 @@
 lint-accepts-default-check-skipped-with-reason）在 base 上已成立，不带 xfail。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from test_slice_gate import plan, slice_, write_plan
 
@@ -34,7 +32,6 @@ def _checks_lines(stderr):
     return [l.strip()[2:] for l in stderr.splitlines() if l.strip().startswith("- checks:")]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_lint_rejects_malformed_checks(tmp_path):
     # Given: gate.checks 有 name 为 Bad 的、no-final 缺 final 的、两个 dup、zero-timeout 的 timeout_sec 为 0、typo 带未知字段 base_line；
     #        checks_skip 里 empty-reason 的理由是空白，ok-check 同时出现在 gate.checks 与 checks_skip
@@ -77,7 +74,6 @@ def test_lint_accepts_valid_checks(tmp_path):
     assert json.loads(p.stdout) == [["S1"]]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_lint_requires_repo_default_check(tmp_path):
     # Given: openspec/gate-checks.json 列出 coverage-parity；openspec/changes/c 的 gate.checks 与 checks_skip 都没有它
     _defaults(tmp_path / "openspec", ["coverage-parity"])
@@ -104,7 +100,6 @@ def test_lint_accepts_default_check_skipped_with_reason(tmp_path):
     assert p.returncode == 0, p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_lint_repo_defaults_follow_change_dir(tmp_path):
     # Given: change 目录在 template/openspec/changes/c；template/openspec/gate-checks.json 列出 coverage-parity；
     #        template/ 的上一级没有 openspec/；本 change 没写这个检查
@@ -120,7 +115,6 @@ def test_lint_repo_defaults_follow_change_dir(tmp_path):
     assert any("coverage-parity" in l for l in _checks_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_lint_rejects_unreadable_repo_defaults(tmp_path):
     # Given: openspec/gate-checks.json 的内容不是合法 JSON；本 change 的计划其余部分合法
     write(tmp_path / "openspec" / "gate-checks.json", "[{not json\n")
