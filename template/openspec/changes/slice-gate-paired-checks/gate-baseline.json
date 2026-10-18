@@ -1,0 +1,58 @@
+{
+  "commit": "766d3fa9a435723871b32a3203934eb5517b5ef1",
+  "at": "2026-10-17T14:51:18Z",
+  "plan_sha": "ff433650bf425324a3624f00913617a753d0727e",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 80.1
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_gate_checks_lint.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_gate_checks_baseline.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_gate_checks_final.py tests/test_gate_checks_baseline.py tests/test_slice_gate_final.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_gate_checks_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_baseline_incremental_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "slice-gate-paired-checks",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-gate-paired-checks-by-exit-code.md": "c7723c4719d7e1a672428795ffb6b9f13e86d4e3",
+    "tests/test_gate_checks_baseline.py": "3ccb433a1cfcbaa6fe3420a4d311eccd27a1f4d8",
+    "tests/test_gate_checks_docs.py": "d5125528602dfd7352fffc601b0df175f785718b",
+    "tests/test_gate_checks_final.py": "bd80f4e461b9d2f91b7cd48991bb2a863d5f898e",
+    "tests/test_gate_checks_lint.py": "93849e91636bb94bafca18af858c5abe20dba436"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "decompose-role-by-label",
+      "commit": "20ba98478b05",
+      "reason": "有非测试文件改动：template/.claude/hooks/session-decompose.py, template/openspec/adr/DRAFT-gate-paired-checks-by-exit-code.md"
+    }
+  ]
+}

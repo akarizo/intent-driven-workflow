@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "change": "slice-gate-paired-checks",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 80.1
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定器：lint 校验 gate.checks / checks_skip 的形状，并按 change 目录找仓库默认检查 gate-checks.json 对账",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_gate_checks_lint.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_gate_checks_lint.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "scenarios": [
+        "gate-paired-checks#lint-rejects-malformed-checks",
+        "gate-paired-checks#lint-accepts-valid-checks",
+        "gate-paired-checks#lint-requires-repo-default-check",
+        "gate-paired-checks#lint-accepts-default-check-skipped-with-reason",
+        "gate-paired-checks#lint-repo-defaults-follow-change-dir",
+        "gate-paired-checks#lint-rejects-unreadable-repo-defaults"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "判定器：检查运行函数（GATE_* · 超时整组结束 · 输出落盘）、baseline 运行与记录检查（实跑前清空目录、照 D10 沿用）、plan_sha 并入检查",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_gate_checks_baseline.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_gate_checks_baseline.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "scenarios": [
+        "gate-paired-checks#check-timeout-is-red",
+        "gate-paired-checks#baseline-red-when-check-fails",
+        "gate-paired-checks#baseline-clears-check-dir-before-run",
+        "gate-paired-checks#baseline-check-reused-when-tree-unchanged",
+        "gate-paired-checks#baseline-check-rerun-when-command-changed",
+        "gate-paired-checks#baseline-check-rerun-when-dir-missing",
+        "gate-paired-checks#baseline-check-rerun-on-cross-change-reuse",
+        "gate-paired-checks#preflight-stale-when-check-added",
+        "gate-paired-checks#preflight-ignores-check-final-edit",
+        "gate-paired-checks#no-checks-behavior-unchanged"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "判定器：final 在全量判定之后运行检查（核对基线记录、G9、G7 红时不跑并警告）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_gate_checks_final.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_gate_checks_final.py tests/test_gate_checks_baseline.py tests/test_slice_gate_final.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py",
+      "scenarios": [
+        "gate-paired-checks#check-env-and-dir-shared-across-phases",
+        "gate-paired-checks#final-red-when-check-fails",
+        "gate-paired-checks#final-skips-checks-when-g7-red",
+        "gate-paired-checks#final-runs-checks-when-full-suite-red",
+        "gate-paired-checks#final-red-when-baseline-record-missing"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "文档：schema tasks instruction、propose / verify 命令与同名 skill、README 写明 gate.checks 的配置、时机与契约",
+      "owns": [
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/.claude/commands/opsx-verify.md",
+        "template/.claude/skills/openspec-verify-change/SKILL.md",
+        "README.md",
+        "tests/test_gate_checks_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_gate_checks_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_baseline_incremental_docs.py",
+      "scenarios": [
+        "gate-paired-checks#docs-describe-paired-checks"
+      ],
+      "packet": "slices/S4.md"
+    }
+  ],
+  "scenario_tests": {
+    "gate-paired-checks#lint-rejects-malformed-checks": "tests/test_gate_checks_lint.py::test_lint_rejects_malformed_checks",
+    "gate-paired-checks#lint-accepts-valid-checks": "tests/test_gate_checks_lint.py::test_lint_accepts_valid_checks",
+    "gate-paired-checks#lint-requires-repo-default-check": "tests/test_gate_checks_lint.py::test_lint_requires_repo_default_check",
+    "gate-paired-checks#lint-accepts-default-check-skipped-with-reason": "tests/test_gate_checks_lint.py::test_lint_accepts_default_check_skipped_with_reason",
+    "gate-paired-checks#lint-repo-defaults-follow-change-dir": "tests/test_gate_checks_lint.py::test_lint_repo_defaults_follow_change_dir",
+    "gate-paired-checks#lint-rejects-unreadable-repo-defaults": "tests/test_gate_checks_lint.py::test_lint_rejects_unreadable_repo_defaults",
+    "gate-paired-checks#check-timeout-is-red": "tests/test_gate_checks_baseline.py::test_check_timeout_is_red",
+    "gate-paired-checks#baseline-red-when-check-fails": "tests/test_gate_checks_baseline.py::test_baseline_red_when_check_fails",
+    "gate-paired-checks#baseline-clears-check-dir-before-run": "tests/test_gate_checks_baseline.py::test_baseline_clears_check_dir_before_run",
+    "gate-paired-checks#baseline-check-reused-when-tree-unchanged": "tests/test_gate_checks_baseline.py::test_baseline_check_reused_when_tree_unchanged",
+    "gate-paired-checks#baseline-check-rerun-when-command-changed": "tests/test_gate_checks_baseline.py::test_baseline_check_rerun_when_command_changed",
+    "gate-paired-checks#baseline-check-rerun-when-dir-missing": "tests/test_gate_checks_baseline.py::test_baseline_check_rerun_when_dir_missing",
+    "gate-paired-checks#baseline-check-rerun-on-cross-change-reuse": "tests/test_gate_checks_baseline.py::test_baseline_check_rerun_on_cross_change_reuse",
+    "gate-paired-checks#preflight-stale-when-check-added": "tests/test_gate_checks_baseline.py::test_preflight_stale_when_check_added",
+    "gate-paired-checks#preflight-ignores-check-final-edit": "tests/test_gate_checks_baseline.py::test_preflight_ignores_check_final_edit",
+    "gate-paired-checks#no-checks-behavior-unchanged": "tests/test_gate_checks_baseline.py::test_no_checks_behavior_unchanged",
+    "gate-paired-checks#check-env-and-dir-shared-across-phases": "tests/test_gate_checks_final.py::test_check_env_and_dir_shared_across_phases",
+    "gate-paired-checks#final-red-when-check-fails": "tests/test_gate_checks_final.py::test_final_red_when_check_fails",
+    "gate-paired-checks#final-skips-checks-when-g7-red": "tests/test_gate_checks_final.py::test_final_skips_checks_when_g7_red",
+    "gate-paired-checks#final-runs-checks-when-full-suite-red": "tests/test_gate_checks_final.py::test_final_runs_checks_when_full_suite_red",
+    "gate-paired-checks#final-red-when-baseline-record-missing": "tests/test_gate_checks_final.py::test_final_red_when_baseline_record_missing",
+    "gate-paired-checks#docs-describe-paired-checks": "tests/test_gate_checks_docs.py::test_docs_describe_paired_checks"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_gate_checks_lint.py",
+      "line": 35,
+      "summary": "守护测试覆盖不全，切片要求的 mutation 自证有缺口。以下判定改坏后没有任何断言会变红：gate.checks 不是数组、某项不是对象、baseline 是空白字符串、timeout_sec 为负数 / 布尔 / 字符串、checks_skip 不是对象；默认检查文件顶层不是数组、元素不是对象、name 不合法或重复（现有测试只覆盖了 JSON 不合法这一种读不出）。比如把 `not isinstance(t, bool)` 删掉，或把 `_repo_default_checks` 里的重复判断删掉，套件仍然全绿。",
+      "fix": "补几条参数化用例：每种非法形状单独构造一份计划或默认文件，断言 exit 非 0，并断言有一行 `checks:` 点名对应对象（默认文件的用例断言该行含 gate-checks.json）。至少要盖住 timeout_sec=true、baseline=\"  \"、checks={}、checks_skip=[]，以及默认文件为 {}、[1]、[{\"name\":\"X\"}]、两个同名项。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 388,
+      "summary": "`os.path.isfile(path)` 把存在但不是普通文件的情况（比如同名目录、指向不存在目标的符号链接）当成文件不存在，默认检查对账就被静默跳过。这和 design D9 的 fail-closed 意图（读不出不能当没有）不一致。属边缘情况，需进一步确认是否值得处理。",
+      "fix": "改成 `if not os.path.lexists(path): return None, None`。路径存在但不是文件时，交给后面的 open 抛 OSError，统一报「无法解析」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 370,
+      "summary": "timeout_sec 能通过 Python json 认可的 `Infinity`，因为 `inf > 0` 为真。S2/S3 把它传给 communicate(timeout=...) 时，实际效果等于不设超时，在部分路径上还可能抛 OverflowError。",
+      "fix": "判定里加上 `math.isfinite(t)`，或在报错文本里写明须是有限正数。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 252,
+      "summary": "机械门禁表的 `lint` 行没有更新。S1 之后 lint 也会校验 gate.checks / checks_skip 的形状，并对账 gate-checks.json，但表里仍只列切片数、DAG、owns、verify。新段落最后一条提到了「由 slice-gate.py lint 校验」，可读者按表格查 lint 职责时会漏掉这一项。",
+      "fix": "在 lint 行末尾补「/ gate.checks 形状与仓库默认检查 gate-checks.json 对账」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 257,
+      "summary": "契约没写全，有两处遗漏。一是基线沿用的条件写成「与 lint 相同的条件」，但 spec 还要求该检查的 GATE_CHECK_DIR 仍存在，目录被删了就会实跑。二是没写 final 会先核对基线记录：记录缺失、exit 非 0 或 cmd 与当前 baseline 命令不一致时，记 `G9 check <name>`（含「基线」），且不跑该检查的 final。另外也没说明 plan_sha 只纳入 [name, baseline]，所以改 baseline 命令会让基线过期，只改 final / timeout_sec 不会。",
+      "fix": "时机条补「且共用目录仍在」，再补一条：final 先核对基线记录（有同名记录、exit 0、cmd 一致），不满足记 G9 并提示重跑 baseline；改检查的 baseline 命令会让基线过期，只改 final / timeout_sec 不会。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 71,
+      "summary": "新加的一行写「任一红即基线红（照下面的红处理）」，但下面红的处理只写了「人类修 gate.test / verify / 环境后重跑本步」，没有提到检查。检查在基线上红时，读者不知道该修代码还是修检查命令。openspec-propose/SKILL.md 同一位置有相同问题。",
+      "fix": "两份文档同步修改，保持逐字一致：把退出非 0 那条里的「修 gate.test / verify / 环境」改成「修 gate.test / verify / gate.checks 的 baseline 命令 / 环境」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/schemas/intent-driven/schema.yaml",
+      "line": 292,
+      "summary": "tasks instruction 只写了 gate.checks 的字段名，没写 lint 的硬约束：name 须匹配 ^[a-z0-9-]+$ 且不重复，final 须是非空字符串，timeout_sec 须大于 0。规划时容易写出 lint 红的配置，要靠 lint 报错才能发现。",
+      "fix": "在该段补一句：name 只用小写字母、数字与连字符且不重复，final 必填非空，timeout_sec 可选且须大于 0。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1514,
+      "summary": "基线检查段的建目录调用没有异常保护。这一步在运行标记写入之后、结果覆盖之前执行：`shutil.rmtree(cdir, ignore_errors=True)` 会静默吞掉删除失败（权限问题，或 cdir 是普通文件），随后 `os.makedirs(cdir)` 抛 FileExistsError 或 PermissionError；共用目录所在的 git common dir 不可写时同样会抛 OSError。异常未被捕获，gate-baseline.json 会停在 running 标记上，preflight 只会提示「基线中断（进程已不在）」，看不到真实原因。这违反 D12「运行标记一定被结果覆盖」的约定（同一函数里结束快照失败已按 D12 转成 reason）。另外，rmtree 静默删不全时，D3「清空再建」的保证也就落空了。",
+      "fix": "把 rmtree 与 makedirs 包进 try/except OSError，出错时向 reasons 追加「check <name> 共用目录无法清空或创建：<错误>」，记录 bl[\"checks\"][cname] = {exit: None, cmd, key} 后跳过实跑。rmtree 改为不忽略错误（目录不存在时先判 os.path.lexists 再删），确保清空失败显式变红，而不是让旧数据残留。补一条测试：预先在共用目录路径上放一个同名普通文件，断言 baseline 退出非 0、gate-baseline.json 已不是 running 标记，且 reasons 点名该检查。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1874,
+      "summary": "超时后先 killpg 整个进程组，再调用不带超时的 `p.communicate()` 收尾。如果检查命令派生的后代用 setsid 或 daemon 方式脱离了进程组，同时还继承着 stdout 管道，这次 communicate 会一直等到该后代退出，timeout_sec 的上限就失效了。这种情况在设计 D2 范围内概率不高，属于需进一步确认的边界。",
+      "fix": "收尾的 communicate 也加一个短超时（例如 5 秒）；再超时就关闭 p.stdout、调用 p.wait 回收进程，并用已拿到的部分输出（可能为空）作为 out。也可以在契约文档里注明：脱离进程组的后代不在超时清理范围内。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1910,
+      "summary": "_final_checks 不检查 gate.checks 的形状：遇到非 dict 元素（`c.get` 报 AttributeError）、缺 name（KeyError）或缺 final（Popen(None) 抛 TypeError，_run_check 只捕获 OSError）都会让 final 抛 traceback，拿不到 JSON 结论。正常流程里 lint/preflight 会先拦下（_lint_checks），但设计 D8 写明 /opsx-verify 可以不经 preflight 直接跑 final。触发概率低，不阻断。",
+      "fix": "在 _final_checks 循环开头加一行守卫：c 不是 dict 或没有非空 final 时，failed 追加 `G9 check <name 或 第 i 项>：计划形状非法，先跑 lint` 后 continue。也可以让 cmd_final 先调用 _lint_checks，把其中的 errors 作为 failed 返回。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_gate_checks_final.py",
+      "line": 99,
+      "summary": "G9 有三条分支没有测试守护：final 超时（`G9 check <name>：超时 N 秒`）、基线记录 cmd 与当前 baseline 命令不一致、基线 exit 非 0。目前只覆盖了基线完全没有该检查记录的情况。spec 第 145-146 行规定了这几条的语义，把 `rec.get(\"cmd\") == bcmd` 改坏或删掉超时分支，现有测试仍然全绿。spec scenario 没有点名这几条，所以不算门禁缺口。",
+      "fix": "补 2-3 个小测试：(1) 基线绿之后把 checks[0].baseline 改成别的命令（不重跑 baseline），断言 failed 有 `G9 check parity` 开头且含「基线」的项，并且 final 没有运行；(2) final 命令为 `sleep 5`、timeout_sec=1，断言 failed 有以 `G9 check parity：超时` 开头的项；(3) 可选：基线记录 exit 非 0 时同样判为基线不符。"
+    }
+  ],
+  "fix": null
+}

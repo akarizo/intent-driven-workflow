@@ -76,6 +76,7 @@ metadata:
    ```
    用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。它跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
    verify 在基线上必须绿（骨架是 strict-xfail）。
+   配置了 `gate.checks` 时，baseline 在 verify 之后运行每个检查的 `baseline` 命令，任一红即基线红（照下面的红处理）；代码树没变时按与 lint 相同的条件沿用上次结果。
    baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
    脚本自己判断跑全量还是**增量**，并跳过重复的运行：
    - 自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；
