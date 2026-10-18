@@ -1,7 +1,5 @@
 """schema、propose / verify 命令与同名 skill、README 写明检查的配置、时机与契约（scenario: gate-paired-checks#docs-describe-paired-checks）。
 切片 S4 已解锁。"""
-import pytest
-
 from conftest import ROOT
 from test_baseline_incremental_docs import _baseline_step, _has_line
 

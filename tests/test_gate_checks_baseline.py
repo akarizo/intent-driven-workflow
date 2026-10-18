@@ -10,8 +10,6 @@ import shlex
 import shutil
 import time
 
-import pytest
-
 from conftest import commit_all, git, run_hook, write
 from test_baseline_incremental import (PY, append, baseline, first_full, full_c, marker, preflight, read_bl, read_plan,
                                        setup_change, two_changes)
@@ -282,3 +280,25 @@ def test_no_checks_behavior_unchanged(git_repo):
     assert set(out) <= {"slice", "ok", "commit", "failed", "warnings", "scenarios", "summary", "dirty"}, out
     assert not any("G9" in x for x in out["failed"] + out["warnings"]), out
     assert not (common_dir(git_repo) / CHECKS_DIR).exists()
+
+
+# ---------------------------------------------------------------- 计划形状非法时 baseline 不动手（PR #4 评审 HIGH）
+
+
+def test_baseline_rejects_malformed_checks_before_running(git_repo):
+    # Given: 仓外目录 victim 里有哨兵文件；检查名写成该目录的绝对路径（lint 会判红），baseline 命令本身能运行
+    victim = git_repo.parent / "victim"
+    victim.mkdir()
+    (victim / "keep.txt").write_text("x", encoding="utf-8")
+    d = setup_checks(git_repo, [dict(parity(git_repo), name=str(victim))])
+
+    # When: 不先跑 lint，直接运行 slice-gate.py baseline
+    p = baseline(git_repo, d)
+
+    # Then: 退出非 0，stderr 点名 checks: 并提示先跑 lint；哨兵文件仍在；检查没有运行；gate-baseline.json 不是运行标记
+    assert p.returncode != 0, p.stdout + p.stderr
+    assert "checks:" in p.stderr and "lint" in p.stderr, p.stderr
+    assert (victim / "keep.txt").exists()
+    assert runs(git_repo) == []
+    bl_path = d / "gate-baseline.json"
+    assert not bl_path.exists() or read_bl(d).get("running") is not True, bl_path.read_text(encoding="utf-8")

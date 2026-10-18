@@ -1385,7 +1385,10 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     checks = gate.get("checks") or []
-    if checks and v7:
+    cerrs = _lint_checks(gate)[0]
+    if cerrs:  # /opsx-verify 可不经 preflight 直接跑 final（design D8）：形状非法时不运行任何检查
+        failed.append("G9 gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
+    elif checks and v7:
         warnings.append("G9 检查未跑：G7 已红，scenario 全绿后重跑 final")
     elif checks:
         failed.extend(_final_checks(root, args.change_dir, checks, baseline))
@@ -1409,6 +1412,10 @@ def cmd_baseline(args):
     if not test_cmd:
         die("未配置也未探测到全量测试命令")
     gate["test"] = test_cmd
+    # 检查名会拼进 rmtree 的路径：形状先于任何动作校验，非法时不写运行标记，不碰现有 gate-baseline.json
+    cerrs = _lint_checks(gate)[0]
+    if cerrs:
+        die("gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
     sha0 = plan_sha(data)
     name = os.path.basename(os.path.realpath(args.change_dir))
     change_rel = _change_rel(root, args.change_dir)
@@ -1509,14 +1516,25 @@ def cmd_baseline(args):
             continue
         cname = c["name"]
         kkey = cmd_key(root, change_rel, bcmd)
-        cdir = _check_dir(root, name, cname)
+        try:
+            cdir = _check_dir(root, name, cname)
+        except RuntimeError as e:  # design D12：运行标记一定被结果覆盖
+            bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey}
+            reasons.append("check %s 共用目录不可用：%s" % (cname, e))
+            continue
         oc = old_checks.get(cname) if isinstance(old_checks, dict) else None
         if (strict_delta == [] and kkey and isinstance(oc, dict) and "exit" in oc
                 and oc.get("cmd") == bcmd and oc.get("key") == kkey and os.path.isdir(cdir)):
             bl["checks"][cname] = {"exit": oc["exit"], "sec": oc.get("sec"), "cmd": bcmd, "key": kkey, "reused": True}
             continue
-        shutil.rmtree(cdir, ignore_errors=True)
-        os.makedirs(cdir)
+        try:  # 清空失败显式判红，不让旧数据残留
+            if os.path.lexists(cdir):
+                shutil.rmtree(cdir)
+            os.makedirs(cdir)
+        except OSError as e:
+            bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey}
+            reasons.append("check %s 共用目录无法清空或创建：%s" % (cname, e))
+            continue
         crc, cout, csec, ctimeout = _run_check(bcmd, root, _check_env("baseline", name, bl["commit"], cdir),
                                                c.get("timeout_sec"))
         bl["checks"][cname] = {"exit": crc, "sec": csec, "cmd": bcmd, "key": kkey}
@@ -1850,7 +1868,12 @@ def _check_dir(root, change, name):
     """检查的共用目录（design D3）：<git common dir>/flight-gate-checks/<change>/<name>，绝对路径；baseline 与 final 共用。"""
     common = git(root, "rev-parse", "--git-common-dir")
     base = common if os.path.isabs(common) else os.path.join(root, common)
-    return os.path.join(os.path.abspath(base), CHECKS_DIR, change, name)
+    parent = os.path.join(os.path.abspath(base), CHECKS_DIR, change)
+    path = os.path.join(parent, name)
+    # 纵深防御：检查名已由 lint 校验；仍确认解析后（含符号链接）恰好落在本 change 的检查目录之下
+    if os.path.dirname(os.path.realpath(path)) != os.path.realpath(parent):
+        raise RuntimeError("%s 不在 %s 之下" % (path, parent))
+    return path
 
 
 def _check_env(phase, change, base_commit, cdir):
@@ -1913,8 +1936,12 @@ def _final_checks(root, change_dir, checks, baseline):
         if not base or (bcmd and not (isinstance(rec, dict) and rec.get("exit") == 0 and rec.get("cmd") == bcmd)):
             failed.append("G9 check %s：基线缺记录或与计划不符，重跑 baseline" % cname)
             continue
-        cdir = _check_dir(root, change, cname)
-        os.makedirs(cdir, exist_ok=True)
+        try:
+            cdir = _check_dir(root, change, cname)
+            os.makedirs(cdir, exist_ok=True)
+        except (RuntimeError, OSError) as e:
+            failed.append("G9 check %s：共用目录不可用：%s" % (cname, e))
+            continue
         rc, out, _, timed_out = _run_check(c["final"], root, _check_env("final", change, base, cdir),
                                            c.get("timeout_sec"))
         log = _check_log(cdir, "final", out)

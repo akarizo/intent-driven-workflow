@@ -114,3 +114,25 @@ def test_final_red_when_baseline_record_missing(git_repo):
     assert not fa.exists()
     assert fb.exists()
     assert not any(f.startswith("G9 check b") for f in out["failed"]), out["failed"]
+
+
+# ---------------------------------------------------------------- 计划形状非法时 final 不运行检查（PR #4 评审 HIGH）
+
+
+def test_final_rejects_malformed_checks_before_running(git_repo):
+    # Given: 检查 parity 的基线已绿；随后把 parity 的 final 命令删掉（name 与 baseline 不变，基线不过期）并提交
+    d = setup_checks(git_repo, [parity(git_repo)])
+    first_full(git_repo, d)
+    bad = parity(git_repo)
+    del bad["final"]
+    set_checks(d, [bad])
+    commit_all(git_repo, "drop final")
+    before = runs(git_repo)
+
+    # When: 运行 slice-gate.py final
+    out = final_json(git_repo, d)
+
+    # Then: 输出 JSON 且 ok 为 false；failed 有一项以 G9 开头并提示先跑 lint；检查没有再运行
+    assert out["ok"] is False, out
+    assert any(f.startswith("G9") and "lint" in f for f in out["failed"]), out["failed"]
+    assert runs(git_repo) == before
