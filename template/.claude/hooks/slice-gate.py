@@ -23,10 +23,13 @@
 #                                              结果带 change / mode / snapshot / cmd_key / byproducts；旧基线可复用（cmd_key 相同、
 #                                              Δ 只有 test_*.py 且补跑不红）→ mode incremental：不跑 gate.test，verify 只重跑受影响的片；
 #                                              --full 不复用；运行期间已有文件或测试文件被改 → 红，新出现的非测试文件 → 副产物只警告；
-#                                              走全量且判过候选时记 reuse_skipped（≤5 条）；开跑前内容快照失败 → 停下、不写运行标记
+#                                              走全量且判过候选时记 reuse_skipped（≤5 条）；开跑前内容快照失败 → 停下、不写运行标记；
+#                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
+#                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
+#                                              且目录仍在），检查红 / 超时 → 基线红
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
-#                                              （Δ 非空 → 基线过期）；通过打印 waves
+#                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -36,6 +39,7 @@
 # JSON 契约：{"slice", "ok", "commit", "failed": [...], "warnings": [...],
 #             "ceilings": [[路径, 行号, 限制, 升级路径], ...], "summary"}；failed 每项以 G<n> 开头并点名对象。
 #             ceilings 由执行体转写后经 record --json 回流，形状不可信：解析见 ceiling_rows_from_json，绝不抛异常。
+#             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import fnmatch
@@ -44,6 +48,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -244,6 +249,9 @@ def plan_sha(data):
     gate = data.get("gate") or {}
     key = [gate.get("test"), gate.get("lint"), gate.get("typecheck"),
            [[s.get("id"), s.get("verify")] for s in data.get("slices") or []]]
+    checks = gate.get("checks")
+    if isinstance(checks, list) and checks:  # 检查的 baseline 命令也归基线负责（design D7）；final 不在此列
+        key.append([[c.get("name"), c.get("baseline")] for c in checks if isinstance(c, dict)])
     return hashlib.sha1(json.dumps(key, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -1485,6 +1493,34 @@ def cmd_baseline(args):
         bl["verify"][s["id"]] = {"exit": vrc, "cmd": vcmd}
         if vrc != 0:
             reasons.append("%s verify 在基线上红（exit %d）：命令不可运行或含既有错误" % (s["id"], vrc))
+    # 成对检查的 baseline 半（design D5）：沿用条件同 lint / typecheck（D10）外加共用目录仍在；否则清空目录后实跑
+    checks = gate.get("checks") or []
+    if checks:
+        bl["checks"] = {}
+        old_checks = (old.get("checks") if isinstance(old, dict) else None) or {}
+    for c in checks:
+        bcmd = c.get("baseline") if isinstance(c, dict) else None
+        if not bcmd:
+            continue
+        cname = c["name"]
+        kkey = cmd_key(root, change_rel, bcmd)
+        cdir = _check_dir(root, name, cname)
+        oc = old_checks.get(cname) if isinstance(old_checks, dict) else None
+        if (strict_delta == [] and kkey and isinstance(oc, dict) and "exit" in oc
+                and oc.get("cmd") == bcmd and oc.get("key") == kkey and os.path.isdir(cdir)):
+            bl["checks"][cname] = {"exit": oc["exit"], "sec": oc.get("sec"), "cmd": bcmd, "key": kkey, "reused": True}
+            continue
+        shutil.rmtree(cdir, ignore_errors=True)
+        os.makedirs(cdir)
+        crc, cout, csec, ctimeout = _run_check(bcmd, root, _check_env("baseline", name, bl["commit"], cdir),
+                                               c.get("timeout_sec"))
+        bl["checks"][cname] = {"exit": crc, "sec": csec, "cmd": bcmd, "key": kkey}
+        log = _check_log(cdir, "baseline", cout)
+        if ctimeout:
+            bl["checks"][cname]["timed_out"] = True
+            reasons.append(_check_msg("check %s 在基线上超时（%s 秒）" % (cname, c.get("timeout_sec")), log, cout))
+        elif crc != 0:
+            reasons.append(_check_msg("check %s 在基线上红（exit %d）" % (cname, crc), log, cout))
     # 运行期间的改动（design D6）
     s1, byproducts = None, []
     try:
@@ -1800,6 +1836,63 @@ def _pool_dir(root):
     """git common dir 下的基线池目录（同仓各 worktree 共享）；相对路径按 root 解析成绝对路径。"""
     common = git(root, "rev-parse", "--git-common-dir")
     return os.path.join(common if os.path.isabs(common) else os.path.join(root, common), POOL_DIR)
+
+
+CHECKS_DIR = "flight-gate-checks"
+
+
+def _check_dir(root, change, name):
+    """检查的共用目录（design D3）：<git common dir>/flight-gate-checks/<change>/<name>，绝对路径；baseline 与 final 共用。"""
+    common = git(root, "rev-parse", "--git-common-dir")
+    base = common if os.path.isabs(common) else os.path.join(root, common)
+    return os.path.join(os.path.abspath(base), CHECKS_DIR, change, name)
+
+
+def _check_env(phase, change, base_commit, cdir):
+    """检查命令的环境（运行契约）：os.environ 副本 + GATE_PHASE / GATE_CHANGE / GATE_BASE_COMMIT / GATE_CHECK_DIR。"""
+    return dict(os.environ, GATE_PHASE=phase, GATE_CHANGE=change, GATE_BASE_COMMIT=base_commit or "",
+                GATE_CHECK_DIR=cdir)
+
+
+def _run_check(cmd, root, env, timeout):
+    """运行一条检查命令（design D2），返回 (rc, out, sec, timed_out)；timeout 为 None 不设上限，超时整个进程组结束。"""
+    t0 = time.time()
+    try:
+        p = subprocess.Popen(cmd, shell=True, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, start_new_session=True)
+    except OSError as e:
+        return 127, str(e), round(time.time() - t0, 1), False
+    timed_out = False
+    try:
+        out, _ = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(p.pid, 9)
+        except OSError:
+            pass
+        out, _ = p.communicate()
+    return p.returncode, out or "", round(time.time() - t0, 1), timed_out
+
+
+def _check_log(cdir, phase, out):
+    """覆盖写 cdir/.gate-<phase>.log；返回 (日志路径, None)，写失败返回 (None, 错误文本)。"""
+    path = os.path.join(cdir, ".gate-%s.log" % phase)
+    try:
+        os.makedirs(cdir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(out or "")
+    except OSError as e:
+        return None, str(e)
+    return path, None
+
+
+def _check_msg(head, log, out):
+    """红的提示（design D4）：首行结论 + 日志位置（log 为 _check_log 的返回值），再接输出末尾 20 行。"""
+    path, err = log
+    msg = head + ("；日志 %s" % path if path else "；日志未能写入：%s" % err)
+    tail = _tail(out or "", 20)
+    return msg + ("\n" + tail if tail else "")
 
 
 def _pool_order(name, entry):

@@ -93,7 +93,6 @@ def final_json(repo, d):
 # ---------------------------------------------------------------- 运行契约：超时
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_check_timeout_is_red(git_repo):
     # Given: 检查 slow 的 baseline 命令是 sleep 30; echo done，timeout_sec 为 1
     d = setup_checks(git_repo, [{"name": "slow", "baseline": "sleep 30; echo done", "final": "true", "timeout_sec": 1}])
@@ -112,7 +111,6 @@ def test_check_timeout_is_red(git_repo):
 # ---------------------------------------------------------------- baseline 运行并记录检查
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_baseline_red_when_check_fails(git_repo):
     # Given: 检查 parity 的 baseline 命令退出 3；全量、lint 与 verify 都绿
     d = setup_checks(git_repo, [parity(git_repo, b_action="exit3")])
@@ -128,7 +126,6 @@ def test_baseline_red_when_check_fails(git_repo):
     assert bl["checks"]["parity"]["exit"] == 3, bl["checks"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_baseline_clears_check_dir_before_run(git_repo):
     # Given: 检查 parity 的共用目录里有上一次留下的 stale.txt；本次 baseline 要实跑这个检查
     d = setup_checks(git_repo, [parity(git_repo)])
@@ -144,7 +141,6 @@ def test_baseline_clears_check_dir_before_run(git_repo):
     assert (cdir / "env-baseline.json").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_baseline_check_reused_when_tree_unchanged(git_repo):
     # Given: change c 已有一次全量绿基线，检查 parity 实跑过一次；之后只改了本 change 的 proposal.md
     d = setup_checks(git_repo, [parity(git_repo)])
@@ -162,7 +158,6 @@ def test_baseline_check_reused_when_tree_unchanged(git_repo):
     assert c.get("reused") is True and c["exit"] == 0, c
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_baseline_check_rerun_when_command_changed(git_repo):
     # Given: change c 已有一次全量绿基线，检查 parity 实跑过一次；之后把它的 baseline 命令末尾多加一个参数
     d = setup_checks(git_repo, [parity(git_repo)])
@@ -178,7 +173,6 @@ def test_baseline_check_rerun_when_command_changed(git_repo):
     assert "reused" not in read_bl(d)["checks"]["parity"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_baseline_check_rerun_when_dir_missing(git_repo):
     # Given: change c 已有一次全量绿基线，检查 parity 实跑过一次；之后删掉了它的共用目录，并改了本 change 的 proposal.md
     d = setup_checks(git_repo, [parity(git_repo)])
@@ -196,7 +190,23 @@ def test_baseline_check_rerun_when_dir_missing(git_repo):
     assert "reused" not in read_bl(d)["checks"]["parity"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
+def test_baseline_check_rerun_when_other_change_edited(git_repo):
+    # Given: change c 已有一次全量绿基线，检查 parity 实跑过一次；之后在 openspec/changes/other/verify/ 下新建了一个文件
+    d = setup_checks(git_repo, [parity(git_repo)])
+    first_full(git_repo, d)
+    write(git_repo / "openspec" / "changes" / "other" / "verify" / "x.py", "x = 1\n")
+
+    # When: 再运行 slice-gate.py baseline
+    p = baseline(git_repo, d)
+
+    # Then: 退出 0；mode 为 incremental；检查又运行了一次；checks.parity 没有 reused
+    assert p.returncode == 0, p.stdout + p.stderr
+    bl = read_bl(d)
+    assert bl["mode"] == "incremental", bl
+    assert runs(git_repo) == ["baseline ok", "baseline ok"]
+    assert "reused" not in bl["checks"]["parity"]
+
+
 def test_baseline_check_rerun_on_cross_change_reuse(git_repo):
     # Given: change c 跑过一次全绿的全量基线并进了基线池；change d 的全量脚本与 c 相同，配了检查 parity
     c, d = two_changes(git_repo, old_red=False)
@@ -218,7 +228,6 @@ def test_baseline_check_rerun_on_cross_change_reuse(git_repo):
 # ---------------------------------------------------------------- preflight 按计划对账检查
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_preflight_stale_when_check_added(git_repo):
     # Given: change c 已有一次绿基线，当时计划里没有检查；之后在计划里加了检查 parity（baseline 与 final 都是 true）并提交
     d = setup_change(git_repo, old_red=False)
