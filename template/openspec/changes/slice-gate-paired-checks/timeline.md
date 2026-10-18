@@ -1,0 +1,2 @@
+<!-- timeline: ISO时间\t事件\t备注（由 hooks 自动追加） -->
+2026-10-17T14:52:38Z	baseline	exit 0, 80.1s ok；verify 推导 4 片
