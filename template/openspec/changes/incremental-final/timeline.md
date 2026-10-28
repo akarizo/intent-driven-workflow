@@ -18,3 +18,5 @@
 2026-10-28T10:07:08Z	gate	S4 red
 2026-10-28T10:07:27Z	gate	S4 ok
 2026-10-28T10:19:22Z	final	全量（没有可用锚点） ok
+2026-10-28T10:24:46Z	ship	ready
+2026-10-28T10:25:07Z	pr-ready	https://github.com/akarizo/intent-driven-workflow/pull/6

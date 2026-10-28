@@ -11,43 +11,7 @@
       "reason": "fix agent 未返回（已重派一次）"
     }
   ],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 468,
-      "summary": "依赖图没有记录 conftest 引入的模块，也没有记录跨文件 fixture 用到的文件，后续增量 final 会因此误判为绿。原因：DEPS_PLUGIN 只在 Module 收集窗口和用例窗口里记 open，静态闭包也只从测试文件本身出发。conftest.py 在 Directory/Package 收集阶段导入，不在任何窗口内，它 import 的仓库模块（如 src/helper.py）不会进任何测试文件的依赖。session/package 级 fixture 只在第一个用到它的测试文件的 setup 窗口里执行一次，读到的文件只记给那一个测试文件。已定向复现：conftest 导入 src/helper.py，session fixture 读 data.txt，test_p 和 test_q 都用这两个 fixture。结果是 deps = {test_p: [data.txt], test_q: []}，src/helper.py 不在任何依赖里。按 design D4，依赖外的 .py 只给警告、不触发全量；按 D5，改 data.txt 只重跑 test_p。test_q 的结论会被直接沿用，可能把红判成绿。D4 豁免 .py 的前提是「加载过的 .py 一定会被记下」，本实现不满足这个前提。",
-      "fix": "在 pytest_sessionfinish 里，给每个测试文件并入它目录链上（到 rootdir 为止）全部 conftest.py 的静态 import 闭包，以及 conftest 本身。再加一个 pytest_fixture_setup hookwrapper：fixture 的 scope 不是 function/class/module 时，按 fixturedef 单独收集窗口内的 open 事件，会话结束时并入所有 item.fixturenames 含该 fixture 的测试文件。也可以更保守：在任何测试文件窗口之外、会话期间记到的仓库文件都并入所有测试文件。补两条守护测试：conftest 导入的模块要出现在依赖里；session fixture 读的文件要出现在每个用到它的测试文件的依赖里。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 256,
-      "summary": "多个进程同时往一个 FLIGHT_DEPS_OUT 追加时，行可能互相穿插，坏行被静默丢弃，锚点却仍标 measured。xdist 的各 worker 在 sessionfinish 时一次写出全部测试文件的记录，同时 sitecustomize 子进程也在 atexit 时写。_emit 用文本模式逐条 f.write，数据经 TextIOWrapper/BufferedWriter 按大约 8KB 一次 write() 落盘，切分点和行边界无关。O_APPEND 只保证单次 write() 不被打断，一行跨两次 write() 时，中间可能插进别的进程的数据。_read_deps 遇到坏行直接跳过，于是丢掉某个测试文件的整条 {file, deps, test} 记录，anchor 仍判 measured=true。下游增量选测就选不中这个文件（会误判为绿）。依赖列表大、worker 多（如 afa 的 -n auto）时容易碰上。",
-      "fix": "每个进程单独写文件，例如 FLIGHT_DEPS_OUT 当作目录或前缀，按 <prefix>.<pid>.jsonl 写；_read_deps 用 glob 合并读入。或者在 _emit 里先把整批记录拼成一个 bytes，用 os.open(O_WRONLY|O_APPEND|O_CREAT) 和单次 os.write 写入，并检查返回的字节数，写不全就记一条损坏标记，让 _read_deps 判为不可度量。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 3314,
-      "summary": "增量 final 红时（收集错误 rc=2 / 超时 / 异常退出）写出的前移锚点仍是 measured=True，而且把这次失败抹掉了，于是下一次 final 会误判为绿。原因是 _anchor_forward 把重跑文件的旧 failed / tests / deps 全部丢掉，只用本次 outcomes 的 FAILED/ERROR 替代：(1) 收集错误不经 runtest_logreport，不会进 outcomes / nodes，出错的测试文件不在新锚点的 failed 里；(2) 超时被 kill -9 时 sessionfinish 没跑，_read_deps 仍返回一个非空的空图 dict，bool(d) 为真，被选文件的依赖被清空。我做了 1 次定向抽查确认：baseline 后给 src/a.py 写入语法错误，第一次 final 红（G2 增量重跑 exit 2）；接着只改 data/b.json，第二次 final 选中的锚点就是红的那次，只重跑 tests/test_b.py，结果 ok=True，而 src/a.py 仍是坏的、tests/test_a.py 仍收集失败。",
-      "fix": "_anchor_forward 只在本次运行可度量时才前移：timed_out，或 rc 不在 (0,1,5)，或 rc==1 但 fails 为空时，新锚点写 measured=False（或者不写锚点），这样下次没有可用锚点、自动走全量。更细的做法：把本次被选中、却没有任何用例结论的测试文件（不在 _node_counts(outcomes) 里）保留旧依赖，并加进 blind，保证下次一定重跑。补一条回归测试：增量 final 因收集错误变红后，只改无关文件再跑 final，结果必须仍为红，或者走全量。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 2397,
-      "summary": "全量 final 写锚点也有同样的问题：measured 只看 ad is not None，failed 只来自依赖图的 nodes。全量运行因收集错误（rc=2）、超时或其他不可度量的 exit 变红时，锚点仍判为可用，收集失败的测试文件既不在 failed 里，也没有用例计数。下一次 final 会以这个红锚点（Δ 最小、时间最新）为准做增量，没有被 Δ 命中的坏文件不会重跑，final 误判为绿。",
-      "fix": "只有 tg['rc'] 为 0，或为 1 且 tg['failed'] is not None（可度量）时，锚点才写 measured=True，其余一律 measured=False。或者把 ad['files'] 里没有任何 node 的测试文件并进 blind。补一条全量红（收集错误）之后再跑增量的回归测试。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 2393,
-      "summary": "分层增量只在『选中文件落进区域 paths』时才跑区域，而选中文件完全来自锚点的 deps。代码没有核对锚点是否测过当前 gate.integration 里的区域。锚点池按 cmd_key + tiers_key 共享，分层文件 openspec/test-tiers.json 是仓库级的，所以另一个 change 留下的锚点也可能被选中。如果那个 change 没选该区域（或本 change 后来才把区域加进 integration），锚点 deps 里就没有该区域的测试文件。这时 Δ 即使改到区域覆盖的源码（例如 src/hooks/h.py），区域测试也进不了 sel，_full_why 对 .py 只给一条『未被任何用例加载』的警告，区域被记进 regions_skipped，final 判绿，区域回归被静默漏掉。另外，被跳过的区域也绕开了原来的『基线缺记录或命令已变』校验（第 2453 行起的循环只遍历 run_regions）。",
-      "fix": "(1) 锚点写入时记下实际测过并合入 deps 的区域名，例如 anchor_part['regions']：全量路径填已选区域，增量路径合并旧锚点的区域与本次 run_regions。分层增量时，当前 _selected_regions(gate) 里锚点没测过的区域一律加进 run_regions；也可以在 _pick_anchor 的候选过滤里要求锚点覆盖当前已选区域，覆盖不了就退回全量。(2) 把区域的 covers glob 也作为触发条件：Δ 命中某个已选区域的 covers 就运行该区域。(3) 被跳过的区域照样先做 rrec / rcmd 的基线记录校验，缺记录时判红。补一条测试：锚点来自未选该区域的计划，Δ 改动区域 covers 下的源码，final 必须运行该区域。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "MEDIUM",
