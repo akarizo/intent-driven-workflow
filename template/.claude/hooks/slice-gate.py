@@ -1021,6 +1021,13 @@ def _diff_verdict(label, tg, known_failed):
     return "G2 %s: exit 1（新增 %d 条失败）\n%s" % (label, len(new), "\n".join(new[:6])), None
 
 
+def _tg_measurable(tg):
+    """run_test_gate 结果能否给锚点：绿，或可度量的 exit 1。收集错误 / 超时 / 其他退出码时
+    出错的测试文件没有用例结论，依赖图的 failed 漏掉它们，锚点不可用。"""
+    # ceiling: 带 --continue-on-collection-errors 的 exit 1 仍判可度量，收集失败的文件不进锚点 failed -> 遇到该用法时让依赖图插件把收集失败记为 ERROR 结论
+    return tg["rc"] == 0 or tg["failed"] is not None
+
+
 def _selected_regions(gate):
     """gate.integration 里的区域名（形状不合法时视为未选）。"""
     integration = gate.get("integration")
@@ -2500,9 +2507,11 @@ def cmd_final(args):
                                "failed": sorted(n for n, o in (ad or {}).get("nodes", {}).items()
                                                 if o in ("FAILED", "ERROR")),
                                "tests": _node_counts((ad or {}).get("nodes") or {}),
-                               "measured": ad is not None, "source": "final-full"}
+                               "measured": ad is not None and _tg_measurable(tg), "source": "final-full"}
                 if ad is None:
                     warnings.append("依赖图未测：%s" % tg["deps_why"])
+                elif not anchor_part["measured"]:
+                    warnings.append("锚点不可用：全量 exit %d 不可度量（%s）" % (tg["rc"], tg["why"]))
                 inc = {"mode": "full", "full_why": why}
             if tiers is not None:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
                 bregions = (baseline or {}).get("regions")
@@ -2523,6 +2532,9 @@ def cmd_final(args):
                         if rg["deps"] is None:
                             anchor_part["measured"] = False
                             warnings.append("依赖图未测：区域 %s：%s" % (rname, rg["deps_why"]))
+                        elif not _tg_measurable(rg):
+                            anchor_part["measured"] = False
+                            warnings.append("锚点不可用：区域 %s exit %d 不可度量（%s）" % (rname, rg["rc"], rg["why"]))
                         else:
                             m = _deps_merge(dict(anchor_part, nodes={}), rg["deps"])
                             anchor_part.update({k: m[k] for k in ("deps", "blind", "files")})
@@ -2657,6 +2669,8 @@ def cmd_baseline(args):
             deps_whys.append(tg["deps_why"])
         elif rc != 0:
             bl["test"]["failed_nodes"] = sorted(n for n, o in adeps["nodes"].items() if o in ("FAILED", "ERROR"))
+        if adeps is not None and not _tg_measurable(tg):  # 锚点不可用（同 final 全量）
+            deps_whys.append("全量 exit %d 不可度量（%s）" % (rc, tg["why"]))
         if rc != 0 and tg["failed"] is not None:
             bl["test"]["failed"] = tg["failed"]
             warnings.append("预存红 %d 条已记录，final 按基线差分" % len(tg["failed"]))
@@ -2722,6 +2736,8 @@ def cmd_baseline(args):
             deps_whys.append("区域 %s：%s" % (rname, rg["deps_why"]))
         elif adeps is not None:
             adeps = _deps_merge(adeps, rg["deps"])
+        if rg["deps"] is not None and not _tg_measurable(rg):
+            deps_whys.append("区域 %s exit %d 不可度量（%s）" % (rname, rg["rc"], rg["why"]))
         if rg["rc"] != 0 and rg["failed"] is not None:
             rec["failed"] = rg["failed"]
             warnings.append("区域 %s 预存红 %d 条已记录，final 按基线差分" % (rname, len(rg["failed"])))

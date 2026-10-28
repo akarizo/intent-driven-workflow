@@ -160,3 +160,21 @@ def test_final_stays_red_after_incremental_collection_error(git_repo):
 
     # Then: final 仍然红（src/a.py 仍坏，tests/test_a.py 仍收集失败）
     assert out["ok"] is False, out
+
+
+def test_final_stays_red_after_full_collection_error(git_repo):
+    # Given: baseline 绿；随后 src/a.py 写入语法错误，final --full 全量因 tests/test_a.py 收集失败而红（exit 2）；
+    #        之后提交飞行记录，又只改了 src/c_lib.py（仍然正确；中断的全量里 tests/test_c.py 没跑到）
+    d = make_repo(git_repo)
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", A_BROKEN)
+    first, _ = final(git_repo, d, "--full")
+    assert first["ok"] is False and first["incremental"]["mode"] == "full", first
+    commit_all(git_repo, "flight")
+    change_and_commit(git_repo, "src/c_lib.py", "VALUE = 3  # 改过\n")
+
+    # When: 再运行一次 final
+    out, p = final(git_repo, d)
+
+    # Then: final 仍然红（src/a.py 仍坏，tests/test_a.py 仍收集失败）
+    assert out["ok"] is False, out
