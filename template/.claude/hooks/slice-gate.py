@@ -146,6 +146,7 @@ GUARD_PLUGIN = '''import os
 import pytest
 
 _outer = [False]
+_saved = {}  # 嵌套会话 id(config) → 进入前的 FLIGHT_GUARD_NESTED（None = 原来没有）
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -163,7 +164,19 @@ def pytest_configure(config):
     xp, mine = getattr(config.option, "xmlpath", None), os.environ.get("FLIGHT_GUARD_JUNIT")
     if xp and mine and os.path.realpath(os.path.abspath(xp)) == os.path.realpath(mine):  # 只清门禁注入的 junit
         config.option.xmlpath = None
+    _saved[id(config)] = os.environ.get("FLIGHT_GUARD_NESTED")
     os.environ["FLIGHT_GUARD_NESTED"] = "1"
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):
+    # 同进程 pytest.main() 的嵌套会话结束：恢复 FLIGHT_GUARD_NESTED，外层后续用例照常记录
+    if id(config) in _saved:
+        old = _saved.pop(id(config))
+        if old is None:
+            os.environ.pop("FLIGHT_GUARD_NESTED", None)
+        else:
+            os.environ["FLIGHT_GUARD_NESTED"] = old
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -336,7 +349,8 @@ def _leave():
 
 
 def pytest_configure(config):
-    _cfg[0] = config
+    if _cfg[0] is None:  # 同进程 pytest.main() 的嵌套会话共用本模块，不得覆盖外层 config
+        _cfg[0] = config
 
 
 def pytest_sessionstart(session):
@@ -376,25 +390,28 @@ def pytest_fixture_setup(fixturedef, request):
         _fxcur[0] = saved
 
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_setup(item):
+def _run_window(item):
+    if _nested():  # 同进程嵌套会话：不动外层用例的窗口（_cur 与 FLIGHT_DEPS_FILE）
+        yield
+        return
     _enter(_window(item))
     yield
     _leave()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    yield from _run_window(item)
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
-    _enter(_window(item))
-    yield
-    _leave()
+    yield from _run_window(item)
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item):
-    _enter(_window(item))
-    yield
-    _leave()
+    yield from _run_window(item)
 
 
 def _rootdir():

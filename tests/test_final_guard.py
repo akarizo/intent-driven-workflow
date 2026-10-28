@@ -151,3 +151,47 @@ def test_nested_explicit_junitxml_kept(tmp_path):
 
     # Then: 嵌套会话显式指定的 junit 照常写出，用例通过
     assert res["rc"] == 0, res["out"][-1500:]
+
+
+def test_inprocess_pytest_main_keeps_outer_deps(tmp_path):
+    # Given: tests/test_inproc.py 在同一进程里调 pytest.main() 跑一个临时目录的用例，返回后再读 data/after.json；
+    #        排在其后的 tests/test_z.py 读 data/z.json
+    write(tmp_path / "pytest.ini", "[pytest]\n")
+    write(tmp_path / "data" / "after.json", "{}\n")
+    write(tmp_path / "data" / "z.json", "{}\n")
+    write(tmp_path / "tests" / "test_inproc.py", """
+        import os
+
+        import pytest
+
+        ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+
+        def test_inproc(tmp_path):
+            (tmp_path / "test_inner.py").write_text("def test_inner():\\n    pass\\n")
+            assert pytest.main(["-q", "-p", "no:cacheprovider", str(tmp_path / "test_inner.py")]) == 0
+            with open(os.path.join(ROOT, "data", "after.json")) as f:
+                f.read()
+    """)
+    write(tmp_path / "tests" / "test_z.py", """
+        import os
+
+        ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+
+        def test_z():
+            with open(os.path.join(ROOT, "data", "z.json")) as f:
+                f.read()
+    """)
+    sg = load_hook("slice-gate")
+
+    # When: 门禁以依赖图方式运行这个套件
+    res = sg.run_test_gate(CMD, str(tmp_path), deps=True)
+
+    # Then: pytest.main() 返回后外层依赖图仍完整：两个测试文件、返回后读的文件与其后用例的依赖都在
+    assert res["rc"] == 0, res["out"][-1500:]
+    deps = res["deps"]
+    assert deps is not None, res["deps_why"]
+    assert "data/after.json" in deps["deps"].get("tests/test_inproc.py", []), deps
+    assert "data/z.json" in deps["deps"].get("tests/test_z.py", []), deps
+    assert "tests/test_z.py::test_z" in deps["nodes"], deps
