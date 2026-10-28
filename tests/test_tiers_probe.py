@@ -105,3 +105,36 @@ def test_probe_unmeasurable_for_non_pytest(tmp_path):
     # Then: 结果判为不可度量：没有逐用例记录，并给出原因
     assert res["probe"] is None, res
     assert res["probe_why"], res
+
+
+def test_probe_ignores_source_reads_for_tracebacks(tmp_path):
+    # Given: 单元层有两个用例，都只在 try/except 里处理异常：一个调 traceback.format_exc()，
+    #        一个调 logging.getLogger().exception(...)；两者都会经 linecache 读测试源文件生成回溯
+    write(tmp_path / "tests" / "unit" / "test_tb.py", """
+        import logging
+        import traceback
+
+
+        def test_format_exc():
+            try:
+                raise ValueError("x")
+            except ValueError:
+                assert "ValueError" in traceback.format_exc()
+
+
+        def test_log_exception():
+            try:
+                raise ValueError("y")
+            except ValueError:
+                logging.getLogger("t").exception("boom")
+    """)
+
+    # When: slice-gate 以探针方式运行单元层
+    res = run_probe(tmp_path)
+
+    # Then: 生成回溯时读源码不算触碰，两个用例都没有触碰记录
+    assert res["rc"] == 0, res["out"]
+    probe = res["probe"]
+    nid = "tests/unit/test_tb.py::%s"
+    assert probe[nid % "test_format_exc"]["hits"] == {}, probe
+    assert probe[nid % "test_log_exception"]["hits"] == {}, probe
