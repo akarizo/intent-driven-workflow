@@ -2449,7 +2449,11 @@ def cmd_final(args):
                 if tiers is not None:
                     regs = tiers.get("regions") or {}
                     hit = {r: [f for f in sel if any(glob_match(f, g) for g in regs[r]["paths"])] for r in regs}
-                    run_regions = [r for r in _selected_regions(gate) if hit.get(r)]
+                    # 锚点没测过的区域（锚点来自未选它的计划 / 本 change 后选的）依赖不在锚点里，必须跑；Δ 命中 covers 也跑
+                    tested = set(anchor.get("regions") or [])
+                    run_regions = [r for r in _selected_regions(gate)
+                                   if hit.get(r) or r not in tested
+                                   or any(glob_match(p, g) for p in delta for g in (regs.get(r) or {}).get("covers") or [])]
                     run_sel = [f for f in sel if not any(f in v for v in hit.values())]
                     unit_files = {f for f in run_sel if any(glob_match(f, g) for g in tiers["unit"]["paths"])}
                 d, pr, outcomes, rc, text, timed_out = {}, {}, [], 0, "", False
@@ -2476,7 +2480,7 @@ def cmd_final(args):
                                                   tiers.get("slow_allow") or {})
                     failed.extend(f10)
                     warnings.extend(w10)
-                rerun = sorted(set(run_sel).union(*[hit[r] for r in run_regions or []]))
+                rerun = sorted(set(run_sel).union(*[hit.get(r) or [] for r in run_regions or []]))
                 inherited = sum(n for f, n in (anchor.get("tests") or {}).items()
                                 if f not in rerun and os.path.isfile(os.path.join(root, f)))
                 inc = {"mode": "incremental", "source": "builtin",
@@ -2507,7 +2511,8 @@ def cmd_final(args):
                                "failed": sorted(n for n, o in (ad or {}).get("nodes", {}).items()
                                                 if o in ("FAILED", "ERROR")),
                                "tests": _node_counts((ad or {}).get("nodes") or {}),
-                               "measured": ad is not None and _tg_measurable(tg), "source": "final-full"}
+                               "measured": ad is not None and _tg_measurable(tg), "source": "final-full",
+                               "regions": []}
                 if ad is None:
                     warnings.append("依赖图未测：%s" % tg["deps_why"])
                 elif not anchor_part["measured"]:
@@ -2515,11 +2520,13 @@ def cmd_final(args):
                 inc = {"mode": "full", "full_why": why}
             if tiers is not None:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
                 bregions = (baseline or {}).get("regions")
-                for rname in (_selected_regions(gate) if run_regions is None else run_regions):
+                for rname in _selected_regions(gate):  # 跳过的区域也先校验基线记录
                     rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
                     rrec = bregions.get(rname) if isinstance(bregions, dict) else None
                     if not isinstance(rrec, dict) or not rcmd or rrec.get("cmd") != rcmd:
                         failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
+                        continue
+                    if run_regions is not None and rname not in run_regions:
                         continue
                     full_run = inc["mode"] == "full"
                     t0 = time.time()
@@ -2540,6 +2547,7 @@ def cmd_final(args):
                             anchor_part.update({k: m[k] for k in ("deps", "blind", "files")})
                             rfail = [n for n, o in rg["deps"]["nodes"].items() if o in ("FAILED", "ERROR")]
                             anchor_part["failed"] = sorted(set(anchor_part["failed"]) | set(rfail))
+                            anchor_part["regions"] = sorted(set(anchor_part.get("regions") or []) | {rname})
                             for f, n in _node_counts(rg["deps"]["nodes"]).items():  # 增量：区域文件换成本次计数
                                 anchor_part["tests"][f] = (anchor_part["tests"].get(f, 0) if full_run else 0) + n
             if cur_snap is not None and anchor_part is not None:
@@ -2806,6 +2814,7 @@ def cmd_baseline(args):
             "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
             "cmd_key": key, "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
+            "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
             "measured": measured, "source": "baseline"})
         if w:
             warnings.append(w)
@@ -3481,6 +3490,7 @@ def _anchor_forward(root, old, sel, d, fails, outcomes):
         "deps": dict(sorted(deps.items())),
         "blind": sorted({f for f in old.get("blind") or [] if f not in drop} | set(d.get("blind") or [])),
         "tests": tests,
+        "regions": sorted(old.get("regions") or []),  # 沿用旧锚点测过的区域；本次跑并入的区域由调用方追加
         "measured": bool(d) or not sel,
     }
 

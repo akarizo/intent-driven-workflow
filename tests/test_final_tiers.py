@@ -75,3 +75,28 @@ def test_tiers_region_runs_only_when_selected(git_repo):
     assert out["ok"] is True, out
     assert "hooks" not in out["tier_sec"]["regions"], out["tier_sec"]
     assert "hooks" in out["incremental"]["regions_skipped"], out["incremental"]
+
+
+def test_tiers_region_runs_when_anchor_never_tested_it(git_repo):
+    # Given: change c 已选区域 hooks 并跑过 baseline；随后另一个 change o（同一分层文件、同一 gate.test，未选任何区域）
+    #        跑了 baseline，留下更新的锚点；之后把区域 covers 下的 src/hooks/h.py 改坏（H = 2，tests/integration/hooks/test_h.py 会失败）
+    d = tiers_repo(git_repo, with_region=True)
+    baseline(git_repo, d)
+    data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    data["change"] = "o"
+    data["gate"].pop("integration")
+    o = git_repo / "openspec" / "changes" / "o"
+    write(o / "proposal.md", "## Why\n\n另一个 change。\n")
+    write(o / "slices" / "S1.md", "# S1\n")
+    write(o / "slices.json", json.dumps(data, ensure_ascii=False, indent=1))
+    write(git_repo / "src" / "a.py", "# o 顺带的无害改动：让 o 的锚点 Δ 严格更小、必被选中\ndef a():\n    return 1\n")
+    commit_all(git_repo, "plan o")
+    baseline(git_repo, o)
+    change_and_commit(git_repo, "src/hooks/h.py", "H = 2\n")
+
+    # When: 对 change c 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 区域 hooks 运行了，final 红且 G2 region hooks 点名失败
+    assert "hooks" in out["tier_sec"]["regions"], out
+    assert out["ok"] is False and any("region hooks" in f for f in out["failed"]), out
