@@ -2472,7 +2472,8 @@ def cmd_final(args):
             if not args.full and cur_snap is not None:
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
                         else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
-            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=gate)
+            rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
+            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate)
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
@@ -2510,7 +2511,7 @@ def cmd_final(args):
                     unit_files = {f for f in run_sel if any(glob_match(f, g) for g in tiers["unit"]["paths"])}
                 d, pr, outcomes, rc, text, timed_out = {}, {}, [], 0, "", False
                 if run_sel:
-                    outcomes, rc, text, timed_out = _pytest_outcomes(root, run_sel, gate, deps_out=d,
+                    outcomes, rc, text, timed_out = _pytest_outcomes(root, run_sel, rgate, deps_out=d,
                                                                      probe_out=pr if unit_files else None)
                 unit_wall = time.time() - t0
                 known = set(bt.get("failed_nodes") or [])

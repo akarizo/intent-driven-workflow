@@ -242,3 +242,22 @@ def test_final_incremental_when_gate_pytest_covers_gate_test_options(git_repo):
 
     # Then: 选项已被 gate.pytest 覆盖 → 照常增量
     assert out["incremental"]["mode"] == "incremental", out["incremental"]
+
+
+def test_final_incremental_when_gate_test_detected(git_repo):
+    # Given: gate.test 与 gate.pytest 都没配（final 靠 detect_test_cmd 探测出 python3 -m pytest -q）；
+    #        baseline 绿后把它回填的 gate.test 再清掉，之后只改了 src/a.py
+    d = make_repo(git_repo, gate_extra={"test": None, "pytest": None})
+    baseline(git_repo, d)
+    data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    data["gate"]["test"] = None
+    write(d / "slices.json", json.dumps(data, ensure_ascii=False, indent=1))
+    commit_all(git_repo, "gate.test 清空")
+    change_and_commit(git_repo, "src/a.py", A_OK)
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 对探测出的命令做同样判断：它在 pytest 之后只有白名单选项 → 照常增量
+    assert out["incremental"]["mode"] == "incremental", out["incremental"]
+    assert out["ok"] is True, out
