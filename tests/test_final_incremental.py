@@ -4,16 +4,12 @@
 #final-full-when-no-anchor、#final-full-when-unseen-non-python-file-changes、#final-full-flag-forces-full）。"""
 import shutil
 
-import pytest
-
 from conftest import commit_all
 from final_helpers import anchors, baseline, change_and_commit, final, head, make_repo, timeline_rows
 
-XF = pytest.mark.xfail(strict=True, reason="S2 尚未实现")
 A_OK = "def a():\n    return 1  # 改过，仍正确\n"
 
 
-@XF
 def test_final_reruns_only_affected_tests(git_repo):
     # Given: 依赖图已记录的仓库，baseline 绿；随后只改了 src/a.py，而且仍然正确
     d = make_repo(git_repo)
@@ -35,7 +31,6 @@ def test_final_reruns_only_affected_tests(git_repo):
     assert note.startswith("增量") and anchor10 in note and note.endswith(" ok"), note
 
 
-@XF
 def test_final_incremental_red_on_new_failure(git_repo):
     # Given: 依赖图已记录的仓库，baseline 绿；随后改坏了 src/a.py，使 tests/test_a.py::test_a 失败
     d = make_repo(git_repo)
@@ -51,7 +46,6 @@ def test_final_incremental_red_on_new_failure(git_repo):
     assert out["incremental"]["mode"] == "incremental", out["incremental"]
 
 
-@XF
 def test_final_reruns_anchor_failures_and_changed_tests(git_repo):
     # Given: baseline 记录了预存红 tests/test_old.py::test_broken；随后只改了测试文件 tests/test_b.py
     d = make_repo(git_repo, extra={"tests/test_old.py": "def test_broken():\n    assert False\n"})
@@ -67,7 +61,6 @@ def test_final_reruns_anchor_failures_and_changed_tests(git_repo):
     assert out["ok"] is True, out["failed"]
 
 
-@XF
 def test_final_moves_anchor_forward(git_repo):
     # Given: 第一次 final 增量通过（只改了 src/a.py）；之后提交飞行记录，又改了 src/c_lib.py 并提交
     d = make_repo(git_repo)
@@ -89,7 +82,6 @@ def test_final_moves_anchor_forward(git_repo):
     assert out["ok"] is True, out
 
 
-@XF
 def test_final_full_when_global_file_changes(git_repo):
     # Given: 依赖图已记录的仓库，baseline 绿；随后新增了 tests/conftest.py
     d = make_repo(git_repo)
@@ -105,7 +97,6 @@ def test_final_full_when_global_file_changes(git_repo):
     assert out["ok"] is True, out
 
 
-@XF
 def test_final_full_when_no_anchor(git_repo):
     # Given: baseline 之后锚点目录被删，随后改了 src/a.py
     d = make_repo(git_repo)
@@ -122,7 +113,6 @@ def test_final_full_when_no_anchor(git_repo):
     assert [a for a in anchors(git_repo) if a.get("commit") == head(git_repo)], anchors(git_repo)
 
 
-@XF
 def test_final_full_when_unseen_non_python_file_changes(git_repo):
     # Given: scripts/helper.sh 从未被任何用例触及，baseline 后改了它
     d = make_repo(git_repo)
@@ -137,7 +127,6 @@ def test_final_full_when_unseen_non_python_file_changes(git_repo):
     assert inc["mode"] == "full" and "scripts/helper.sh" in inc["full_why"], inc
 
 
-@XF
 def test_final_full_flag_forces_full(git_repo):
     # Given: 依赖图已记录的仓库，只改了 src/a.py
     d = make_repo(git_repo)
