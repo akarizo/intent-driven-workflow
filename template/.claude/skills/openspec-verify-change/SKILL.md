@@ -25,6 +25,7 @@ metadata:
    ```
    拿到 JSON：全量 test/lint/typecheck 结果 + `scenarios{total, passed}`。
    配置了 `gate.checks` 时，final 在全量之后运行每个检查的 `final` 命令（G7 红时不跑），红记 `G9 check <name>`，完整输出在 `$GATE_CHECK_DIR/.gate-final.log`。
+   配置了测试分层（openspec 根有 `test-tiers.json`）时，G7 绿后 final 以探针跑单元层：按基线差分，并判 `G10 slow unit test`（单元层用例耗时 ≥3 秒、重跑仍超线且未经 `allow-slow` 放行）与 `G11 impure unit test`（单元层用例触碰真实文件 / 子进程 / 网络），不可度量时只警告 `G10/G11 不可度量`；再逐个跑 `gate.integration` 选中的区域，按该区域的基线失败差分，新增失败记 `G2 region <NAME>`，基线缺记录或区域 `cmd` 已变记 `G2 region <NAME>：基线缺记录或命令已变，重跑 baseline`；输出带分层耗时 `tier_sec`。
 
 3. **打印 scenario 映射状态**
    对照 `openspec/changes/<name>/slices.json` 的 `scenario_tests`，逐条列出每个 scenario 的当前状态：

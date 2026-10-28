@@ -482,7 +482,7 @@ cat <<EOF
        openspec schema validate intent-driven
 
 更多:
-  - 15 个 slash command 见 .claude/commands/（10 个 opsx-* 含 /opsx-mini + 3 个 claudemd-* + /spec-html + /pr-ship）
+  - 16 个 slash command 见 .claude/commands/（10 个 opsx-* 含 /opsx-mini + 3 个 claudemd-* + /spec-html + /pr-ship + /test-tiers）
   - CLAUDE.md 门禁 claudemd-lint：PostToolUse hook 已自动接线（写完当场回灌）
     · 全仓扫描  python3 .claude/hooks/claudemd-lint.py
     · 预算中性  python3 .claude/hooks/claudemd-lint.py --diff-gate --base HEAD --msg-file <f>

@@ -171,7 +171,7 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main
 ```
 your-project/
 ├── .claude/
-│   ├── commands/       # 15 个 slash 命令（见下方）
+│   ├── commands/       # 16 个 slash 命令（见下方）
 │   ├── skills/         # 16 个 skill + 1 个 legacy（见下方）
 │   ├── agents/         # 3 个 agent：slice-executor / integrator / code-reviewer（见下方）
 │   ├── workflows/      # opsx-apply.js：飞行流程的命名 Workflow 调度器
@@ -260,6 +260,12 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **共用目录**：`<git common dir>/flight-gate-checks/<change>/<name>/`，各 worktree 是同一处，baseline 与 final 借它交接；baseline 实跑前清空重建，final 不清空
 - **`timeout_sec`**：可选；到时结束检查所在的整个进程组并判红；不配置不设超时
 - **仓库默认检查**：openspec 根目录下的 `gate-checks.json` 列出的每个检查，须抄进本 change 的 `gate.checks`，或在 `gate.checks_skip` 写明理由，由 `slice-gate.py lint` 校验
+
+**测试分层（`openspec/test-tiers.json`，可选）**：把测试分成单元层与按模块划分的集成区域，由 `/test-tiers` 实测并经人类批准后生成。
+- **形状**：`{"unit": {paths, cmd}, "regions": {NAME: {paths, covers, cmd}}, "slow_allow": {NODEID: {reason, approved}}}`；路径 glob 与 `owns` 同语义，`covers` 写区域测试覆盖的被测源码
+- **计划**：`gate.test` 必须等于 `unit.cmd`；`gate.integration` 选本 change 要跑的区域、`gate.integration_skip` 写不跑的理由；`covers` 与切片 `owns` 相交的区域必须表态；scenario 骨架放在单元层或已选区域的 `paths` 里，由 `slice-gate.py lint` 校验
+- **门禁**：baseline 只跑单元层（带探针、不走增量）与已选区域；final 对区域逐个差分（`G2 region <NAME>`）；`G10` 慢单测（单元层用例 ≥3 秒，经人类放行 `test-tiers.py allow-slow` 才降为警告）· `G11` 单测不纯（触碰真实文件 / 子进程 / 网络）· `G12` 切片改动的测试文件未归层
+- **耗时**：`gate` / `baseline` / `final` 输出 `tier_sec`（单元 / 集成 / 各区域秒数），写进 `summary` 与飞行记录；没有分层文件时以上都不触发，行为不变
 
 **基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
 
@@ -381,7 +387,7 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 
 ---
 
-## 15 个 slash 命令
+## 16 个 slash 命令
 
 按命名空间分组。
 
@@ -423,6 +429,12 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 | 命令 | 目的 |
 | --- | --- |
 | `/spec-html [name]` | 手动重渲 `openspec/changes/<name>/spec.html` 意图审批面板（propose / continue 已自动跑） |
+
+### `/test-tiers`（测试分层，1 个）
+
+| 命令 | 目的 |
+| --- | --- |
+| `/test-tiers` | 把仓库测试重划分为单元层与集成区域：探针实测 → 起草划分 → 审批页等人类批准 → 搬文件 → 复核，产出 `openspec/test-tiers.json`（命令本身即逻辑，无同名 skill） |
 
 ---
 

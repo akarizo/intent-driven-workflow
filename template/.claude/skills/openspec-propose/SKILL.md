@@ -58,6 +58,7 @@ metadata:
 
    - 一次性写出全部该建的工件。
    - tasks 阶段额外产出：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 生成的 `tasks.md`。
+   - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。
    - 随后：
      ```bash
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>
@@ -77,6 +78,7 @@ metadata:
    用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。它跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
    verify 在基线上必须绿（骨架是 strict-xfail）。
    配置了 `gate.checks` 时，baseline 在 verify 之后运行每个检查的 `baseline` 命令，任一红即基线红（照下面的红处理）；代码树没变时按与 lint 相同的条件沿用上次结果。
+   配置了测试分层（openspec 根有 `test-tiers.json`）时，baseline 只跑单元层（`gate.test`，带探针判 G10 慢单测 / G11 单测不纯，任一失败即基线红）与 `gate.integration` 选中的区域（verify 之后、检查之前），不走增量（与 `--full` 相同），未选区域不跑；输出带分层耗时 `tier_sec`。
    baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
    脚本自己判断跑全量还是**增量**，并跳过重复的运行：
    - 自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；
