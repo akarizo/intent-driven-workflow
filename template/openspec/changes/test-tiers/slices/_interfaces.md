@@ -121,5 +121,20 @@
 2430:def cmd_ship(args):
 2477:def main():
 
+## S2
+template/.claude/hooks/slice-gate.py（分层判定）
+- `_diff_verdict(label, tg, known_failed)` 对比失败集与已知失败
+- `_selected_regions(gate)` 取选中区域
+- `slow_candidates(probe)` 慢测候选
+- `tier_verdicts(probe, probe_why, rerun, allow)` 各层判定
+- `_tier_rerun(root, gate, nodeids)` 重跑
+- `_unit_tier_verdict(root, gate, tg, allow)` unit 层判定
+
+## S3
+template/.claude/hooks/test-tiers.py（CLI）
+- `cmd_probe(args)` / `cmd_check(args)` / `cmd_allow_slow(args)` / `cmd_render(args)`
+- `load_tiers(args)` / `tiers_path(args)` / `read_json(path, what)` / `fail(msg, code=2)`
+- `main(argv=None)`
+
 ## S4
 仅文档/命令/schema 文件，无源码接口：template/.claude/commands/test-tiers.md 等。
