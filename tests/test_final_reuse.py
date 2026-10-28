@@ -3,12 +3,8 @@
 护栏（red-final-is-not-reused）在 base 上已成立，不带标记。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, run_hook
 from final_helpers import baseline, final, make_repo, timeline_rows
-
-XF = pytest.mark.xfail(strict=True, reason="S2 尚未实现")
 
 
 def counting_test(path, ok=True):
@@ -21,7 +17,6 @@ def count(path):
     return len(path.read_text().splitlines()) if path.exists() else 0
 
 
-@XF
 def test_same_tree_final_reuses_result(git_repo, tmp_path):
     # Given: scenario 映射到计数用例；final 刚刚绿过，之后只提交了飞行记录文件
     counter = tmp_path / "count.txt"
@@ -62,7 +57,6 @@ def test_red_final_is_not_reused(git_repo, tmp_path):
     assert count(counter) > n1
 
 
-@XF
 def test_ship_fresh_when_tree_unchanged(git_repo):
     # Given: final 在 commit X 上绿过；随后把 X 改写成内容只多了飞行记录、但不是 X 后代的 commit Y
     d = make_repo(git_repo)
