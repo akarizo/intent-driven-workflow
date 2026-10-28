@@ -138,3 +138,18 @@ template/.claude/hooks/test-tiers.py（CLI）
 
 ## S4
 仅文档/命令/schema 文件，无源码接口：template/.claude/commands/test-tiers.md 等。
+
+## S5
+482:def tier_verdicts(probe, probe_why, rerun, allow):
+513:def globs_intersect(a, b):
+618:def _tiers_path(change_dir):
+623:def _tier_shape(label, obj, fields):
+641:def _load_tiers_file(path):
+690:def _load_tiers(change_dir):
+694:def tiers_matching(path, tiers):
+702:def tier_seconds(durations, tiers):
+721:def _tier_add(ts, unit=0.0, regions=None):
+731:def _tier_note(ts):
+735:def _lint_tiers(data, change_dir):
+1277:def _tier_rerun(root, gate, nodeids):
+1297:def _unit_tier_verdict(root, gate, tg, allow):
