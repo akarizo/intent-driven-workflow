@@ -1,5 +1,5 @@
 ---
-description: 端到端送出本次变更：commit → push → 创建 PR/MR → 干净 subagent 自检 → 评论入库 → 自动迭代修复（飞行模式：全程至多一次问询）
+description: 端到端送出本次变更：commit → push → 创建 PR/MR → 干净 subagent 自检 → 评论入库 → 自动迭代修复（飞行模式：全程不问询）
 ---
 
 把当前分支的全部变更端到端送出：commit 未提交项 → push → 创建 PR（GitHub）或 MR（GitLab）→ 起一个**干净的 code-review subagent** 对 diff 做一次评审 → 把结果贴成 PR/MR 评论 → CRITICAL/HIGH 自动修复（至多 2 轮）→ 收尾。
@@ -158,11 +158,9 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
    — reviewed by Claude Code (code-reviewer subagent), <YYYY-MM-DD>（当天日期）
    ```
 
-10. **CRITICAL/HIGH 自动修复（至多 2 轮，修前问一次）**
+10. **CRITICAL/HIGH 自动修复（至多 2 轮，不询问）**
 
-    - 有 CRITICAL/HIGH → 唯一一次 **AskUserQuestion**：『自动修并 push』/『只贴评论交人』；无人应答默认只贴评论。
-      - 选「只贴评论交人」（或默认）→ 不修代码：finding 留在 PR 评论里，`review-findings.json.blocking` 保留这些 CRITICAL/HIGH，下文「收尾复裁」的 `ship` 照常裁 draft。
-      - 选「自动修并 push」→ 走下面的原有流程（至多 2 轮）。
+    - 有 CRITICAL/HIGH（首审或复核）→ 直接修复并 push，不询问，走下面的流程（至多 2 轮）。
     - 自动修：主会话直接按建议修代码 → 每个独立修复点一个 commit（message 引用 finding 摘要：`fix: 按 review 修 <finding 摘要>`）→ `git push` → 派一个 fresh `code-reviewer`（`model: "<main>"`，同 step 8 由 `session-model.py` 判定，判定不出则停下报告）走 **`follow-up` 模式**复核：
       ```
       背景: 复核 PR/MR #<num> 的修复补丁。
@@ -216,7 +214,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 - **subagent 必须干净**：不给它主会话的对话历史 / 设计意图，只给 diff + 门禁摘要（gate-report.md / evidence.log）。
 - **评审只 full 一种模式**：不重跑测试套件、不轮询，以门禁报告与 evidence.log 为准，至多 1 次定向抽查命令。
 - **CRITICAL/HIGH 自动修复至多 2 轮**：仍阻断则停下交人，不无限重试。
-- **全程至多问询 1 次**（仅 step 10 自动修复前，问自动修还是只贴评论交人）：其余环节（commit 文案、PR 正文、是否复审、收尾）一律直接执行，不问询。
+- **全程不问询**（CRITICAL/HIGH 自动修复至多 2 轮，仍阻断停下交人）：commit 文案、PR 正文、是否修复、是否复审、收尾一律直接执行。
 - **review 评论签名必带**：让 PR 阅读者知道这条评论来自 AI。
 - **monorepo 友好**：跨多个 sub-repo 时按 sub-repo 分块 review。
 
@@ -224,7 +222,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
 | 上游 | 本命令 (`/pr-ship`) | 下游 |
 | --- | --- | --- |
-| `/opsx-apply` 飞行模式跑完 | ship: commit → PR → self-review → 自动修复 | 人类 reviewer 看 / 合并 |
+| `/opsx-apply` 飞行模式跑完 | ship: commit → PR → self-review → 自动修复（不问询） | 人类 reviewer 看 / 合并 |
 | `/claudemd-commit` 沉淀完知识 | ship: 把 CLAUDE.md 改动也带进同一个 PR | 累积多轮后 `/claudemd-distill` |
 
 典型使用顺序：

@@ -70,7 +70,7 @@ description: 飞行模式 apply：批准后从门禁 lint 直跑到 PR，中途�
    ```bash
    python3 .claude/hooks/slice-gate.py ship --change-dir openspec/changes/<name>    # 退出 0 ready / 1 draft；reasons 列出为何不 ready
    ```
-   `ship` 只读 `gate-report.md`（每切片最新行 + final 行是否 ok 且对齐 HEAD）与 `review-findings.json.blocking`，不看工作流的 blocked 列表。reasons 里出现 `final 过期` → 重跑 `slice-gate.py final` 再 `ship`。把门禁绿的切片在 `tasks.md` 里对应 `- [ ]` 勾成 `- [x]`（红的切片不勾）；飞行记录文件单独 `chore(flight)` commit。
+   `ship` 只读 `gate-report.md`（每切片最新行 + final 行是否 ok 且对齐 HEAD）与 `review-findings.json.blocking`，不看工作流的 blocked 列表。reasons 里出现 `final 过期` → 重跑 `slice-gate.py final` 再 `ship`（同树会秒回：代码树、计划、命令都没变且上次绿就沿用结论；内容变了走增量，只重跑受影响的测试）。把门禁绿的切片在 `tasks.md` 里对应 `- [ ]` 勾成 `- [x]`（红的切片不勾）；飞行记录文件单独 `chore(flight)` commit。
 
 7. **不问，直接进入 `/pr-ship`**
    无论 `ship` 结果如何都调用 `/pr-ship`；它会自己再跑一次 `ship` 决定以 draft 还是 ready 建 PR，并把 `ship --markdown` 的段落贴进正文。主会话不自行判断 draft。

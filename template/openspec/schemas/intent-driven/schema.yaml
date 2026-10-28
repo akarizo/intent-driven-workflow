@@ -295,6 +295,10 @@ artifacts:
       `gate.checks_skip`（可选）：`{<name>: <理由>}`。openspec 根目录下有
       `gate-checks.json`（仓库默认检查）时，把其中每个检查抄进 `gate.checks`，
       或在 `gate.checks_skip` 写明理由；由 `slice-gate.py lint` 校验。
+      `gate.impacted`（可选）：仓库已有选测命令时配上（非空字符串，由
+      `slice-gate.py lint` 校验）；增量 final 改由它运行、不用内建选测，库经
+      `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）/
+      `GATE_ANCHOR_COMMIT`（锚点 commit）交给它改动清单与锚点。
       测试分层：openspec 根目录下有 `test-tiers.json`（单元层 `unit` +
       集成区域 `regions`，由 `/test-tiers` 生成）时，`gate.test` 必须等于
       `unit.cmd`（基线就是单元层）；`gate.integration`（可选）是本 change

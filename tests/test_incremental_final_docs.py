@@ -2,9 +2,6 @@
 （scenario: incremental-final#docs-describe-incremental-final、pr-ship-review-autofix#pr-ship-autofixes-without-asking）。"""
 import pathlib
 
-import pytest
-
-XF = pytest.mark.xfail(strict=True, reason="S4 尚未实现")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 T = ROOT / "template"
 
@@ -13,7 +10,6 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-@XF
 def test_docs_describe_incremental_final():
     # Given: 本 change 合入后的模板文档
     verify = [read(T / ".claude/commands/opsx-verify.md"), read(T / ".claude/skills/openspec-verify-change/SKILL.md")]
@@ -34,7 +30,6 @@ def test_docs_describe_incremental_final():
     assert "增量 final" in readme and "锚点" in readme
 
 
-@XF
 def test_pr_ship_autofixes_without_asking():
     # Given: 本 change 合入后的 template/.claude/commands/pr-ship.md
     text = read(T / ".claude/commands/pr-ship.md")

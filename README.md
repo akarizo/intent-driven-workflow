@@ -269,6 +269,14 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 
 **基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
 
+**增量 final**：`gate.test` 是 pytest 时，每次全量运行顺带记录依赖图（以测试文件为单位），并写一条锚点进锚点池 `<git common dir>/flight-anchors/`（各 worktree 共用，只留最新若干条）。
+- **增量**：final 默认取可用锚点（命令 / 分层指纹相同、依赖图测到、是 HEAD 的祖先），只重跑依赖与改动相交的测试文件、改动里的测试文件、锚点里有失败的与盲文件，其余沿用锚点结论；跑完锚点前移
+- **何时全量**：没有可用锚点 · 基线有预存红但缺 `failed_nodes` · 改动含全局文件（`conftest.py` / `pytest.ini` / `pyproject.toml` / 锁文件 / `test-tiers.json` 等）· 改动含从未被任何用例触及的非 `.py`、非文档文件；`incremental.full_why` 写明原因
+- **`--full`**：`slice-gate.py final --full` 强制全量
+- **同树沿用**：代码树、计划与各门禁命令都没变且上次 final 绿 → 秒回，不跑任何测试或检查（`incremental.mode` 为 `reused`）
+- **`gate.impacted`**：可选；仓库已有选测命令时配上，增量 final 改由它运行
+- **checks 的三个环境变量**：final 运行 `gate.checks` 的 `final` 命令时另注入 `GATE_FINAL_MODE`（`incremental` / `full`）· `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）· `GATE_ANCHOR_COMMIT`（锚点 commit，无锚点为空串）；`gate.impacted` 同样拿到
+
 **TDD 仍是硬约束**（详见 `.claude/skills/test-driven-development/SKILL.md`）：
 
 ```
