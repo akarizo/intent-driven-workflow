@@ -1,0 +1,73 @@
+{
+  "commit": "7a222e474fc2ffb65749ee29a82a27adfdb975af",
+  "at": "2026-10-28T08:39:58Z",
+  "plan_sha": "145fc433d6baa571e40421824e7b9daee27014ea",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 149.5
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_final_guard.py tests/test_final_deps.py tests/test_tiers_probe.py tests/test_tiers_gate.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_final_incremental.py tests/test_final_reuse.py tests/test_ship_verdict.py tests/test_slice_gate_final.py tests/test_tiers_gate.py tests/test_tiers_timing.py tests/test_gate_checks_final.py tests/test_evidence_timeline.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_final_checks_env.py tests/test_final_impacted.py tests/test_final_tiers.py tests/test_final_incremental.py tests/test_gate_checks_final.py tests/test_gate_checks_lint.py tests/test_tiers_gate.py tests/test_tiers_plan.py tests/test_tiers_timing.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_incremental_final_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "incremental-final",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-final-incremental-by-dependency-anchor.md": "fb79d4e392ccf1cc03198b88d51f14e5a6cdcd87",
+    "tests/final_helpers.py": "dc10a43459d803608c571251c8b8f0f208d53319",
+    "tests/test_final_checks_env.py": "a1b7aa82d33c1410347c4ae9212c04910733691c",
+    "tests/test_final_deps.py": "d795bbb2ba3afbffc233e3df3750eca3862857a8",
+    "tests/test_final_guard.py": "583571496ca35e8d8959fe50667dcadabff6a110",
+    "tests/test_final_impacted.py": "f517a251a7dfe32522b835e371e90066c81d0729",
+    "tests/test_final_incremental.py": "09f9827257cc394119589078292d618ebc413c2f",
+    "tests/test_final_reuse.py": "2f83f2ae4bdfa98dff68de41ead039860af0e8ff",
+    "tests/test_final_tiers.py": "bfa83d708a92eed76db65e4f9c03c029cba82ff5",
+    "tests/test_incremental_final_docs.py": "5a983ae4db5e474586e8a9eb016e5d20c9bf68a5"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "test-tiers",
+      "commit": "a20e532c9d49",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/test-tiers.py"
+    },
+    {
+      "change": "slice-gate-paired-checks",
+      "commit": "766d3fa9a435",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/test-tiers.py"
+    },
+    {
+      "change": "decompose-role-by-label",
+      "commit": "20ba98478b05",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/session-decompose.py, template/.claude/hooks/slice-gate.py"
+    }
+  ]
+}
