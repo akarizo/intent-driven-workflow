@@ -75,3 +75,22 @@ def test_ship_fresh_when_tree_unchanged(git_repo):
     # Then: reasons 里没有「过期」
     res = json.loads(p.stdout.strip().splitlines()[-1])
     assert not [r for r in res["reasons"] if "过期" in r], res["reasons"]
+
+
+def test_final_not_reused_when_slice_scenarios_change(git_repo):
+    # Given: final 刚刚绿过；之后只在 slices.json 给 S1 加了一个没有测试映射的 scenario id（slices.json 不进 Δ）
+    d = make_repo(git_repo)
+    baseline(git_repo, d)
+    first, _ = final(git_repo, d)
+    assert first["ok"] is True, first
+    data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    data["slices"][0]["scenarios"].append("c#unmapped")
+    (d / "slices.json").write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    commit_all(git_repo, "add scenario")
+
+    # When: 再运行一次 final
+    out, p = final(git_repo, d)
+
+    # Then: 指纹含每片 scenarios，不沿用；G7 判新 scenario 无测试映射而红
+    assert (out.get("incremental") or {}).get("mode") != "reused", out.get("incremental")
+    assert out["ok"] is False, out

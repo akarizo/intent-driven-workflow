@@ -3422,6 +3422,9 @@ def _final_fps(root, change_rel, data, tiers):
         "plan_sha": plan_sha(data),
         "scenario_tests": hashlib.sha1(json.dumps(data.get("scenario_tests") or {}, ensure_ascii=False, sort_keys=True)
                                        .encode("utf-8")).hexdigest(),
+        # G7 查哪些 scenario 由每片 scenarios 决定（plan_sha 只含 id + verify）
+        "scenarios": hashlib.sha1(json.dumps([[s.get("id"), s.get("scenarios")] for s in data.get("slices") or []],
+                                             ensure_ascii=False).encode("utf-8")).hexdigest(),
         "cmd": {k: cmd_key(root, change_rel, gate[k]) if gate.get(k) else None
                 for k in ("test", "pytest", "lint", "typecheck", "impacted")},
         "checks": [[c.get("name"), cmd_key(root, change_rel, c.get("final"))] for c in checks if isinstance(c, dict)],
