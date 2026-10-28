@@ -1,10 +1,11 @@
 """全量运行记录依赖图并写入锚点池
 （scenario: incremental-final#full-run-records-dependency-map、#blind-subprocess-marks-test-file、
 #baseline-records-failed-nodes）。"""
+import argparse
 import json
 
 from conftest import commit_all, load_hook, write
-from final_helpers import PY, baseline, latest_anchor, make_repo
+from final_helpers import PY, anchors, baseline, latest_anchor, make_repo
 
 
 TEST_ISO = """
@@ -185,3 +186,29 @@ def test_deps_unmeasured_when_session_not_finished(tmp_path):
     assert res["rc"] == 0, res["out"]
     assert res["deps"] is None, res["deps"]
     assert "不完整" in res["deps_why"], res["deps_why"]
+
+
+def test_anchor_unmeasured_when_end_snapshot_fails(git_repo, monkeypatch, capsys):
+    # Given: 依赖图可测的仓库；baseline 结束时的内容快照失败（开跑快照正常）
+    d = make_repo(git_repo)
+    sg = load_hook("slice-gate")
+    real, calls = sg._snapshot, []
+
+    def flaky(root, change_rel):
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("模拟快照失败")
+        return real(root, change_rel)
+
+    monkeypatch.setattr(sg, "_snapshot", flaky)
+    monkeypatch.chdir(git_repo)
+
+    # When: 进程内跑 baseline
+    try:
+        sg.cmd_baseline(argparse.Namespace(change_dir=str(d), full=False))
+    except SystemExit:
+        pass
+
+    # Then: 锚点要么不写、要么 measured 为假（snapshot 为 None 的锚点不得可用）
+    assert len(calls) >= 2, calls
+    assert all(a.get("measured") is False for a in anchors(git_repo)), anchors(git_repo)
