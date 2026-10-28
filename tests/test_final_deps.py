@@ -4,7 +4,7 @@
 import json
 
 from conftest import load_hook
-from final_helpers import baseline, latest_anchor, make_repo
+from final_helpers import PY, baseline, latest_anchor, make_repo
 
 
 TEST_ISO = """
@@ -140,3 +140,15 @@ def test_read_deps_unmeasurable_on_corrupt_line(tmp_path):
     # Then: 判为不可度量，原因写明记录损坏
     assert got is None, got
     assert "损坏" in why, why
+
+
+def test_anchor_unmeasured_when_full_run_stops_early(git_repo):
+    # Given: gate.test 带 -x；tests/test_0.py 预存失败，排在其他测试文件之前（-x 停下后其余文件没跑到）
+    d = make_repo(git_repo, extra={"tests/test_0.py": "def test_zero():\n    assert False\n"},
+                  gate_extra={"test": "%s -m pytest -q -x -p no:cacheprovider tests" % PY})
+
+    # When: baseline 跑全量
+    baseline(git_repo, d)
+
+    # Then: 全量提前停止，没跑到的测试文件没有运行时依赖 → 锚点 measured 为假
+    assert latest_anchor(git_repo)["measured"] is False, latest_anchor(git_repo)

@@ -89,6 +89,8 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # pytest-cov 覆盖率未达标的输出标记（pytest-cov 7.1.0 pytest_cov/plugin.py：
 # 前者在 pytest_runtestloop 收尾打印，后者在 pytest_terminal_summary 打印）
 COVERAGE_FAIL_MARKS = ("Coverage failure: total of", "FAIL Required test coverage of")
+# pytest 提前停止（-x / --maxfail / 收集错误中断）的输出特征：锚点不可度量
+EARLY_STOP_MARKS = ("stopping after", "Interrupted:")
 
 TEST_DIR_NAMES = {"tests", "test", "__tests__", "spec"}
 TEST_FILE_RE = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.py|[^/]*\.test\.[^/]+|[^/]*\.spec\.[^/]+)$")
@@ -1031,6 +1033,8 @@ def _tg_measurable(tg):
     """run_test_gate 结果能否给锚点：绿，或可度量的 exit 1。收集错误 / 超时 / 其他退出码时
     出错的测试文件没有用例结论，依赖图的 failed 漏掉它们，锚点不可用。"""
     # ceiling: 带 --continue-on-collection-errors 的 exit 1 仍判可度量，收集失败的文件不进锚点 failed -> 遇到该用法时让依赖图插件把收集失败记为 ERROR 结论
+    if any(m in tg["out"] for m in EARLY_STOP_MARKS):  # -x / --maxfail 提前停止：没跑到的测试文件只有静态闭包
+        return False
     return tg["rc"] == 0 or tg["failed"] is not None
 
 
@@ -2512,7 +2516,8 @@ def cmd_final(args):
                     inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
                 anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
                 # 超时 / 收集错误 / 异常退出：本次结论不全（收集失败的文件没有用例结论），锚点不可用，下次退回更早的锚点或全量
-                ran_ok = not timed_out and (rc in (0, 5) or (rc == 1 and bool(fails)))
+                ran_ok = (not timed_out and (rc in (0, 5) or (rc == 1 and bool(fails)))
+                          and not any(m in text for m in EARLY_STOP_MARKS))
                 anchor_part["measured"] = (bool(d) and ran_ok) or not run_sel
                 anchor_part["source"] = "final-incremental"
                 byproducts = anchor.get("byproducts") or []
