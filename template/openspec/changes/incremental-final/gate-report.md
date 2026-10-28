@@ -15,3 +15,5 @@
 | 2026-10-28T10:07:08Z | S4 | red | d38ffdb6ae | G6 ownership: tests/test_template_docs.py 不在 owns 内 | G5 evidence: 无 evidence.log（test-evidence hook 未安装或未触发），本切片留痕无法核对 |
 | 2026-10-28T10:07:27Z | S4 | ok | 69408b4597 | - | G5 evidence: 无 evidence.log（test-evidence hook 未安装或未触发），本切片留痕无法核对 |
 | 2026-10-28T10:19:22Z | final | ok | 69408b4597 | - | 依赖图未测：防护插件加载失败（包装命令覆写了 PYTHONPATH？），依赖图未测 |
+| 2026-10-28T11:12:08Z | final | red | 703b034a65 | G2 test: exit 1（新增 2 条失败） tests.test_final_guard::test_guard_plugin_load_failure_falls_back tests.test_tiers_probe::test_probe_falls_back_when_plugin_cannot_load | - |
+| 2026-10-28T11:19:05Z | final | ok | af3b6fa100 | - | - |
