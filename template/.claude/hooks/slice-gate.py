@@ -50,6 +50,9 @@
 #             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
 #             gate-baseline.json 有分层文件时另有 "tiers": {"measured": bool[, "why"]} 与 "regions": {name: {exit, sec, cmd[, failed]}}；
 #             无分层文件时无这两个键。
+#             分层文件合法时 gate / final 的 JSON 与 gate-baseline.json（及 baseline 的 stdout）另有
+#             "tier_sec": {"unit", "integration", "regions": {name: 秒}[, "unclassified"]}，summary / timeline 备注带「单元 Xs · 集成 Ys」；
+#             无分层文件时无此键，summary 与备注不变。
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import fnmatch
@@ -94,8 +97,15 @@ MARK_RE = re.compile(r"xfail|skip", re.I)
 # junitxml 区分不出非 strict 的 XPASS（与 PASSED 同形），所以不用它
 G7_PLUGIN = '''import json, os
 
+_sec = {}
+
 
 def pytest_runtest_logreport(report):
+    if "FLIGHT_G7_SEC" in os.environ:
+        _sec[report.nodeid] = _sec.get(report.nodeid, 0.0) + report.duration
+        if report.when == "teardown":
+            with open(os.environ["FLIGHT_G7_SEC"], "a", encoding="utf-8") as f:
+                f.write(json.dumps([report.nodeid, _sec.pop(report.nodeid)]) + "\\n")
     if report.when == "call":
         if hasattr(report, "wasxfail"):
             out = "XPASS" if report.passed else "XFAIL"
@@ -689,6 +699,39 @@ def tiers_matching(path, tiers):
     return out
 
 
+def tier_seconds(durations, tiers):
+    """逐用例耗时 {nodeid: 秒} 按分层文件归层（design D14）：文件部分取 nodeid 的第一段，tiers_matching 取第一个；
+    不在任何层 → unclassified（为 0 时不出现）；integration = 各区域之和；各项保留 1 位小数。"""
+    unit, loose, regions = 0.0, 0.0, {}
+    for nodeid, sec in durations.items():
+        hit = tiers_matching(nodeid.split("::", 1)[0], tiers)
+        if not hit:
+            loose += sec
+        elif hit[0] == "unit":
+            unit += sec
+        else:
+            regions[hit[0]] = regions.get(hit[0], 0.0) + sec
+    ts = {"unit": round(unit, 1), "integration": round(sum(regions.values()), 1),
+          "regions": {n: round(regions[n], 1) for n in sorted(regions)}}
+    if round(loose, 1):
+        ts["unclassified"] = round(loose, 1)
+    return ts
+
+
+def _tier_add(ts, unit=0.0, regions=None):
+    """把墙钟秒数并入已有 tier_sec（返回新 dict）：重算 integration，各项保留 1 位小数。"""
+    regs = dict(ts.get("regions") or {})
+    for n, sec in (regions or {}).items():
+        regs[n] = regs.get(n, 0.0) + sec
+    out = dict(ts, unit=round(ts.get("unit", 0.0) + unit, 1), regions={n: round(regs[n], 1) for n in sorted(regs)})
+    out["integration"] = round(sum(regs.values()), 1)
+    return out
+
+
+def _tier_note(ts):
+    return "单元 %.1fs · 集成 %.1fs" % (ts["unit"], ts["integration"])
+
+
 def _lint_tiers(data, change_dir):
     """计划 × 分层文件的校验（design D1–D3）；违规文本都以 tiers: 开头。"""
     gate = data.get("gate") or {}
@@ -1182,8 +1225,9 @@ def _g7_timeout(gate):
     return 600
 
 
-def _pytest_outcomes(root, targets, gate=None):
-    """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。"""
+def _pytest_outcomes(root, targets, gate=None, durations=None):
+    """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。
+    durations 是 dict 时把逐用例耗时（setup + call + teardown）按 nodeid 累加进去。"""
     gate = gate or {}
     prefix, _ = _g7_runner(gate)
     timeout = _g7_timeout(gate)
@@ -1194,6 +1238,10 @@ def _pytest_outcomes(root, targets, gate=None):
         # 不写字节码：__pycache__ 落进被测 worktree 会被当成改动（G5 起点测量、source 判定）
         env = dict(os.environ, FLIGHT_G7_OUT=out, PYTHONDONTWRITEBYTECODE="1",
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        sec_out = os.path.join(tmp, "seconds.jsonl")
+        env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
+        if isinstance(durations, dict):
+            env["FLIGHT_G7_SEC"] = sec_out
         argv = prefix + ["-p", "flight_g7_outcomes", "-p", "no:cacheprovider", "--rootdir", root, *targets]
         timed_out, rc, text = False, None, ""
         try:
@@ -1217,6 +1265,12 @@ def _pytest_outcomes(root, targets, gate=None):
         if os.path.isfile(out):
             with open(out, "r", encoding="utf-8") as f:
                 outcomes = [tuple(json.loads(line)) for line in f if line.strip()]
+        if isinstance(durations, dict) and os.path.isfile(sec_out):
+            with open(sec_out, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        nid, sec = json.loads(line)
+                        durations[nid] = durations.get(nid, 0.0) + sec
         return outcomes, rc, text or "", timed_out
 
 
@@ -1253,7 +1307,7 @@ def _g7_diag(text):
     return hit[:200]
 
 
-def scenario_status(root, data, slice_ids=None):
+def scenario_status(root, data, slice_ids=None, durations=None):
     """返回 (violations, total, passed)。passed = 有映射、函数存在、无 xfail/skip 标记，且 .py 目标实跑结果全为 PASSED。"""
     tests = data.get("scenario_tests") or {}
     wanted = []
@@ -1307,7 +1361,7 @@ def scenario_status(root, data, slice_ids=None):
         _, warn = _g7_runner(gate)
         if warn:
             warnings.append(warn)
-        outcomes, rc, text, timed_out = _pytest_outcomes(root, [t for _, t in py_targets], gate)
+        outcomes, rc, text, timed_out = _pytest_outcomes(root, [t for _, t in py_targets], gate, durations)
         for sid, target in py_targets:
             outs = [o for i, o in outcomes if i == target or i.startswith(target + "[")]
             if timed_out:
@@ -1627,7 +1681,8 @@ def cmd_gate(args):
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
-    v7, _, _, w7 = scenario_status(root, data, {args.slice})
+    durations = {} if tiers is not None else None
+    v7, _, _, w7 = scenario_status(root, data, {args.slice}, durations=durations)
     failed.extend(v7)
     warnings.extend(w7)
     v8, ceilings = ceiling_rows(root, base)
@@ -1637,13 +1692,19 @@ def cmd_gate(args):
               "failed": failed, "warnings": warnings, "hooks_missing": hooks_missing,
               "ceilings": [[rel, ln, limit, up] for rel, ln, limit, up in ceilings],
               "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files))}
+    gate_note = args.slice
+    if durations is not None:
+        ts = tier_seconds(durations, tiers)
+        result["tier_sec"] = ts
+        result["summary"] += "；" + _tier_note(ts)
+        gate_note = "%s %s" % (args.slice, _tier_note(ts))
     if result["ok"]:
         err = _gate_save(root, args.change_dir, result)
         if err:
             warnings.append("门禁结论未能留存：%s" % err)
     append_report(args.change_dir, result)
     record_ceilings(args.change_dir, args.slice, ceilings)
-    timeline_record(args.change_dir, "gate", "%s %s" % (args.slice, "ok" if result["ok"] else "red"))
+    timeline_record(args.change_dir, "gate", "%s %s" % (gate_note, "ok" if result["ok"] else "red"))
     if marker is not None:
         if result["ok"]:
             try:
@@ -1720,7 +1781,10 @@ def cmd_final(args):
     dirty = _dirty_paths(root, args.change_dir)
     if dirty:
         warnings.append("工作树有未提交改动，结论不对应 commit：%s" % ", ".join(dirty[:8]))
-    v7, total, passed, w7 = scenario_status(root, data)
+    tiers, terrs = _load_tiers(args.change_dir)
+    durations = {} if tiers is not None else None
+    unit_wall, region_wall = 0.0, {}
+    v7, total, passed, w7 = scenario_status(root, data, durations=durations)
     failed.extend(v7)
     warnings.extend(w7)
     baseline = load_baseline(args.change_dir)
@@ -1736,7 +1800,6 @@ def cmd_final(args):
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
     else:
         test_cmd = gate.get("test") or detect_test_cmd(root)
-        tiers, terrs = _load_tiers(args.change_dir)
         if terrs:  # 分层文件不合法：单元层照旧差分，不跑探针与区域
             failed.append("G2 tiers：测试分层文件不合法，先跑 lint 修好")
             tiers = None
@@ -1749,9 +1812,11 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
         else:
+            t0 = time.time()
             tg = run_test_gate(test_cmd, root, probe=True)
             f2, w2 = _diff_verdict("test", tg, ((baseline or {}).get("test") or {}).get("failed"))
             f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            unit_wall = time.time() - t0
             failed.extend([f2] if f2 else [])
             warnings.extend([w2] if w2 else [])
             failed.extend(f10)
@@ -1763,7 +1828,10 @@ def cmd_final(args):
                 if not isinstance(rec, dict) or not rcmd or rec.get("cmd") != rcmd:
                     failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
                     continue
-                f2, w2 = _diff_verdict("region " + rname, run_test_gate(rcmd, root), rec.get("failed"))
+                t0 = time.time()
+                rg = run_test_gate(rcmd, root)
+                region_wall[rname] = time.time() - t0
+                f2, w2 = _diff_verdict("region " + rname, rg, rec.get("failed"))
                 failed.extend([f2] if f2 else [])
                 warnings.extend([w2] if w2 else [])
     checks = gate.get("checks") or []
@@ -1780,8 +1848,16 @@ def cmd_final(args):
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
     if dirty:
         result["dirty"] = True
+    final_note = "ok" if result["ok"] else "red"
+    if durations is not None:
+        ts = tier_seconds(durations, tiers)
+        if not v7:  # G7 红时全量与区域未跑，只报 G7 部分
+            ts = _tier_add(ts, unit_wall, region_wall)
+        result["tier_sec"] = ts
+        result["summary"] += "；" + _tier_note(ts)
+        final_note = "%s %s" % (_tier_note(ts), final_note)
     append_report(args.change_dir, result)
-    timeline_record(args.change_dir, "final", "ok" if result["ok"] else "red")
+    timeline_record(args.change_dir, "final", final_note)
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(0 if result["ok"] else 1)
 
@@ -1835,6 +1911,7 @@ def cmd_baseline(args):
         if abort:  # 补跑红 / 超时 / 异常退出码与候选无关，直接走全量（design D3）
             break
     reasons, warnings, out = [], [], ""
+    unit_wall = 0.0
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons}
     if hit is not None:
@@ -1857,6 +1934,7 @@ def cmd_baseline(args):
             f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
             reasons.extend(f10)
             warnings.extend(w10)
+            unit_wall = time.time() - t0
             bl["tiers"] = {"measured": True} if tg["probe"] is not None else {"measured": False, "why": tg["probe_why"]}
     # lint / typecheck 沿用（design D10）：只看本 change 旧基线；严格差异（含其他 change 目录）为空且命令与指纹不变
     strict_delta = None
@@ -1914,6 +1992,9 @@ def cmd_baseline(args):
         elif rg["rc"] != 0:
             reasons.append("区域 %s 在基线上红（exit %d；按退出码判：%s）" % (rname, rg["rc"], rg["why"]))
         bl["regions"][rname] = rec
+    if tiers is not None:
+        bl["tier_sec"] = _tier_add({"unit": 0.0, "regions": {}}, unit_wall,
+                                   {n: r["sec"] for n, r in bl["regions"].items()})
     # 成对检查的 baseline 半（design D5）：沿用条件同 lint / typecheck（D10）外加共用目录仍在；否则清空目录后实跑
     checks = gate.get("checks") or []
     if checks:
@@ -1999,7 +2080,8 @@ def cmd_baseline(args):
         note = "增量（复用 %s 的全量 exit %s, %ss；补跑 %d 个测试文件 %ss） %s" % (
             hit["from"].get("change"), t.get("exit"), t.get("sec"), len(hit["files"]), hit["sec"], verdict)
     else:
-        note = "exit %s, %ss %s" % (t.get("exit"), t.get("sec"), verdict)
+        note = "exit %s, %ss%s" % (t.get("exit"), t.get("sec"),
+                                    "；%s %s" % (_tier_note(bl["tier_sec"]), verdict) if "tier_sec" in bl else " " + verdict)
         if derived:
             note += "；verify 推导 %d 片" % derived
     timeline_record(args.change_dir, "baseline", note)
