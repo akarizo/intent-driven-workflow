@@ -254,21 +254,26 @@ def _observe(event, args, deps):
 
 
 def _emit(recs):
+    """按进程写 <FLIGHT_DEPS_OUT>.<pid>：xdist worker 与子进程各写各的，行不会互相穿插。"""
     out = os.environ.get("FLIGHT_DEPS_OUT")
     if not out or not recs:
         return
     saved, _busy[0] = _busy[0], True
     try:
-        with open(out, "a", encoding="utf-8") as f:
-            for rec in recs:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\\n")
+        data = "".join(json.dumps(rec) + "\\n" for rec in recs).encode("utf-8")
+        fd = os.open("%s.%d" % (out, os.getpid()), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            while data:
+                data = data[os.write(fd, data):]
+        finally:
+            os.close(fd)
     except OSError:
         pass
     finally:
         _busy[0] = saved
 '''
 # 依赖图插件：写进临时目录为 flight_deps.py，经 -p 加载；收集窗口与用例窗口里记 open / 子进程 argv，
-# 会话结束并入测试文件的静态 import 闭包；逐用例结论口径同 G7；记录以 JSON 行追加进 FLIGHT_DEPS_OUT
+# 会话结束并入测试文件的静态 import 闭包；逐用例结论口径同 G7；记录以 JSON 行追加进 FLIGHT_DEPS_OUT.<pid>（每进程一份）
 DEPS_PLUGIN = DEPS_CORE + OUTCOME_SRC + '''
 import ast
 
@@ -795,19 +800,31 @@ def _flight_plugins(tmp, env, root, deps):
 
 
 def _read_deps(path):
-    """读依赖图 jsonl → ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
-    没有开跑记录 → 不可度量；同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
+    """读依赖图 jsonl（path 与各进程的 path.<pid>）→ ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
+    没有开跑记录或有坏行（写入被中断，整条记录丢失）→ 不可度量；
+    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
     started, deps, blind, files, nodes = False, {}, set(), set(), {}
+    d, base = os.path.split(path)
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            lines = f.read().splitlines()
+        names = sorted(n for n in os.listdir(d or ".") if n == base or n.startswith(base + "."))
     except OSError:
-        lines = []
+        names = []
+    lines = []
+    for n in names:
+        try:
+            with open(os.path.join(d, n), "r", encoding="utf-8") as f:
+                lines += f.read().splitlines()
+        except OSError:
+            pass
+        except ValueError:
+            return None, "依赖图记录损坏（编码错误）"
     for line in lines:
+        if not line.strip():
+            continue
         try:
             rec = json.loads(line)
         except ValueError:
-            continue
+            return None, "依赖图记录损坏（写入被中断？）"
         if not isinstance(rec, dict):
             continue
         if rec.get("flight_deps") == "start":

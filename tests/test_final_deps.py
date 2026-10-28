@@ -3,6 +3,7 @@
 #baseline-records-failed-nodes）。"""
 import json
 
+from conftest import load_hook
 from final_helpers import baseline, latest_anchor, make_repo
 
 
@@ -109,3 +110,33 @@ def test_session_fixture_reads_recorded_for_every_user(git_repo):
     deps = latest_anchor(git_repo)["deps"]
     assert "data/s.txt" in deps["tests/test_p.py"], deps
     assert "data/s.txt" in deps["tests/test_q.py"], deps
+
+
+def test_read_deps_merges_per_process_files(tmp_path):
+    # Given: 两个进程各写一份依赖图：deps.jsonl.101 记 tests/test_a.py 依赖 src/a.py，
+    #        deps.jsonl.202 记 tests/test_b.py 依赖 data/b.json；两份都有开跑记录
+    sg = load_hook("slice-gate")
+    rec = '{"flight_deps": "start"}\n{"file": "%s", "deps": ["%s"], "test": true}\n'
+    (tmp_path / "deps.jsonl.101").write_text(rec % ("tests/test_a.py", "src/a.py"), encoding="utf-8")
+    (tmp_path / "deps.jsonl.202").write_text(rec % ("tests/test_b.py", "data/b.json"), encoding="utf-8")
+
+    # When: 按 deps.jsonl 读依赖图
+    got, why = sg._read_deps(str(tmp_path / "deps.jsonl"))
+
+    # Then: 两个测试文件的依赖都被读到
+    assert got is not None, why
+    assert got["deps"] == {"tests/test_a.py": ["src/a.py"], "tests/test_b.py": ["data/b.json"]}, got
+
+
+def test_read_deps_unmeasurable_on_corrupt_line(tmp_path):
+    # Given: 依赖图有开跑记录，但 tests/test_a.py 那条记录被截断成半行
+    sg = load_hook("slice-gate")
+    (tmp_path / "deps.jsonl.101").write_text(
+        '{"flight_deps": "start"}\n{"file": "tests/test_a.py", "deps": ["src/a\n', encoding="utf-8")
+
+    # When: 按 deps.jsonl 读依赖图
+    got, why = sg._read_deps(str(tmp_path / "deps.jsonl"))
+
+    # Then: 判为不可度量，原因写明记录损坏
+    assert got is None, got
+    assert "损坏" in why, why
