@@ -19,6 +19,7 @@
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
+#                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #   baseline --change-dir DIR [--full]        起飞前预检：先把 gate-baseline.json 写成运行标记 {running, pid, started}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              耗时写回 slices.json.gate.full_suite_sec；退出码按 ok；
@@ -29,9 +30,12 @@
 #                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
+#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
+#                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
 #                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
+#                                              分层文件存在时已选区域的基线 regions.<name>.cmd 须等于分层文件当前 cmd，否则基线过期
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -44,6 +48,8 @@
 #             探针：run_test_gate(cmd, root, probe=True) 另返回 probe = {nodeid: {"sec", "hits": {"文件"|"子进程"|"网络": 样例}}}
 #             或 None（不可度量，probe_why 写原因）；probe=False 时二者恒为 None。
 #             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
+#             gate-baseline.json 有分层文件时另有 "tiers": {"measured": bool[, "why"]} 与 "regions": {name: {exit, sec, cmd[, failed]}}；
+#             无分层文件时无这两个键。
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import fnmatch
@@ -433,17 +439,57 @@ def gate_cmd_verdict(kind, cmd, root, baseline):
 
 def full_suite_verdict(cmd, root, baseline):
     """跑 gate.test，返回 (failed_item, warning_item)。可度量的 exit 1 按基线 test.failed 逐条差分（缺失视为空集）。"""
-    tg = run_test_gate(cmd, root)
+    return _diff_verdict("test", run_test_gate(cmd, root), ((baseline or {}).get("test") or {}).get("failed"))
+
+
+def _diff_verdict(label, tg, known_failed):
+    """run_test_gate 结果对基线已知失败差分，返回 (failed_item, warning_item)；label 为 test 或 region <NAME>。"""
     rc = tg["rc"]
     if rc == 0:
         return None, None
     if tg["failed"] is None:
-        return "G2 test: exit %d（按退出码判：%s）\n%s" % (rc, tg["why"], _tail(tg["out"])), None
-    old = set(((baseline or {}).get("test") or {}).get("failed") or [])
+        return "G2 %s: exit %d（按退出码判：%s）\n%s" % (label, rc, tg["why"], _tail(tg["out"])), None
+    old = set(known_failed or [])
     new = [t for t in tg["failed"] if t not in old]
     if not new:
-        return None, "G2 test: exit 1，失败均为基线预存红（%d 条已按基线排除）" % len(tg["failed"])
-    return "G2 test: exit 1（新增 %d 条失败）\n%s" % (len(new), "\n".join(new[:6])), None
+        return None, "G2 %s: exit 1，失败均为基线预存红（%d 条已按基线排除）" % (label, len(tg["failed"]))
+    return "G2 %s: exit 1（新增 %d 条失败）\n%s" % (label, len(new), "\n".join(new[:6])), None
+
+
+def _selected_regions(gate):
+    """gate.integration 里的区域名（形状不合法时视为未选）。"""
+    integration = gate.get("integration")
+    return [n for n in integration if isinstance(n, str)] if isinstance(integration, list) else []
+
+
+def slow_candidates(probe):
+    """首跑耗时 >= UNIT_MAX_SEC 的 nodeid（排序）；probe 为 None → []。"""
+    if not probe:
+        return []
+    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= UNIT_MAX_SEC)
+
+
+def tier_verdicts(probe, probe_why, rerun, allow):
+    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选须单独重跑仍超线（或重跑无记录）才确认。"""
+    if probe is None:
+        return [], ["G10/G11 不可度量：%s" % probe_why]
+    failed, warnings = [], []
+    for nid in slow_candidates(probe):
+        again = rerun.get(nid)
+        if again is not None and again < UNIT_MAX_SEC:
+            continue
+        sec = float(probe[nid].get("sec") or 0.0)
+        if nid in allow:
+            warnings.append("G10 slow unit test 已人工放行：%s %.1fs（%s）" % (nid, sec, allow[nid]["approved"]))
+        else:
+            failed.append("G10 slow unit test: %s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
+                          % (nid, sec, "未取得" if again is None else "%.1fs" % again))
+    for nid in sorted(probe):
+        hits = probe[nid].get("hits") or {}
+        if hits:
+            failed.append("G11 impure unit test: %s 碰了%s（%s）：改成纯函数或移入集成区域"
+                          % (nid, "、".join(hits), "；".join(str(v) for v in hits.values())))
+    return failed, warnings
 
 
 def glob_match(path, pattern):
@@ -1174,6 +1220,33 @@ def _pytest_outcomes(root, targets, gate=None):
         return outcomes, rc, text or "", timed_out
 
 
+def _tier_rerun(root, gate, nodeids):
+    """单独重跑慢候选（带探针）→ {nodeid: sec}；拿不到探针输出 / 超时 / 起不来 → None（调用方按「未取得」处理）。"""
+    prefix, _ = _g7_runner(gate)
+    with tempfile.TemporaryDirectory(prefix="flight-tier-") as tmp:
+        with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
+            f.write(TIER_PROBE_PLUGIN)
+        out = os.path.join(tmp, "tier-probe.jsonl")
+        env = dict(os.environ, FLIGHT_TIER_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+                   PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        argv = prefix + ["-p", "flight_tier_probe", "-p", "no:cacheprovider", "--rootdir", root, *nodeids]
+        try:
+            subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=_g7_timeout(gate))
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        probe, _ = _read_probe(out)
+    if probe is None:
+        return None
+    return {n: r["sec"] for n, r in probe.items()}
+
+
+def _unit_tier_verdict(root, gate, tg, allow):
+    """单元层 G10 / G11：有慢候选才重跑，再交给 tier_verdicts。"""
+    cands = slow_candidates(tg["probe"])
+    rerun = (_tier_rerun(root, gate, cands) or {}) if cands else {}
+    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow)
+
+
 def _g7_diag(text):
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     hit = next((ln for ln in lines if "Error" in ln), lines[-1] if lines else "")
@@ -1663,14 +1736,36 @@ def cmd_final(args):
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
     else:
         test_cmd = gate.get("test") or detect_test_cmd(root)
+        tiers, terrs = _load_tiers(args.change_dir)
+        if terrs:  # 分层文件不合法：单元层照旧差分，不跑探针与区域
+            failed.append("G2 tiers：测试分层文件不合法，先跑 lint 修好")
+            tiers = None
         if not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
-        else:
+        elif tiers is None:
             f2, w2 = full_suite_verdict(test_cmd, root, baseline)
             if f2:
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
+        else:
+            tg = run_test_gate(test_cmd, root, probe=True)
+            f2, w2 = _diff_verdict("test", tg, ((baseline or {}).get("test") or {}).get("failed"))
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            failed.extend([f2] if f2 else [])
+            warnings.extend([w2] if w2 else [])
+            failed.extend(f10)
+            warnings.extend(w10)
+            bregions = (baseline or {}).get("regions")
+            for rname in _selected_regions(gate):
+                rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
+                rec = bregions.get(rname) if isinstance(bregions, dict) else None
+                if not isinstance(rec, dict) or not rcmd or rec.get("cmd") != rcmd:
+                    failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
+                    continue
+                f2, w2 = _diff_verdict("region " + rname, run_test_gate(rcmd, root), rec.get("failed"))
+                failed.extend([f2] if f2 else [])
+                warnings.extend([w2] if w2 else [])
     checks = gate.get("checks") or []
     cerrs = _lint_checks(gate)[0]
     if cerrs:  # /opsx-verify 可不经 preflight 直接跑 final（design D8）：形状非法时不运行任何检查
@@ -1703,6 +1798,13 @@ def cmd_baseline(args):
     cerrs = _lint_checks(gate)[0]
     if cerrs:
         die("gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
+    tiers, terrs = _load_tiers(args.change_dir)
+    if terrs:
+        die("测试分层文件不合法，先跑 lint 修好：%s" % "；".join(terrs))
+    regions = _selected_regions(gate)
+    unknown = [n for n in regions if n not in ((tiers or {}).get("regions") or {})]
+    if unknown:
+        die("gate.integration 的区域 %s 不在测试分层文件 regions 里，先跑 lint 修好" % ", ".join(unknown))
     sha0 = plan_sha(data)
     name = os.path.basename(os.path.realpath(args.change_dir))
     change_rel = _change_rel(root, args.change_dir)
@@ -1719,7 +1821,8 @@ def cmd_baseline(args):
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
         f.write("\n")
-    cands = _baseline_candidates(root, old, key, name, args.full)
+    # 有分层文件时恒走全量：G10 / G11 要单元层探针，复用的旧结果没有（design D5）
+    cands = _baseline_candidates(root, old, key, name, args.full or tiers is not None)
     # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用
     own = cands[0] if cands and old is not None and cands[0].get("snapshot") is old.get("snapshot") else None
     hit, src, skipped, rerun_cache = None, None, [], {}
@@ -1741,7 +1844,7 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     else:
         t0 = time.time()
-        tg = run_test_gate(test_cmd, root)
+        tg = run_test_gate(test_cmd, root, probe=tiers is not None)
         rc, out = tg["rc"], tg["out"]
         gate["full_suite_sec"] = round(time.time() - t0, 1)
         bl["test"] = {"exit": rc, "sec": gate["full_suite_sec"]}
@@ -1750,6 +1853,11 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条已记录，final 按基线差分" % len(tg["failed"]))
         elif rc != 0:
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
+        if tiers is not None:
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            reasons.extend(f10)
+            warnings.extend(w10)
+            bl["tiers"] = {"measured": True} if tg["probe"] is not None else {"measured": False, "why": tg["probe_why"]}
     # lint / typecheck 沿用（design D10）：只看本 change 旧基线；严格差异（含其他 change 目录）为空且命令与指纹不变
     strict_delta = None
     if hit is not None and src is own:
@@ -1792,6 +1900,20 @@ def cmd_baseline(args):
         bl["verify"][s["id"]] = {"exit": vrc, "cmd": vcmd}
         if vrc != 0:
             reasons.append("%s verify 在基线上红（exit %d）：命令不可运行或含既有错误" % (s["id"], vrc))
+    # 已选区域（design D9）：可度量的红记 failed 供 final 差分；不可度量的红 → 基线红
+    if tiers is not None:
+        bl["regions"] = {}
+    for rname in regions:
+        rcmd = tiers["regions"][rname]["cmd"]
+        t0 = time.time()
+        rg = run_test_gate(rcmd, root)
+        rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+        if rg["rc"] != 0 and rg["failed"] is not None:
+            rec["failed"] = rg["failed"]
+            warnings.append("区域 %s 预存红 %d 条已记录，final 按基线差分" % (rname, len(rg["failed"])))
+        elif rg["rc"] != 0:
+            reasons.append("区域 %s 在基线上红（exit %d；按退出码判：%s）" % (rname, rg["rc"], rg["why"]))
+        bl["regions"][rname] = rec
     # 成对检查的 baseline 半（design D5）：沿用条件同 lint / typecheck（D10）外加共用目录仍在；否则清空目录后实跑
     checks = gate.get("checks") or []
     if checks:
@@ -1925,6 +2047,13 @@ def cmd_preflight(args):
         die("基线红，不能起飞：\n  - " + "\n  - ".join(bl.get("reasons") or ["ok 为 false 但无 reasons"]))
     if bl.get("plan_sha") != plan_sha(data):
         die("基线过期：gate / verify 改动后需重跑 baseline")
+    tiers, _ = _load_tiers(args.change_dir)
+    if tiers is not None:
+        bregions = bl.get("regions")
+        for rname in _selected_regions(data.get("gate") or {}):
+            rec = bregions.get(rname) if isinstance(bregions, dict) else None
+            if not isinstance(rec, dict) or rec.get("cmd") != ((tiers.get("regions") or {}).get(rname) or {}).get("cmd"):
+                die("基线过期：区域 %s 的命令已变或没有基线记录；重跑 baseline" % rname)
     # 不能用 git()：--is-ancestor 不成立时退出 1，git() 会当成异常抛
     p = subprocess.run(["git", "merge-base", "--is-ancestor", str(bl.get("commit") or ""), "HEAD"],
                        cwd=root, capture_output=True, text=True)

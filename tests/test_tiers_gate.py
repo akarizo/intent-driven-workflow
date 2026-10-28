@@ -6,11 +6,8 @@ import json
 import shlex
 import sys
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S2 尚未实现")
 PY = shlex.quote(sys.executable)
 UNIT_CMD = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
 HOOKS_CMD = "%s -m pytest -q -p no:cacheprovider tests/integration/hooks" % PY
@@ -80,7 +77,6 @@ def set_hooks_cmd(repo, cmd):
 # ---------------------------------------------------------------- baseline
 
 
-@XF
 def test_baseline_red_when_unit_test_impure(git_repo):
     # Given: 分层文件合法；单元层里有一个在 tmp_path 写文件的用例 tests/unit/test_u.py::test_writes
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": "def test_writes(tmp_path):\n    (tmp_path / 'f').write_text('x')\n"},
@@ -95,7 +91,6 @@ def test_baseline_red_when_unit_test_impure(git_repo):
     assert any(r.startswith("G11") and "tests/unit/test_u.py::test_writes" in r for r in reasons), reasons
 
 
-@XF
 def test_baseline_red_when_unit_test_slow(git_repo):
     # Given: 分层文件合法、slow_allow 为空；单元层里有一个每次都睡 3.1 秒的纯函数用例 tests/unit/test_u.py::test_sleepy
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": "import time\n\n\ndef test_sleepy():\n    time.sleep(3.1)\n"},
@@ -110,7 +105,6 @@ def test_baseline_red_when_unit_test_slow(git_repo):
     assert any(r.startswith("G10") and "tests/unit/test_u.py::test_sleepy" in r for r in reasons), reasons
 
 
-@XF
 def test_baseline_records_selected_regions_only(git_repo):
     # Given: 分层文件有区域 hooks 与 docs，计划只选了 hooks；hooks 里 test_old 预存失败；单元层全绿且纯
     region = {"tests/integration/hooks/test_h.py": "def test_old():\n    assert False\n\n\ndef test_fine():\n    assert True\n"}
@@ -134,7 +128,6 @@ def test_baseline_records_selected_regions_only(git_repo):
 # ---------------------------------------------------------------- final
 
 
-@XF
 def test_final_diffs_regions_against_baseline(git_repo):
     # Given: 基线已记录区域 hooks 的预存失败 test_old；之后的提交让 hooks 里的 test_new 也失败
     region = {"tests/integration/hooks/test_h.py": "def test_old():\n    assert False\n\n\ndef test_new():\n    assert True\n"}
@@ -155,7 +148,6 @@ def test_final_diffs_regions_against_baseline(git_repo):
     assert not any("test_old" in f for f in out["failed"]), out
 
 
-@XF
 def test_final_red_on_new_impure_unit_test(git_repo):
     # Given: 基线绿；之后的提交在单元层新增一个起子进程的用例 tests/unit/test_u.py::test_spawns
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, integration=())
@@ -174,7 +166,6 @@ def test_final_red_on_new_impure_unit_test(git_repo):
     assert any(f.startswith("G11") and "tests/unit/test_u.py::test_spawns" in f for f in out["failed"]), out
 
 
-@XF
 def test_final_red_when_region_record_stale(git_repo):
     # Given: 基线记录了区域 hooks 的结果；之后分层文件里 hooks 的 cmd 被改成另一条命令
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {"tests/integration/hooks/test_h.py": HOOKS_OK},
@@ -194,7 +185,6 @@ def test_final_red_when_region_record_stale(git_repo):
 # ---------------------------------------------------------------- preflight
 
 
-@XF
 def test_preflight_stale_when_region_cmd_changed(git_repo):
     # Given: 基线绿且记录了区域 hooks；之后分层文件里 hooks 的 cmd 被改成另一条命令
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {"tests/integration/hooks/test_h.py": HOOKS_OK},
