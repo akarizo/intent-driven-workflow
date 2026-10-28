@@ -137,7 +137,8 @@ def pytest_runtest_logreport(report):
 '''
 # 嵌套会话防护插件（design D1）：写进临时目录为 flight_guard.py，与 --junitxml 一起经 -p 恒加载；
 # 环境里没有 FLIGHT_GUARD_OWNER 且不是 worker → 外层（设 OWNER，给自己的 xdist worker 写 flight_outer）；
-# 带 flight_outer 的 worker 算外层；其余是嵌套：抢在 junitxml 之前清掉 xmlpath，并设 FLIGHT_GUARD_NESTED=1（探针 / 依赖图据此不写）
+# 带 flight_outer 的 worker 算外层；其余是嵌套：抢在 junitxml 之前清掉 xmlpath，并设 FLIGHT_GUARD_NESTED=1（探针 / 依赖图据此不写）；
+# 外层写 FLIGHT_GUARD_OK 标记文件：走到 configure 说明外层的全部 -p 插件都已导入，输出里的插件导入错误只能来自嵌套会话
 GUARD_PLUGIN = '''import os
 
 import pytest
@@ -152,6 +153,8 @@ def pytest_configure(config):
         os.environ["FLIGHT_GUARD_OWNER"] = str(os.getpid())
         os.environ.pop("FLIGHT_GUARD_NESTED", None)
         _outer[0] = True
+        if os.environ.get("FLIGHT_GUARD_OK"):
+            open(os.environ["FLIGHT_GUARD_OK"], "w").close()
         return
     if wi is not None and wi.get("flight_outer"):
         return
@@ -581,8 +584,9 @@ except Exception:
 finally:
     sys.path[:] = _saved_path
 '''
-FLIGHT_ENV = ("FLIGHT_GUARD_OWNER", "FLIGHT_GUARD_NESTED", "FLIGHT_DEPS_OUT", "FLIGHT_DEPS_FILE", "FLIGHT_ROOT")
-# 三个 flight 插件任一导入失败（包装命令覆写了 PYTHONPATH 等）的 pytest 输出特征
+FLIGHT_ENV = ("FLIGHT_GUARD_OWNER", "FLIGHT_GUARD_NESTED", "FLIGHT_GUARD_OK", "FLIGHT_DEPS_OUT", "FLIGHT_DEPS_FILE",
+              "FLIGHT_ROOT")
+# 三个 flight 插件任一导入失败（包装命令覆写了 PYTHONPATH 等）的 pytest 输出特征；只在外层没写 FLIGHT_GUARD_OK 标记时才算外层失败
 FLIGHT_PLUGIN_FAIL = re.compile(r'Error importing plugin "flight_(?:guard|deps|tier_probe)"')
 # 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
 TIER_FILE = "test-tiers.json"
@@ -868,7 +872,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
           "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
           "deps": {"deps", "blind", "files", "nodes"} | None, "deps_why": str | None}；
     deps=True 时另加载依赖图插件（design D2）；deps=False 时 deps / deps_why 恒为 None。
-    任一 flight 插件加载失败 → 去掉全部插件、只带 junit 重跑一次（_plain）并返回其结果，探针 / 依赖图判没测到；
+    外层自己的 flight 插件加载失败（输出有插件导入错误、且外层没写 guard 标记；嵌套会话的同类错误不算）→ 去掉全部插件、只带 junit 重跑一次（_plain）并返回其结果，探针 / 依赖图判没测到；
     failed 非 None ⇔ 可度量（rc 1、junit 可解析、汇总行恰一行、汇总与 junit 计数一致且非 0，
     且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
     cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。
@@ -880,8 +884,10 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
         deps_out = None
+        guard_ok = os.path.join(tmp, "guard.ok")
         if not _plain:
             deps_out = _flight_plugins(tmp, env, root, deps)
+            env["FLIGHT_GUARD_OK"] = guard_ok
             env["PYTEST_ADDOPTS"] += " -p flight_guard" + (" -p flight_deps" if deps else "")
         if probe and not _plain:
             with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
@@ -890,7 +896,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
             env["FLIGHT_TIER_OUT"] = tier_out
         p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
-        if not _plain and FLIGHT_PLUGIN_FAIL.search(out):
+        if not _plain and not os.path.exists(guard_ok) and FLIGHT_PLUGIN_FAIL.search(out):
             res = run_test_gate(cmd, root, _plain=True, extra_env=extra_env)
             why = "防护插件加载失败（包装命令覆写了 PYTHONPATH？），%s"
             if probe:

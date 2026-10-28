@@ -5,6 +5,7 @@ import shlex
 import sys
 
 from conftest import load_hook, write
+from final_helpers import final, latest_anchor, make_repo
 
 PY = shlex.quote(sys.executable)
 CMD = "%s -m pytest -q -p no:cacheprovider tests" % PY
@@ -89,3 +90,39 @@ def test_guard_plugin_load_failure_falls_back(tmp_path):
     assert res["failed"] == ["tests.test_x::test_bad"], (res["why"], res["out"][-800:])
     assert res["deps"] is None
     assert res["deps_why"] and "加载失败" in res["deps_why"], res["deps_why"]
+
+
+# 用例里起一个嵌套 pytest：继承 PYTEST_ADDOPTS（含 -p flight_guard）却把 PYTHONPATH 覆写掉 → 嵌套会话插件导入失败；
+# 它的输出经 -s 进了外层输出。每跑一次往仓库外的计数文件追加一行
+SPAWN_BROKEN_NESTED = """
+    import os
+    import subprocess
+    import sys
+
+
+    def test_spawn(tmp_path):
+        with open(%r, "a") as f:
+            f.write("x\\n")
+        (tmp_path / "test_inner.py").write_text("def test_inner():\\n    pass\\n")
+        env = dict(os.environ, PYTHONPATH=os.devnull)
+        p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(tmp_path)],
+                           env=env, capture_output=True, text=True)
+        print(p.stdout + p.stderr)
+"""
+
+
+def test_nested_plugin_failure_not_taken_as_outer_failure(git_repo, tmp_path):
+    # Given: 被测仓库有一个用例起嵌套 pytest 并故意让它导入 flight 插件失败（错误文字进了外层输出），外层自身正常；
+    #        gate.test 带 -s，锚点池为空
+    count = tmp_path / "count.txt"
+    d = make_repo(git_repo, extra={"tests/test_spawn.py": SPAWN_BROKEN_NESTED % str(count)},
+                  gate_extra={"test": "%s -m pytest -q -s -p no:cacheprovider tests" % PY})
+
+    # When: 运行 final（没有锚点 → 全量）
+    out, p = final(git_repo, d)
+
+    # Then: 全量只跑一次（不去插件重跑）；依赖图测到，没有「依赖图未测」警告，锚点 measured 为真
+    assert out["incremental"]["mode"] == "full", out["incremental"]
+    assert count.read_text().count("x") == 1, count.read_text()
+    assert not [w for w in out["warnings"] if "依赖图未测" in w], out["warnings"]
+    assert latest_anchor(git_repo)["measured"] is True
