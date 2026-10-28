@@ -68,3 +68,21 @@ def test_impacted_full_when_impacted_cmd_changed_since_green(git_repo, tmp_path)
     # Then: 上次绿的指纹与当前不同、基线 plan_sha 也对不上 → 没有可用锚点，自动全量
     assert out["incremental"]["mode"] == "full", out["incremental"]
     assert "锚点" in out["incremental"]["full_why"], out["incremental"]
+
+
+def test_impacted_output_has_rerun_fields_as_null(git_repo, tmp_path):
+    # Given: 配了 gate.impacted；baseline 绿后只改了 src/a.py
+    rec = tmp_path / "delta.txt"
+    d = make_repo(git_repo, extra={"tools/impacted.py": IMPACTED},
+                  gate_extra={"impacted": "python3 tools/impacted.py %s" % rec})
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", "def a():\n    return 1  # 改过\n")
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: incremental 段带 rerun / rerun_tests / inherited_tests 三个键；门禁不知道选测命令选了什么，三者为 null
+    inc = out["incremental"]
+    assert inc["source"] == "impacted", inc
+    for k in ("rerun", "rerun_tests", "inherited_tests"):
+        assert k in inc and inc[k] is None, inc

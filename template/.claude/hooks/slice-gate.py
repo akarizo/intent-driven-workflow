@@ -2490,8 +2490,10 @@ def cmd_final(args):
                 warnings.extend([w2] if w2 else [])
                 if tiers is not None:
                     warnings.append("G10/G11 未判：gate.impacted 增量不挂单元层探针")
+                # 选测命令选了哪些用例门禁无从得知：重跑 / 沿用三项如实给 null（spec「输出」）
                 inc = {"mode": "incremental", "source": "impacted",
-                       "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta)}
+                       "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta),
+                       "rerun": None, "rerun_tests": None, "inherited_tests": None}
             elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
                 anchor, delta = pick
                 sel = _final_select(root, anchor, delta)

@@ -86,7 +86,7 @@ final 在 G7 绿、且没有命中任何自动全量条件时，SHALL 增量运�
 
 **前移锚点**：增量 final 结束后 SHALL 写一条新锚点。重跑过的测试文件用本次的结论与依赖，其余的沿用旧锚点。
 
-**输出**：final 的 JSON SHALL 带 `incremental` 段，含 `mode`（`incremental`）、`source`（`builtin` / `impacted`）、锚点的 `change` 与 `commit`、Δ 文件数、重跑的测试文件清单 `rerun` 与用例数、沿用的用例数。`summary` 末尾追加 `；增量：重跑 a 个文件（b 个用例）/ 沿用 c 个，锚点 <commit 前 10 位>`。timeline 备注写 `增量（锚点 <commit 前 10 位>，重跑 a 个文件 / 沿用 c 个用例） ok|red`，结论词仍在末尾。
+**输出**：final 的 JSON SHALL 带 `incremental` 段，含 `mode`（`incremental`）、`source`（`builtin` / `impacted`）、锚点的 `change` 与 `commit`、Δ 文件数、重跑的测试文件清单 `rerun` 与用例数、沿用的用例数。`summary` 末尾追加 `；增量：重跑 a 个文件（b 个用例）/ 沿用 c 个，锚点 <commit 前 10 位>`。timeline 备注写 `增量（锚点 <commit 前 10 位>，重跑 a 个文件 / 沿用 c 个用例） ok|red`，结论词仍在末尾。`source` 为 `impacted` 时门禁不知道选测命令选了哪些用例：`rerun`、重跑用例数 `rerun_tests` 与沿用用例数 `inherited_tests` 照样给出、值为 null；`summary` 末尾改为追加 `；增量：gate.impacted，Δ n 个文件，锚点 <commit 前 10 位>`，timeline 备注写 `增量（gate.impacted，锚点 <commit 前 10 位>，Δ n 个文件） ok|red`。
 
 #### Scenario: final-reruns-only-affected-tests
 - **GIVEN** 依赖图已记录的仓库（同 `full-run-records-dependency-map`），baseline 绿
