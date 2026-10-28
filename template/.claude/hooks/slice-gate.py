@@ -2470,7 +2470,7 @@ def cmd_final(args):
             imp = gate.get("impacted")
             pick = None
             if not args.full and cur_snap is not None:
-                pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name) if imp
+                pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
                         else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
             why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=gate)
             warnings.extend(wpy)
@@ -3466,19 +3466,28 @@ def _final_reusable(root, rec, cur_snap, head, change_rel, fps):
 
 
 def _last_green(rec):
-    """final 记录里最近一次绿的 {commit, snapshot}：记录本身绿取它，红取它带的 green；没有 → None。"""
+    """final 记录里最近一次绿的 {commit, snapshot, fps}：记录本身绿取它，红取它带的 green；没有 → None。"""
     if not isinstance(rec, dict):
         return None
     if (rec.get("result") or {}).get("ok") is True:
-        return {"commit": rec.get("commit"), "snapshot": rec.get("snapshot")}
+        return {"commit": rec.get("commit"), "snapshot": rec.get("snapshot"), "fps": rec.get("fps")}
     g = rec.get("green")
     return g if isinstance(g, dict) else None
 
 
-def _impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name):
-    """gate.impacted 的锚点（design D8）：本 change 最近一次绿的 final；它不是 HEAD 的祖先（或没有）时取基线 commit 与快照
+def _impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps):
+    """gate.impacted 的锚点（design D8）：本 change 最近一次绿的 final；它不是 HEAD 的祖先（或没有）、
+    或其 gate.test / gate.impacted / 分层指纹与当前不同时取基线 commit 与快照（基线 plan_sha 也须与当前相同）
     → (anchor, Δ) | None。不要求依赖图。"""
-    for cand in (_last_green(rec), baseline):
+    green = _last_green(rec)
+    if isinstance(green, dict):
+        gf = green.get("fps") if isinstance(green.get("fps"), dict) else {}
+        if ([(gf.get("cmd") or {}).get(k) for k in ("test", "impacted")] + [gf.get("tiers")]
+                != [fps["cmd"].get(k) for k in ("test", "impacted")] + [fps.get("tiers")]):
+            green = None
+    if not isinstance(baseline, dict) or baseline.get("plan_sha") != fps["plan_sha"]:
+        baseline = None
+    for cand in (green, baseline):
         if isinstance(cand, dict) and isinstance(cand.get("snapshot"), dict):
             d = _delta(root, cand, cur_snap, head, change_rel, True)
             if d is not None:
