@@ -26,7 +26,7 @@ def test_final_reruns_only_affected_tests(git_repo):
     inc = out["incremental"]
     assert inc["mode"] == "incremental", inc
     assert inc["rerun"] == ["tests/test_a.py"], inc
-    assert inc["inherited_tests"] >= 2, inc
+    assert inc["inherited_tests"] == 2, inc  # test_b 与 test_c 各 1 个用例
     anchor10 = inc["anchor"]["commit"][:10]
     assert "增量" in out["summary"] and anchor10 in out["summary"], out["summary"]
     note = timeline_rows(d, "final")[-1]
