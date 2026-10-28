@@ -100,3 +100,21 @@ def test_tiers_region_runs_when_anchor_never_tested_it(git_repo):
     # Then: 区域 hooks 运行了，final 红且 G2 region hooks 点名失败
     assert "hooks" in out["tier_sec"]["regions"], out
     assert out["ok"] is False and any("region hooks" in f for f in out["failed"]), out
+
+
+def test_tiers_region_runs_when_selected_file_in_region(git_repo):
+    # Given: 分层仓库已选区域 hooks，baseline 绿（锚点测过 hooks）；随后只改了区域里的测试文件
+    #        tests/integration/hooks/test_h.py（落在区域 paths 里、不在 covers 里），并让它失败
+    d = tiers_repo(git_repo, with_region=True)
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "tests/integration/hooks/test_h.py",
+                      IMPORT_SRC % "../../../src/hooks" + "import h\n\n\ndef test_h():\n    assert h.H == 2\n")
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 区域 hooks 运行了（不在 regions_skipped），rerun 含该测试文件；final 红且 G2 region hooks 点名失败
+    assert "hooks" in out["tier_sec"]["regions"], out
+    assert "hooks" not in out["incremental"]["regions_skipped"], out["incremental"]
+    assert "tests/integration/hooks/test_h.py" in out["incremental"]["rerun"], out["incremental"]
+    assert out["ok"] is False and any("region hooks" in f for f in out["failed"]), out
