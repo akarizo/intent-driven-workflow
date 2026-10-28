@@ -1,15 +1,11 @@
 """单元层探针：逐用例记录触碰与耗时、插件加载失败回退、非 pytest 不可度量
 （scenario: test-tiers#probe-classifies-each-test、#probe-counts-setup-and-teardown、
-#probe-falls-back-when-plugin-cannot-load、#probe-unmeasurable-for-non-pytest）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现 run_test_gate(probe=True) 后去掉标记即解锁。"""
+#probe-falls-back-when-plugin-cannot-load、#probe-unmeasurable-for-non-pytest）。"""
 import shlex
 import sys
 
-import pytest
-
 from conftest import load_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S1 尚未实现")
 PY = shlex.quote(sys.executable)
 CMD = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
 
@@ -20,7 +16,6 @@ def run_probe(root, cmd=CMD):
     return load_hook("slice-gate").run_test_gate(cmd, str(root), probe=True)
 
 
-@XF
 def test_probe_classifies_each_test(tmp_path):
     # Given: 单元层有四个用例：只做算术的；在 tmp_path 里写文件的；用子进程运行当前解释器的；
     #        在测试函数里首次 import 测试目录下另一个模块（helper_mod）的
@@ -60,7 +55,6 @@ def test_probe_classifies_each_test(tmp_path):
     assert probe[nid % "test_imports"]["hits"] == {}, probe
 
 
-@XF
 def test_probe_counts_setup_and_teardown(tmp_path):
     # Given: 单元层有一个用例，它的 fixture 在准备阶段与清理阶段各睡 0.4 秒，测试函数本身不睡
     write(tmp_path / "tests" / "unit" / "test_slowfix.py", """
@@ -88,7 +82,6 @@ def test_probe_counts_setup_and_teardown(tmp_path):
     assert rec["sec"] >= 0.8, rec
 
 
-@XF
 def test_probe_falls_back_when_plugin_cannot_load(tmp_path):
     # Given: gate.test 是 env PYTHONPATH= <解释器> -m pytest …（包装命令清空了 PYTHONPATH），单元层用例全绿
     write(tmp_path / "tests" / "unit" / "test_ok.py", "def test_ok():\n    assert True\n")
@@ -103,7 +96,6 @@ def test_probe_falls_back_when_plugin_cannot_load(tmp_path):
     assert "探针" in (res["probe_why"] or ""), res
 
 
-@XF
 def test_probe_unmeasurable_for_non_pytest(tmp_path):
     # Given: gate.test 是 true（不是 pytest）
 
