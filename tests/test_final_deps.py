@@ -60,3 +60,52 @@ def test_baseline_records_failed_nodes(git_repo):
     bl = json.loads((d / "gate-baseline.json").read_text(encoding="utf-8"))
     assert bl["test"]["failed_nodes"] == ["tests/test_old.py::test_broken"], bl["test"]
     assert latest_anchor(git_repo)["failed"] == ["tests/test_old.py::test_broken"]
+
+
+CONFTEST_IMPORT = """
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+    import helper
+"""
+CONFTEST_SESSION = """
+    import os
+
+    import pytest
+
+    DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "s.txt")
+
+
+    @pytest.fixture(scope="session")
+    def sdata():
+        with open(DATA, encoding="utf-8") as f:
+            return f.read().strip()
+"""
+
+
+def test_conftest_imports_recorded_as_dependency(git_repo):
+    # Given: tests/conftest.py 在收集阶段 import src/helper.py；tests/test_b.py 本身不 import 它
+    d = make_repo(git_repo, extra={"tests/conftest.py": CONFTEST_IMPORT, "src/helper.py": "X = 1\n"})
+
+    # When: baseline 跑全量
+    baseline(git_repo, d)
+
+    # Then: tests/test_b.py 的依赖含 src/helper.py 与 tests/conftest.py
+    deps = latest_anchor(git_repo)["deps"]
+    assert {"src/helper.py", "tests/conftest.py"} <= set(deps["tests/test_b.py"]), deps
+
+
+def test_session_fixture_reads_recorded_for_every_user(git_repo):
+    # Given: tests/conftest.py 的 session 级 fixture sdata 读 data/s.txt；tests/test_p.py 与 tests/test_q.py 都用它
+    use = "def test_%s(sdata):\n    assert sdata == 'ok'\n"
+    d = make_repo(git_repo, extra={"tests/conftest.py": CONFTEST_SESSION, "data/s.txt": "ok\n",
+                                   "tests/test_p.py": use % "p", "tests/test_q.py": use % "q"})
+
+    # When: baseline 跑全量
+    baseline(git_repo, d)
+
+    # Then: tests/test_p.py 与 tests/test_q.py 的依赖都含 data/s.txt
+    deps = latest_anchor(git_repo)["deps"]
+    assert "data/s.txt" in deps["tests/test_p.py"], deps
+    assert "data/s.txt" in deps["tests/test_q.py"], deps

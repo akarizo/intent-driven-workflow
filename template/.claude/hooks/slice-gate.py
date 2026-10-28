@@ -282,16 +282,21 @@ _files = set()
 _keys = {}
 _nodes = []
 _edges = {}
+_fxcur = [None]  # 正在 setup 的 session / package 级 fixture 名（只执行一次，读到的文件归全部使用者）
+_fx = {}
+_fx_blind = set()
+_uses = {}  # 测试文件 → 其用例用到的 fixture 名
 
 
 def _hook(event, args):
-    key = _cur[0]
-    if key is None or _busy[0] or _nested():
+    key, fx = _cur[0], _fxcur[0]
+    if (key is None and fx is None) or _busy[0] or _nested():
         return
     _busy[0] = True
     try:
-        if _observe(event, args, _deps.setdefault(key, set())):
-            _blind.add(key)
+        sink = _fx.setdefault(fx, set()) if fx is not None else _deps.setdefault(key, set())
+        if _observe(event, args, sink):
+            (_fx_blind if fx is not None else _blind).add(fx if fx is not None else key)
     except Exception:
         pass
     finally:
@@ -343,7 +348,20 @@ def _window(item):
     key = _key(item)
     if key is not None:
         _keys[item.nodeid] = key
+        _uses.setdefault(key, set()).update(getattr(item, "fixturenames", None) or ())
     return key
+
+
+# ceiling: fixture 按名字归并、session fixture 里起的子进程仍记在首个使用者名下 -> 出现同名异义 fixture 误选或子进程漏记时按 fixturedef 身份区分并给子进程单独的 FLIGHT_DEPS_FILE
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    on = not _nested() and getattr(fixturedef, "scope", "function") not in ("function", "class", "module")
+    saved = _fxcur[0]
+    if on:
+        _fxcur[0] = fixturedef.argname
+    yield
+    if on:
+        _fxcur[0] = saved
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -464,6 +482,16 @@ def _closure(key, roots):
     return {_abs_rel(q) for q in seen} - {None, key}
 
 
+def _conftests(key):
+    """测试文件目录链（到仓库根）上现存的 conftest.py（仓库相对路径）。"""
+    out = []
+    for d in _chain(os.path.join(_ROOT, key)):
+        r = _abs_rel(os.path.join(d, "conftest.py"))
+        if r and os.path.isfile(os.path.join(d, "conftest.py")):
+            out.append(r)
+    return out
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session):
     if _nested():
@@ -477,6 +505,13 @@ def pytest_sessionfinish(session):
     for key in sorted(_files):
         d = _deps.setdefault(key, set())
         d |= _closure(key, roots)
+        for c in _conftests(key):  # conftest 在目录收集阶段导入，不在任何窗口内：并入它本身与其静态 import 闭包
+            d.add(c)
+            d |= _closure(c, roots)
+        for fx in _uses.get(key, ()):
+            d |= _fx.get(fx, set())
+            if fx in _fx_blind:
+                _blind.add(key)
         d.discard(key)
         recs.append({"file": key, "deps": sorted(d), "test": True})
     recs += [{"file": k, "blind": True} for k in sorted(_blind)]
