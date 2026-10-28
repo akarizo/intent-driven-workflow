@@ -277,7 +277,7 @@ def test_no_checks_behavior_unchanged(git_repo):
     key = [g.get("test"), g.get("lint"), g.get("typecheck"), [[s.get("id"), s.get("verify")] for s in data["slices"]]]
     assert bl["plan_sha"] == hashlib.sha1(json.dumps(key, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     out = json.loads(f.stdout)
-    assert set(out) <= {"slice", "ok", "commit", "failed", "warnings", "scenarios", "summary", "dirty"}, out
+    assert set(out) <= {"slice", "ok", "commit", "failed", "warnings", "scenarios", "summary", "dirty", "incremental"}, out
     assert not any("G9" in x for x in out["failed"] + out["warnings"]), out
     assert not (common_dir(git_repo) / CHECKS_DIR).exists()
 
