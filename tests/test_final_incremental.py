@@ -2,10 +2,11 @@
 （scenario: incremental-final#final-reruns-only-affected-tests、#final-incremental-red-on-new-failure、
 #final-reruns-anchor-failures-and-changed-tests、#final-moves-anchor-forward、#final-full-when-global-file-changes、
 #final-full-when-no-anchor、#final-full-when-unseen-non-python-file-changes、#final-full-flag-forces-full）。"""
+import json
 import shutil
 
-from conftest import commit_all
-from final_helpers import anchors, baseline, change_and_commit, final, head, make_repo, timeline_rows
+from conftest import commit_all, write
+from final_helpers import PY, PYTEST, anchors, baseline, change_and_commit, final, head, make_repo, timeline_rows
 
 A_OK = "def a():\n    return 1  # 改过，仍正确\n"
 
@@ -178,3 +179,36 @@ def test_final_stays_red_after_full_collection_error(git_repo):
 
     # Then: final 仍然红（src/a.py 仍坏，tests/test_a.py 仍收集失败）
     assert out["ok"] is False, out
+
+
+def test_final_full_when_gate_test_has_options_beyond_runner(git_repo):
+    # Given: 没配 gate.pytest，gate.test 在 pytest 之后带了白名单外的选项（-W error）；baseline 绿，之后只改了 src/a.py
+    d = make_repo(git_repo, gate_extra={"pytest": None,
+                                        "test": "%s -m pytest -q -p no:cacheprovider -W error tests" % PY})
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", A_OK)
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 增量无法等价复现 gate.test 的选项 → 自动全量，full_why 点名 gate.pytest
+    inc = out["incremental"]
+    assert inc["mode"] == "full" and "gate.pytest" in inc["full_why"], inc
+
+
+def test_final_full_when_gate_pytest_changed_since_anchor(git_repo):
+    # Given: baseline 绿（锚点按当时的 gate.pytest 写入）；之后 gate.pytest 加了 -p no:randomly，又只改了 src/a.py
+    d = make_repo(git_repo)
+    baseline(git_repo, d)
+    data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    data["gate"]["pytest"] = PYTEST + " -p no:randomly"
+    write(d / "slices.json", json.dumps(data, ensure_ascii=False, indent=1))
+    commit_all(git_repo, "gate.pytest")
+    change_and_commit(git_repo, "src/a.py", A_OK)
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 锚点的 gate.pytest 与当前不同 → 不可用，自动全量
+    inc = out["incremental"]
+    assert inc["mode"] == "full" and "没有可用锚点" in inc["full_why"], inc

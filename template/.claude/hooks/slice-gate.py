@@ -2416,13 +2416,14 @@ def cmd_final(args):
         else:
             bt = (baseline or {}).get("test") or {}
             key = cmd_key(root, change_rel, test_cmd)
+            akey = _anchor_key(root, change_rel, test_cmd, gate)
             tkey = _tiers_key(root, args.change_dir, tiers)
             imp = gate.get("impacted")
             pick = None
             if not args.full and cur_snap is not None:
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name) if imp
-                        else _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name))
-            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp))
+                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
+            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=gate)
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
@@ -2552,7 +2553,7 @@ def cmd_final(args):
                                 anchor_part["tests"][f] = (anchor_part["tests"].get(f, 0) if full_run else 0) + n
             if cur_snap is not None and anchor_part is not None:
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
-                                             byproducts=byproducts, cmd_key=key, tiers_key=tkey))
+                                             byproducts=byproducts, cmd_key=akey, tiers_key=tkey))
                 if w:
                     warnings.append(w)
     checks = gate.get("checks") or []
@@ -2812,7 +2813,7 @@ def cmd_baseline(args):
         ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
         w = _anchor_write(root, {
             "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
-            "cmd_key": key, "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
+            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
             "measured": measured, "source": "baseline"})
@@ -3301,6 +3302,15 @@ def _pool_write(root, entry, sub=POOL_DIR, keep=POOL_KEEP, label="基线池"):
     return None
 
 
+def _anchor_key(root, change_rel, test_cmd, gate):
+    """锚点指纹：gate.test 的 cmd_key，配了 gate.pytest 时再并入它（增量重跑用它，改了它旧锚点即不可用）。"""
+    key = cmd_key(root, change_rel, test_cmd)
+    if key is None or not gate.get("pytest"):
+        return key
+    pk = cmd_key(root, change_rel, gate["pytest"])
+    return None if pk is None else hashlib.sha1(("%s|%s" % (key, pk)).encode("utf-8")).hexdigest()
+
+
 def _anchor_write(root, entry):
     """写一条锚点（design D3）；失败返回警告文本。"""
     return _pool_write(root, entry, ANCHOR_DIR, ANCHOR_KEEP, "锚点池")
@@ -3433,7 +3443,7 @@ def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
     return best
 
 
-def _full_why(root, full, pick, baseline, snap_why, impacted=False):
+def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None):
     """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。
     impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。"""
     if full:
@@ -3449,6 +3459,11 @@ def _full_why(root, full, pick, baseline, snap_why, impacted=False):
         return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
     if impacted:
         return None, []
+    gate = gate or {}
+    if not gate.get("pytest"):  # 增量重跑用从 gate.test 截出的 pytest 前缀，其后的选项会丢
+        h = _pytest_head(gate.get("test") or "")
+        if h is None or _derive_paths(h[1]) is None:
+            return "gate.test 带 pytest 之后的选项（或认不出 pytest 前缀），增量无法等价复现；配置 gate.pytest 可走增量", []
     seen = set()
     for v in (anchor.get("deps") or {}).values():
         seen.update(v)
