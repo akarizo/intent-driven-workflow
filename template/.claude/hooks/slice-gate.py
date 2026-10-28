@@ -545,6 +545,8 @@ def pytest_sessionfinish(session):
         recs.append({"file": key, "deps": sorted(d), "test": True})
     recs += [{"file": k, "blind": True} for k in sorted(_blind)]
     recs += [{"node": n, "outcome": o} for n, o in _nodes]
+    if getattr(session.config, "workerinput", None) is None:  # 会话结束标记只由外层 controller 写（xdist worker 不写）
+        recs.append({"flight_deps": "end"})
     _emit(recs)
 '''
 # 依赖图的 Python 子进程端：写进临时目录为 sitecustomize.py，经 PYTHONPATH 生效；
@@ -826,9 +828,9 @@ def _flight_plugins(tmp, env, root, deps):
 
 def _read_deps(path):
     """读依赖图 jsonl（path 与各进程的 path.<pid>）→ ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
-    没有开跑记录或有坏行（写入被中断，整条记录丢失）→ 不可度量；
+    没有开跑记录、没有会话结束标记（外层 controller 的 sessionfinish 末尾写）或有坏行（写入被中断，整条记录丢失）→ 不可度量；
     同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
-    started, deps, blind, files, nodes = False, {}, set(), set(), {}
+    started, ended, deps, blind, files, nodes = False, False, {}, set(), set(), {}
     d, base = os.path.split(path)
     try:
         names = sorted(n for n in os.listdir(d or ".") if n == base or n.startswith(base + "."))
@@ -852,8 +854,9 @@ def _read_deps(path):
             return None, "依赖图记录损坏（写入被中断？）"
         if not isinstance(rec, dict):
             continue
-        if rec.get("flight_deps") == "start":
-            started = True
+        if rec.get("flight_deps") in ("start", "end"):
+            started = started or rec["flight_deps"] == "start"
+            ended = ended or rec["flight_deps"] == "end"
             continue
         if isinstance(rec.get("node"), str):
             if nodes.get(rec["node"]) not in ("FAILED", "ERROR"):
@@ -870,7 +873,9 @@ def _read_deps(path):
             blind.add(f)
     if not started:
         return None, "没有依赖图输出（不是 pytest？）"
-    return {"deps": {f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(blind),
+    if not ended:
+        return None, "依赖图记录不完整（会话未正常结束）"
+    return {"deps":{f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(blind),
             "files": sorted(files), "nodes": nodes}, None
 
 

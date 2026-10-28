@@ -3,7 +3,7 @@
 #baseline-records-failed-nodes）。"""
 import json
 
-from conftest import commit_all, load_hook
+from conftest import commit_all, load_hook, write
 from final_helpers import PY, baseline, latest_anchor, make_repo
 
 
@@ -114,10 +114,11 @@ def test_session_fixture_reads_recorded_for_every_user(git_repo):
 
 def test_read_deps_merges_per_process_files(tmp_path):
     # Given: 两个进程各写一份依赖图：deps.jsonl.101 记 tests/test_a.py 依赖 src/a.py，
-    #        deps.jsonl.202 记 tests/test_b.py 依赖 data/b.json；两份都有开跑记录
+    #        deps.jsonl.202 记 tests/test_b.py 依赖 data/b.json；两份都有开跑记录，101（外层 controller）另有会话结束标记
     sg = load_hook("slice-gate")
     rec = '{"flight_deps": "start"}\n{"file": "%s", "deps": ["%s"], "test": true}\n'
-    (tmp_path / "deps.jsonl.101").write_text(rec % ("tests/test_a.py", "src/a.py"), encoding="utf-8")
+    (tmp_path / "deps.jsonl.101").write_text(rec % ("tests/test_a.py", "src/a.py") + '{"flight_deps": "end"}\n',
+                                             encoding="utf-8")
     (tmp_path / "deps.jsonl.202").write_text(rec % ("tests/test_b.py", "data/b.json"), encoding="utf-8")
 
     # When: 按 deps.jsonl 读依赖图
@@ -168,3 +169,19 @@ def test_anchor_unmeasured_when_baseline_red(git_repo):
     # Then: 基线无效 → 锚点 measured 为假
     assert bl["ok"] is False, bl
     assert latest_anchor(git_repo)["measured"] is False, latest_anchor(git_repo)
+
+
+def test_deps_unmeasured_when_session_not_finished(tmp_path):
+    # Given: 被测套件的 tests/test_z.py 在用例里 os._exit(0)，外层会话跑不到 sessionfinish（退出码仍为 0）
+    write(tmp_path / "pytest.ini", "[pytest]\n")
+    write(tmp_path / "tests" / "test_a.py", "def test_a():\n    pass\n")
+    write(tmp_path / "tests" / "test_z.py", "import os\n\n\ndef test_z():\n    os._exit(0)\n")
+    sg = load_hook("slice-gate")
+
+    # When: 门禁以依赖图方式运行这个套件
+    res = sg.run_test_gate("%s -m pytest -q -p no:cacheprovider tests" % PY, str(tmp_path), deps=True)
+
+    # Then: 依赖图只有开跑记录、没有结束标记 → 判为没测到，原因写明会话未正常结束
+    assert res["rc"] == 0, res["out"]
+    assert res["deps"] is None, res["deps"]
+    assert "不完整" in res["deps_why"], res["deps_why"]
