@@ -1,11 +1,7 @@
 """仓库可用 gate.impacted 代替内建选测
 （scenario: incremental-final#impacted-command-replaces-builtin-selection、#lint-rejects-bad-impacted）。"""
-import pytest
-
 from conftest import run_hook
 from final_helpers import baseline, change_and_commit, final, make_repo
-
-XF = pytest.mark.xfail(strict=True, reason="S3 尚未实现")
 
 IMPACTED = """
     import os
@@ -19,7 +15,6 @@ IMPACTED = """
 """
 
 
-@XF
 def test_impacted_command_replaces_builtin_selection(git_repo, tmp_path):
     # Given: gate.impacted 把 GATE_DELTA_FILE 的内容写到仓库外，再用 pytest 跑 tests/test_a.py；baseline 绿后只改了 src/a.py
     rec = tmp_path / "delta.txt"
@@ -37,7 +32,6 @@ def test_impacted_command_replaces_builtin_selection(git_repo, tmp_path):
     assert "src/a.py" in rec.read_text(encoding="utf-8").split()
 
 
-@XF
 def test_lint_rejects_bad_impacted(git_repo):
     # Given: slices.json 的 gate.impacted 是空串
     d = make_repo(git_repo, gate_extra={"impacted": ""})

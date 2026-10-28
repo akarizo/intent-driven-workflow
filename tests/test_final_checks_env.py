@@ -1,11 +1,7 @@
 """final 给检查命令注入 Δ 与锚点（scenario: incremental-final#final-checks-receive-delta-and-anchor）。"""
 import json
 
-import pytest
-
 from final_helpers import baseline, change_and_commit, final, make_repo
-
-XF = pytest.mark.xfail(strict=True, reason="S3 尚未实现")
 
 DUMP_ENV = """
     import json
@@ -20,7 +16,6 @@ DUMP_ENV = """
 """
 
 
-@XF
 def test_final_checks_receive_delta_and_anchor(git_repo, tmp_path):
     # Given: 配置了一项检查，它的 final 命令把三个环境变量与 Δ 文件内容写到仓库外；baseline 后只改了 src/a.py
     rec_path = tmp_path / "check-env.json"

@@ -4,12 +4,9 @@ import json
 import shlex
 import sys
 
-import pytest
-
 from conftest import commit_all, write
 from final_helpers import baseline, change_and_commit, final
 
-XF = pytest.mark.xfail(strict=True, reason="S3 尚未实现")
 PY = shlex.quote(sys.executable)
 UNIT_CMD = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
 HOOKS_CMD = "%s -m pytest -q -p no:cacheprovider tests/integration/hooks" % PY
@@ -47,7 +44,6 @@ def tiers_repo(repo, with_region):
     return d
 
 
-@XF
 def test_tiers_incremental_probes_selected_unit_files(git_repo):
     # Given: 分层仓库 baseline 绿；随后改了 src/a.py，使单元层 tests/unit/test_a.py 的用例开始写真实文件；
     #        tests/unit/test_z.py 不依赖 src/a.py
@@ -66,7 +62,6 @@ def test_tiers_incremental_probes_selected_unit_files(git_repo):
     assert "tests/unit/test_z.py" not in out["incremental"]["rerun"], out["incremental"]
 
 
-@XF
 def test_tiers_region_runs_only_when_selected(git_repo):
     # Given: 分层仓库已选区域 hooks，baseline 绿；随后只改了单元层依赖的 src/a.py
     d = tiers_repo(git_repo, with_region=True)
@@ -78,4 +73,5 @@ def test_tiers_region_runs_only_when_selected(git_repo):
 
     # Then: 区域 hooks 没有运行，regions_skipped 含 hooks；final 绿
     assert out["ok"] is True, out
+    assert "hooks" not in out["tier_sec"]["regions"], out["tier_sec"]
     assert "hooks" in out["incremental"]["regions_skipped"], out["incremental"]

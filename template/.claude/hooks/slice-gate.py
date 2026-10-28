@@ -810,7 +810,7 @@ def _deps_merge(a, b):
             "files": sorted(set(a["files"]) | set(b["files"])), "nodes": nodes}
 
 
-def run_test_gate(cmd, root, probe=False, deps=False, _plain=False):
+def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None):
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml 并恒加载防护插件 flight_guard（design D1）。
     返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
           "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
@@ -821,10 +821,10 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False):
     且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
     cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。
     probe=True 时另加载探针插件（design D4）：插件加载失败 → 不带探针重跑一次并返回其结果，probe 判不可度量；
-    probe=False 时 probe / probe_why 恒为 None。"""
+    probe=False 时 probe / probe_why 恒为 None。extra_env（dict）在 os.environ 之上追加给命令的环境变量。"""
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
-        env = dict(os.environ)
+        env = dict(os.environ, **(extra_env or {}))
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
         deps_out = None
@@ -839,7 +839,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False):
         p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
         if not _plain and FLIGHT_PLUGIN_FAIL.search(out):
-            res = run_test_gate(cmd, root, _plain=True)
+            res = run_test_gate(cmd, root, _plain=True, extra_env=extra_env)
             why = "防护插件加载失败（包装命令覆写了 PYTHONPATH？），%s"
             if probe:
                 res["probe_why"] = why % "探针未测；G10/G11 未判"
@@ -912,6 +912,8 @@ def plan_sha(data):
     checks = gate.get("checks")
     if isinstance(checks, list) and checks:  # 检查的 baseline 命令也归基线负责（design D7）；final 不在此列
         key.append([[c.get("name"), c.get("baseline")] for c in checks if isinstance(c, dict)])
+    if gate.get("impacted") is not None:  # gate 命令之一（incremental-final design D8）；未配置时与旧算法相同
+        key.append(["impacted", gate.get("impacted")])
     integration = gate.get("integration")
     if isinstance(integration, list) and integration:  # 已选区域归基线负责（design D9）；未选时与旧算法相同
         key.append(["integration", list(integration)])
@@ -1321,6 +1323,9 @@ def lint_plan(data, change_dir=None):
                     for pb in by_id[b].get("owns") or []:
                         if globs_intersect(pa, pb):
                             errors.append("overlap: 同一 wave 的 %s 与 %s 都覆盖 %s / %s" % (a, b, pa, pb))
+    imp = (data.get("gate") or {}).get("impacted")
+    if imp is not None and not _nonblank(imp):
+        errors.append("gate: gate.impacted 必须是非空字符串")
     check_errors, check_names, skip_keys = _lint_checks(data.get("gate") or {})
     errors.extend(check_errors)
     if change_dir is not None:
@@ -1726,10 +1731,11 @@ def _g7_timeout(gate):
     return 600
 
 
-def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None):
+def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, probe_out=None):
     """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。
     durations 是 dict 时把逐用例耗时（setup + call + teardown）按 nodeid 累加进去。
-    deps_out 是 dict 时另加载防护与依赖图插件，结束后把依赖图（形状同 run_test_gate 的 deps）写进去；没测到则不写。"""
+    deps_out 是 dict 时另加载防护与依赖图插件，结束后把依赖图（形状同 run_test_gate 的 deps）写进去；没测到则不写。
+    probe_out 是 dict 时另加载单元层探针，结束后写入 {"probe", "probe_why"}（形状同 run_test_gate）。"""
     gate = gate or {}
     prefix, _ = _g7_runner(gate)
     timeout = _g7_timeout(gate)
@@ -1748,6 +1754,13 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None):
             env["FLIGHT_G7_SEC"] = sec_out
         dout = _flight_plugins(tmp, env, root, True) if isinstance(deps_out, dict) else None
         flight = ["-p", "flight_guard", "-p", "flight_deps"] if dout else []
+        tier_out = os.path.join(tmp, "tier-probe.jsonl")
+        env.pop("FLIGHT_TIER_OUT", None)
+        if isinstance(probe_out, dict):
+            with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
+                f.write(TIER_PROBE_PLUGIN)
+            env["FLIGHT_TIER_OUT"] = tier_out
+            flight += ["-p", "flight_tier_probe"]
         argv = prefix + ["-p", "flight_g7_outcomes", *flight, "-p", "no:cacheprovider", "--rootdir", root, *targets]
         timed_out, rc, text = False, None, ""
         try:
@@ -1781,6 +1794,8 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None):
             parsed, _ = _read_deps(dout)
             if parsed is not None:
                 deps_out.update(parsed)
+        if isinstance(probe_out, dict):
+            probe_out["probe"], probe_out["probe_why"] = _read_probe(tier_out)
         return outcomes, rc, text or "", timed_out
 
 
@@ -2302,8 +2317,8 @@ def cmd_final(args):
         cur_snap, snap_why = None, "内容快照失败：%s" % e
     fps = _final_fps(root, change_rel, data, tiers)
     # 同树沿用（design D6）：不运行 G7 及其后的任何东西
-    rec = None if args.full else _final_rec_read(root, name)
-    if _final_reusable(root, rec, cur_snap, head, change_rel, fps):
+    rec = _final_rec_read(root, name)
+    if not args.full and _final_reusable(root, rec, cur_snap, head, change_rel, fps):
         prev, short = rec["result"], str(rec["commit"])[:10]
         result = {"slice": "final", "ok": True, "commit": head, "failed": [], "warnings": warnings,
                   "scenarios": prev.get("scenarios"), "summary": "%s；同树沿用 %s" % (prev.get("summary"), short),
@@ -2329,6 +2344,7 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     inc = None
+    final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
     if v7:
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
     else:
@@ -2342,21 +2358,45 @@ def cmd_final(args):
             bt = (baseline or {}).get("test") or {}
             key = cmd_key(root, change_rel, test_cmd)
             tkey = _tiers_key(root, args.change_dir, tiers)
+            imp = gate.get("impacted")
             pick = None
             if not args.full and cur_snap is not None:
-                pick = _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name)
-            why, wpy = _full_why(root, args.full, pick, baseline, snap_why)
+                pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name) if imp
+                        else _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name))
+            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp))
             warnings.extend(wpy)
-            if why is None and tiers is not None:  # 分层叠加的增量（单元层探针、区域按需）尚未支持：保 G10 / G11
-                why = "有测试分层（分层增量尚未支持）"
+            if pick is not None:
+                final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
+                             "anchor": pick[0].get("commit") or ""}
             anchor_part, byproducts = None, []
+            run_regions = None  # 本次运行的已选区域；None = 全部
             t0 = time.time()
-            if why is None:  # 增量（design D5）
+            if why is None and imp:  # gate.impacted 代替内建选测（design D8）
+                anchor, delta = pick
+                with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
+                    tg = run_test_gate(imp, root, extra_env=_final_env(final_ctx, tmp))
+                unit_wall = time.time() - t0
+                f2, w2 = _diff_verdict("test", tg, bt.get("failed"))
+                failed.extend([f2] if f2 else [])
+                warnings.extend([w2] if w2 else [])
+                if tiers is not None:
+                    warnings.append("G10/G11 未判：gate.impacted 增量不挂单元层探针")
+                inc = {"mode": "incremental", "source": "impacted",
+                       "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta)}
+            elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
                 anchor, delta = pick
                 sel = _final_select(root, anchor, delta)
-                d, outcomes, rc, text, timed_out = {}, [], 0, "", False
-                if sel:
-                    outcomes, rc, text, timed_out = _pytest_outcomes(root, sel, gate, deps_out=d)
+                run_sel, unit_files, hit = sel, set(), {}
+                if tiers is not None:
+                    regs = tiers.get("regions") or {}
+                    hit = {r: [f for f in sel if any(glob_match(f, g) for g in regs[r]["paths"])] for r in regs}
+                    run_regions = [r for r in _selected_regions(gate) if hit.get(r)]
+                    run_sel = [f for f in sel if not any(f in v for v in hit.values())]
+                    unit_files = {f for f in run_sel if any(glob_match(f, g) for g in tiers["unit"]["paths"])}
+                d, pr, outcomes, rc, text, timed_out = {}, {}, [], 0, "", False
+                if run_sel:
+                    outcomes, rc, text, timed_out = _pytest_outcomes(root, run_sel, gate, deps_out=d,
+                                                                     probe_out=pr if unit_files else None)
                 unit_wall = time.time() - t0
                 known = set(bt.get("failed_nodes") or [])
                 fails = sorted({n for n, o in outcomes if o in ("FAILED", "ERROR")})
@@ -2369,13 +2409,25 @@ def cmd_final(args):
                     failed.append("G2 test：增量重跑 exit %s\n%s" % (rc, _tail(text)))
                 elif fails:
                     warnings.append("G2 test：增量重跑的失败均为基线预存红（%d 条已按基线排除）" % len(fails))
+                if unit_files:  # 只对选中的单元层用例判 G10 / G11（与全量同一套判定）
+                    probe = pr.get("probe")
+                    if probe is not None:
+                        probe = {n: r for n, r in probe.items() if n.split("::", 1)[0] in unit_files}
+                    f10, w10 = _unit_tier_verdict(root, gate, {"probe": probe, "probe_why": pr.get("probe_why")},
+                                                  tiers.get("slow_allow") or {})
+                    failed.extend(f10)
+                    warnings.extend(w10)
+                rerun = sorted(set(run_sel).union(*[hit[r] for r in run_regions or []]))
                 inherited = sum(n for f, n in (anchor.get("tests") or {}).items()
-                                if f not in sel and os.path.isfile(os.path.join(root, f)))
+                                if f not in rerun and os.path.isfile(os.path.join(root, f)))
                 inc = {"mode": "incremental", "source": "builtin",
                        "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")},
-                       "delta": len(delta), "rerun": sel, "rerun_tests": len({n for n, _ in outcomes}),
+                       "delta": len(delta), "rerun": rerun, "rerun_tests": len({n for n, _ in outcomes}),
                        "inherited_tests": inherited}
-                anchor_part = _anchor_forward(root, anchor, sel, d, fails, outcomes)
+                if tiers is not None:
+                    inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
+                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
+                anchor_part["measured"] = bool(d) or not run_sel
                 anchor_part["source"] = "final-incremental"
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）
@@ -2398,9 +2450,9 @@ def cmd_final(args):
                 if ad is None:
                     warnings.append("依赖图未测：%s" % tg["deps_why"])
                 inc = {"mode": "full", "full_why": why}
-            if tiers is not None:  # 区域：增量时照旧全部运行（S3 收窄）；全量时并入依赖图
+            if tiers is not None:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
                 bregions = (baseline or {}).get("regions")
-                for rname in _selected_regions(gate):
+                for rname in (_selected_regions(gate) if run_regions is None else run_regions):
                     rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
                     rrec = bregions.get(rname) if isinstance(bregions, dict) else None
                     if not isinstance(rrec, dict) or not rcmd or rrec.get("cmd") != rcmd:
@@ -2408,12 +2460,12 @@ def cmd_final(args):
                         continue
                     full_run = inc["mode"] == "full"
                     t0 = time.time()
-                    rg = run_test_gate(rcmd, root, deps=full_run)
+                    rg = run_test_gate(rcmd, root, deps=anchor_part is not None)
                     region_wall[rname] = time.time() - t0
                     f2, w2 = _diff_verdict("region " + rname, rg, rrec.get("failed"))
                     failed.extend([f2] if f2 else [])
                     warnings.extend([w2] if w2 else [])
-                    if full_run and anchor_part["measured"]:
+                    if anchor_part is not None and anchor_part["measured"]:
                         if rg["deps"] is None:
                             anchor_part["measured"] = False
                             warnings.append("依赖图未测：区域 %s：%s" % (rname, rg["deps_why"]))
@@ -2422,9 +2474,9 @@ def cmd_final(args):
                             anchor_part.update({k: m[k] for k in ("deps", "blind", "files")})
                             rfail = [n for n, o in rg["deps"]["nodes"].items() if o in ("FAILED", "ERROR")]
                             anchor_part["failed"] = sorted(set(anchor_part["failed"]) | set(rfail))
-                            for f, n in _node_counts(rg["deps"]["nodes"]).items():
-                                anchor_part["tests"][f] = anchor_part["tests"].get(f, 0) + n
-            if cur_snap is not None:
+                            for f, n in _node_counts(rg["deps"]["nodes"]).items():  # 增量：区域文件换成本次计数
+                                anchor_part["tests"][f] = (anchor_part["tests"].get(f, 0) if full_run else 0) + n
+            if cur_snap is not None and anchor_part is not None:
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
                                              byproducts=byproducts, cmd_key=key, tiers_key=tkey))
                 if w:
@@ -2436,7 +2488,7 @@ def cmd_final(args):
     elif checks and v7:
         warnings.append("G9 检查未跑：G7 已红，scenario 全绿后重跑 final")
     elif checks:
-        failed.extend(_final_checks(root, args.change_dir, checks, baseline))
+        failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx))
     result = {"slice": "final", "ok": not failed, "commit": head,
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
@@ -2446,7 +2498,11 @@ def cmd_final(args):
     inc_note = None
     if inc is not None:
         result["incremental"] = inc
-        if inc["mode"] == "incremental":
+        if inc.get("source") == "impacted":
+            a10 = str(inc["anchor"]["commit"])[:10]
+            result["summary"] += "；增量：gate.impacted，Δ %d 个文件，锚点 %s" % (inc["delta"], a10)
+            inc_note = "增量（gate.impacted，锚点 %s，Δ %d 个文件）" % (a10, inc["delta"])
+        elif inc["mode"] == "incremental":
             a10 = str(inc["anchor"]["commit"])[:10]
             result["summary"] += "；增量：重跑 %d 个文件（%d 个用例）/ 沿用 %d 个，锚点 %s" % (
                 len(inc["rerun"]), inc["rerun_tests"], inc["inherited_tests"], a10)
@@ -2467,7 +2523,11 @@ def cmd_final(args):
     append_report(args.change_dir, result)
     timeline_record(args.change_dir, "final", final_note)
     if cur_snap is not None:  # 每次实跑结束（绿或红）都写记录，供下次同树沿用（design D6）
-        w = _final_rec_write(root, name, {"commit": head, "snapshot": cur_snap, "fps": fps, "result": result})
+        entry = {"commit": head, "snapshot": cur_snap, "fps": fps, "result": result}
+        green = None if result["ok"] else _last_green(rec)
+        if green:  # 红记录带上最近一次绿的树，供 gate.impacted 取锚点（design D8）
+            entry["green"] = green
+        w = _final_rec_write(root, name, entry)
         if w:
             result["warnings"].append(w)
     print(json.dumps(result, ensure_ascii=False))
@@ -3015,10 +3075,26 @@ def _check_dir(root, change, name):
     return path
 
 
-def _check_env(phase, change, base_commit, cdir):
-    """检查命令的环境（运行契约）：os.environ 副本 + GATE_PHASE / GATE_CHANGE / GATE_BASE_COMMIT / GATE_CHECK_DIR。"""
-    return dict(os.environ, GATE_PHASE=phase, GATE_CHANGE=change, GATE_BASE_COMMIT=base_commit or "",
-                GATE_CHECK_DIR=cdir)
+def _final_env(final_ctx, ddir):
+    """final 注入的三个变量（incremental-final design D7）：Δ 每行一个写进 <ddir>/.gate-delta.txt；
+    final_ctx = {"mode", "delta": [...] | None, "anchor": commit | ""}；没有 Δ 时 GATE_DELTA_FILE 为空串。写失败抛 OSError。"""
+    path = ""
+    if final_ctx.get("delta") is not None:
+        path = os.path.join(ddir, ".gate-delta.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("".join(p + "\n" for p in final_ctx["delta"]))
+    return {"GATE_FINAL_MODE": final_ctx.get("mode") or "", "GATE_DELTA_FILE": path,
+            "GATE_ANCHOR_COMMIT": final_ctx.get("anchor") or ""}
+
+
+def _check_env(phase, change, base_commit, cdir, final_ctx=None):
+    """检查命令的环境（运行契约）：os.environ 副本 + GATE_PHASE / GATE_CHANGE / GATE_BASE_COMMIT / GATE_CHECK_DIR；
+    final_ctx 非 None（只在 final）时另加 _final_env 的三个变量。"""
+    env = dict(os.environ, GATE_PHASE=phase, GATE_CHANGE=change, GATE_BASE_COMMIT=base_commit or "",
+               GATE_CHECK_DIR=cdir)
+    if final_ctx is not None:
+        env.update(_final_env(final_ctx, cdir))
+    return env
 
 
 def _run_check(cmd, root, env, timeout):
@@ -3062,7 +3138,7 @@ def _check_msg(head, log, out):
     return msg + ("\n" + tail if tail else "")
 
 
-def _final_checks(root, change_dir, checks, baseline):
+def _final_checks(root, change_dir, checks, baseline, final_ctx=None):
     """成对检查的 final 半（G9，design D8）：按 gate.checks 顺序运行，先核对基线记录；返回 failed 项列表。"""
     change = os.path.basename(os.path.realpath(change_dir))
     base = (baseline or {}).get("commit")
@@ -3078,11 +3154,11 @@ def _final_checks(root, change_dir, checks, baseline):
         try:
             cdir = _check_dir(root, change, cname)
             os.makedirs(cdir, exist_ok=True)
+            env = _check_env("final", change, base, cdir, final_ctx)
         except (RuntimeError, OSError) as e:
             failed.append("G9 check %s：共用目录不可用：%s" % (cname, e))
             continue
-        rc, out, _, timed_out = _run_check(c["final"], root, _check_env("final", change, base, cdir),
-                                           c.get("timeout_sec"))
+        rc, out, _, timed_out = _run_check(c["final"], root, env, c.get("timeout_sec"))
         log = _check_log(cdir, "final", out)
         if timed_out:
             failed.append(_check_msg("G9 check %s：超时 %s 秒" % (cname, c.get("timeout_sec")), log, out))
@@ -3247,6 +3323,27 @@ def _final_reusable(root, rec, cur_snap, head, change_rel, fps):
     return d is not None and not [p for p in d if not _is_bookkeeping(p, changes_rel)]
 
 
+def _last_green(rec):
+    """final 记录里最近一次绿的 {commit, snapshot}：记录本身绿取它，红取它带的 green；没有 → None。"""
+    if not isinstance(rec, dict):
+        return None
+    if (rec.get("result") or {}).get("ok") is True:
+        return {"commit": rec.get("commit"), "snapshot": rec.get("snapshot")}
+    g = rec.get("green")
+    return g if isinstance(g, dict) else None
+
+
+def _impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name):
+    """gate.impacted 的锚点（design D8）：本 change 最近一次绿的 final；它不是 HEAD 的祖先（或没有）时取基线 commit 与快照
+    → (anchor, Δ) | None。不要求依赖图。"""
+    for cand in (_last_green(rec), baseline):
+        if isinstance(cand, dict) and isinstance(cand.get("snapshot"), dict):
+            d = _delta(root, cand, cur_snap, head, change_rel, True)
+            if d is not None:
+                return dict(cand, change=name), d
+    return None
+
+
 def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
     """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None。"""
     best = None
@@ -3257,19 +3354,22 @@ def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
     return best
 
 
-def _full_why(root, full, pick, baseline, snap_why):
-    """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。"""
+def _full_why(root, full, pick, baseline, snap_why, impacted=False):
+    """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。
+    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。"""
     if full:
         return "手动要求 --full", []
     if pick is None:
         return "没有可用锚点" + ("（%s）" % snap_why if snap_why else ""), []
     bt = (baseline or {}).get("test") or {}
-    if bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
+    if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
         return "基线缺 failed_nodes（有预存红），重跑 baseline", []
     anchor, delta = pick
     glob = [p for p in delta if _global_file(p)]
     if glob:
         return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
+    if impacted:
+        return None, []
     seen = set()
     for v in (anchor.get("deps") or {}).values():
         seen.update(v)
