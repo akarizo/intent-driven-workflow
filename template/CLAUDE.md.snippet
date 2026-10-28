@@ -17,6 +17,7 @@
 - **Git 授权边界**：建 worktree 可自动做；**merge / push / 删 worktree / commit 一律交你授权**，不代劳
 - **ADR 不可改**：入 `openspec/adr/` 后需变更则 supersede 旧版，禁原地改
 - **TDD**：写实现前先写失败测试，红→验红→绿→验绿→重构；单测先写 `# Given: / # When: / # Then:` 三段中文注释（详见 `.claude/skills/test-driven-development/`）
+- **测试先定层**：单元 = 纯函数且每用例 <3s（基线）；碰真实文件进集成区域（`openspec/test-tiers.json`，G10–G12 机械校验）
 - **两处人类审批不可省**：飞行计划批准（运行 `/opsx-apply`）与 PR review
 - **落点收敛**：ADR → `openspec/adr/`；未成 change 的探索稿 → `openspec/superpower/`；每 change 产物 → 其 worktree
 

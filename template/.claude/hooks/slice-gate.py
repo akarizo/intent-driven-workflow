@@ -4,6 +4,8 @@
 # 子命令：
 #   lint     --change-dir DIR                 校验 slices.json；stdout 打印 waves JSON；违规 exit 2 并在 stderr 点名规则
 #                                              含 gate.checks（name/baseline/final/timeout_sec）与 checks_skip 形状，并对账 <openspec 根>/gate-checks.json 默认检查
+#                                              tiers:：<openspec 根>/test-tiers.json 存在时校验其形状、gate.test == unit.cmd、
+#                                              gate.integration / integration_skip、covers × owns 表态、scenario 测试归层；不存在而计划写了区域选择 → 报缺文件
 #   waves    --change-dir DIR                 只打印 waves JSON
 #   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH]
 #                                              在 git toplevel 写 .openspec-slice 标记（slice / change_dir / base / started）；
@@ -12,11 +14,12 @@
 #                                              无同片标记时：带 --resume-checkpoint 恢复 refs/flight/<change>/<S> 快照（stdout 追加 checkpoint），
 #                                              不带则清掉本片旧快照
 #   checkpoint                                 PostToolUse hook：有标记时把本片 owns 内改动快照到 refs/flight/<change>/<S>；静默、恒 exit 0
-#   gate     S --change-dir DIR [--base REF]  跑 G1–G8；stdout 打印 JSON（含 base）；追加 gate-report.md；ok 时删标记，红时标记 red_count+1
+#   gate     S --change-dir DIR [--base REF]  跑 G1–G8、G12（分层文件合法时：区间内改动的测试文件须落在单元层或已选区域）；stdout 打印 JSON（含 base）；追加 gate-report.md；ok 时删标记，红时标记 red_count+1
 #   record   --change-dir DIR --json '<gate JSON>' | --slice S --commit SHA [--red] [--failed ...] [--warnings ...]
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
+#                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #   baseline --change-dir DIR [--full]        起飞前预检：先把 gate-baseline.json 写成运行标记 {running, pid, started}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              耗时写回 slices.json.gate.full_suite_sec；退出码按 ok；
@@ -27,9 +30,12 @@
 #                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
+#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
+#                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
 #                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
+#                                              分层文件存在时已选区域的基线 regions.<name>.cmd 须等于分层文件当前 cmd，否则基线过期
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -39,7 +45,14 @@
 # JSON 契约：{"slice", "ok", "commit", "failed": [...], "warnings": [...],
 #             "ceilings": [[路径, 行号, 限制, 升级路径], ...], "summary"}；failed 每项以 G<n> 开头并点名对象。
 #             ceilings 由执行体转写后经 record --json 回流，形状不可信：解析见 ceiling_rows_from_json，绝不抛异常。
+#             探针：run_test_gate(cmd, root, probe=True) 另返回 probe = {nodeid: {"sec", "hits": {"文件"|"子进程"|"网络": 样例}}}
+#             或 None（不可度量，probe_why 写原因）；probe=False 时二者恒为 None。
 #             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
+#             gate-baseline.json 有分层文件时另有 "tiers": {"measured": bool[, "why"]} 与 "regions": {name: {exit, sec, cmd[, failed]}}；
+#             无分层文件时无这两个键。
+#             分层文件合法时 gate / final 的 JSON 与 gate-baseline.json（及 baseline 的 stdout）另有
+#             "tier_sec": {"unit", "integration", "regions": {name: 秒}[, "unclassified"]}，summary / timeline 备注带「单元 Xs · 集成 Ys」；
+#             无分层文件时无此键，summary 与备注不变。
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import fnmatch
@@ -84,8 +97,15 @@ MARK_RE = re.compile(r"xfail|skip", re.I)
 # junitxml 区分不出非 strict 的 XPASS（与 PASSED 同形），所以不用它
 G7_PLUGIN = '''import json, os
 
+_sec = {}
+
 
 def pytest_runtest_logreport(report):
+    if "FLIGHT_G7_SEC" in os.environ:
+        _sec[report.nodeid] = _sec.get(report.nodeid, 0.0) + report.duration
+        if report.when == "teardown":
+            with open(os.environ["FLIGHT_G7_SEC"], "a", encoding="utf-8") as f:
+                f.write(json.dumps([report.nodeid, _sec.pop(report.nodeid)]) + "\\n")
     if report.when == "call":
         if hasattr(report, "wasxfail"):
             out = "XPASS" if report.passed else "XFAIL"
@@ -102,6 +122,93 @@ def pytest_runtest_logreport(report):
     with open(os.environ["FLIGHT_G7_OUT"], "a", encoding="utf-8") as f:
         f.write(json.dumps([report.nodeid, out]) + "\\n")
 '''
+# 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
+TIER_FILE = "test-tiers.json"
+UNIT_MAX_SEC = 3.0
+TIER_NAME_RE = re.compile(r"[a-z0-9-]+")
+# 单元层探针插件：写进临时目录为 flight_tier_probe.py，经 PYTEST_ADDOPTS -p 加载；
+# 只在 setup / call / teardown 窗口内用审计钩子记文件 / 子进程 / 网络触碰（import 机制与断言重写读源文件不计），
+# 每个用例 teardown 后向 FLIGHT_TIER_OUT 追加一行 {nodeid, sec, hits}；会话开始先写一行 {"probe": "start"}
+TIER_PROBE_PLUGIN = '''import json, os, sys
+
+import pytest
+
+FS = {"open", "os.mkdir", "os.remove", "os.rename", "os.rmdir", "os.chmod", "os.truncate", "os.utime",
+      "os.symlink", "os.link", "os.listdir", "os.scandir", "os.walk", "glob.glob", "shutil.copyfile",
+      "shutil.copytree", "shutil.move", "shutil.rmtree", "shutil.copymode", "shutil.copystat"}
+PROC = {"subprocess.Popen", "os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.fork"}
+NET = {"socket.connect", "socket.bind", "urllib.Request"}
+KIND = dict([(e, "文件") for e in FS] + [(e, "子进程") for e in PROC] + [(e, "网络") for e in NET])
+SKIP = ("importlib._bootstrap", "zipimport", "_pytest.assertion.rewrite", "linecache")  # linecache：回溯 / inspect 读源码
+_cur = [None]
+_hits = {}
+_sec = {}
+
+
+def _hook(event, args):
+    nid = _cur[0]
+    if nid is None:
+        return
+    kind = KIND.get(event)
+    if kind is None:
+        return
+    f = sys._getframe(1)
+    while f is not None:
+        if str(f.f_globals.get("__name__") or "").startswith(SKIP):
+            return
+        f = f.f_back
+    hits = _hits.setdefault(nid, {})
+    if kind not in hits:
+        hits[kind] = "%s %s" % (event, str(args[0] if args else "")[:120])
+
+
+sys.addaudithook(_hook)
+
+
+def _write(rec):
+    path = os.environ.get("FLIGHT_TIER_OUT")
+    if not path:
+        return
+    saved, _cur[0] = _cur[0], None
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\\n")
+    finally:
+        _cur[0] = saved
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    _cur[0] = item.nodeid
+    yield
+    _cur[0] = None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    _cur[0] = item.nodeid
+    yield
+    _cur[0] = None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item):
+    _cur[0] = item.nodeid
+    yield
+    _cur[0] = None
+
+
+def pytest_sessionstart(session):
+    _write({"probe": "start"})
+
+
+def pytest_runtest_logreport(report):
+    nid = report.nodeid
+    _sec[nid] = _sec.get(nid, 0.0) + (report.duration or 0.0)
+    if report.when == "teardown":
+        _write({"nodeid": nid, "sec": _sec.pop(nid, 0.0), "hits": _hits.pop(nid, {})})
+'''
+TIER_PLUGIN_FAIL = 'Error importing plugin "flight_tier_probe"'
 # G8 天花板标记：行首注释紧跟标记，两段用 -> 或 → 分隔（形如 `限制 -> 升级条件/路径`）
 CEILING_RE = re.compile(r"^\s*(?:#|//|--|\*)+\s*ceiling\s*:\s*(.*)$", re.I)
 CEILING_SPLIT = re.compile(r"->|→")
@@ -179,19 +286,66 @@ def _summary_failed(line):
     return n
 
 
-def run_test_gate(cmd, root):
+def _read_probe(path):
+    """读探针 jsonl → (probe | None, probe_why | None)。没有开跑记录 → 不可度量；
+    同一 nodeid 多行（xdist 主进程与 worker）合并：sec 取最大、hits 按类别保留先出现的样例。"""
+    started, probe = False, {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("probe") == "start":
+            started = True
+            continue
+        nid = rec.get("nodeid")
+        if not isinstance(nid, str):
+            continue
+        cur = probe.setdefault(nid, {"sec": 0.0, "hits": {}})
+        cur["sec"] = max(cur["sec"], float(rec.get("sec") or 0.0))
+        for kind, sample in (rec.get("hits") or {}).items():
+            cur["hits"].setdefault(kind, sample)
+    if not started:
+        return None, "没有探针输出（不是 pytest？）"
+    return probe, None
+
+
+def run_test_gate(cmd, root, probe=False):
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml。
-    返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None}；
+    返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
+          "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None}；
     failed 非 None ⇔ 可度量（rc 1、junit 可解析、汇总行恰一行、汇总与 junit 计数一致且非 0，
     且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
-    cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。"""
+    cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。
+    probe=True 时另加载探针插件（design D4）：插件加载失败 → 不带探针重跑一次并返回其结果，probe 判不可度量；
+    probe=False 时 probe / probe_why 恒为 None。"""
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
         env = dict(os.environ)
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
+        tier_out = os.path.join(tmp, "tier-probe.jsonl")
+        if probe:
+            with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
+                f.write(TIER_PROBE_PLUGIN)
+            env["PYTHONPATH"] = tmp + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+            env["PYTEST_ADDOPTS"] += " -p flight_tier_probe"
+            env["FLIGHT_TIER_OUT"] = tier_out
         p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
-        res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None}
+        if probe and TIER_PLUGIN_FAIL in out:
+            res = run_test_gate(cmd, root)
+            res["probe_why"] = "探针插件加载失败（包装命令覆写了 PYTHONPATH？）；G10/G11 未判"
+            return res
+        res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None, "probe": None, "probe_why": None}
+        if probe:
+            res["probe"], res["probe_why"] = _read_probe(tier_out)
         if rc == 0:
             try:
                 res["cases"] = {tc.get("classname") or "" for tc in ET.parse(junit).getroot().iter("testcase")}
@@ -252,6 +406,9 @@ def plan_sha(data):
     checks = gate.get("checks")
     if isinstance(checks, list) and checks:  # 检查的 baseline 命令也归基线负责（design D7）；final 不在此列
         key.append([[c.get("name"), c.get("baseline")] for c in checks if isinstance(c, dict)])
+    integration = gate.get("integration")
+    if isinstance(integration, list) and integration:  # 已选区域归基线负责（design D9）；未选时与旧算法相同
+        key.append(["integration", list(integration)])
     return hashlib.sha1(json.dumps(key, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -292,17 +449,57 @@ def gate_cmd_verdict(kind, cmd, root, baseline):
 
 def full_suite_verdict(cmd, root, baseline):
     """跑 gate.test，返回 (failed_item, warning_item)。可度量的 exit 1 按基线 test.failed 逐条差分（缺失视为空集）。"""
-    tg = run_test_gate(cmd, root)
+    return _diff_verdict("test", run_test_gate(cmd, root), ((baseline or {}).get("test") or {}).get("failed"))
+
+
+def _diff_verdict(label, tg, known_failed):
+    """run_test_gate 结果对基线已知失败差分，返回 (failed_item, warning_item)；label 为 test 或 region <NAME>。"""
     rc = tg["rc"]
     if rc == 0:
         return None, None
     if tg["failed"] is None:
-        return "G2 test: exit %d（按退出码判：%s）\n%s" % (rc, tg["why"], _tail(tg["out"])), None
-    old = set(((baseline or {}).get("test") or {}).get("failed") or [])
+        return "G2 %s: exit %d（按退出码判：%s）\n%s" % (label, rc, tg["why"], _tail(tg["out"])), None
+    old = set(known_failed or [])
     new = [t for t in tg["failed"] if t not in old]
     if not new:
-        return None, "G2 test: exit 1，失败均为基线预存红（%d 条已按基线排除）" % len(tg["failed"])
-    return "G2 test: exit 1（新增 %d 条失败）\n%s" % (len(new), "\n".join(new[:6])), None
+        return None, "G2 %s: exit 1，失败均为基线预存红（%d 条已按基线排除）" % (label, len(tg["failed"]))
+    return "G2 %s: exit 1（新增 %d 条失败）\n%s" % (label, len(new), "\n".join(new[:6])), None
+
+
+def _selected_regions(gate):
+    """gate.integration 里的区域名（形状不合法时视为未选）。"""
+    integration = gate.get("integration")
+    return [n for n in integration if isinstance(n, str)] if isinstance(integration, list) else []
+
+
+def slow_candidates(probe):
+    """首跑耗时 >= UNIT_MAX_SEC 的 nodeid（排序）；probe 为 None → []。"""
+    if not probe:
+        return []
+    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= UNIT_MAX_SEC)
+
+
+def tier_verdicts(probe, probe_why, rerun, allow):
+    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选须单独重跑仍超线（或重跑无记录）才确认。"""
+    if probe is None:
+        return [], ["G10/G11 不可度量：%s" % probe_why]
+    failed, warnings = [], []
+    for nid in slow_candidates(probe):
+        again = rerun.get(nid)
+        if again is not None and again < UNIT_MAX_SEC:
+            continue
+        sec = float(probe[nid].get("sec") or 0.0)
+        if nid in allow:
+            warnings.append("G10 slow unit test 已人工放行：%s %.1fs（%s）" % (nid, sec, allow[nid]["approved"]))
+        else:
+            failed.append("G10 slow unit test: %s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
+                          % (nid, sec, "未取得" if again is None else "%.1fs" % again))
+    for nid in sorted(probe):
+        hits = probe[nid].get("hits") or {}
+        if hits:
+            failed.append("G11 impure unit test: %s 碰了%s（%s）：改成纯函数或移入集成区域"
+                          % (nid, "、".join(hits), "；".join(str(v) for v in hits.values())))
+    return failed, warnings
 
 
 def glob_match(path, pattern):
@@ -418,6 +615,177 @@ def _repo_default_checks(change_dir):
     return names, None
 
 
+def _tiers_path(change_dir):
+    """<openspec 根>/test-tiers.json；openspec 根 = change 目录上两级（与 _repo_default_checks 同一解析）。"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), TIER_FILE)
+
+
+def _tier_shape(label, obj, fields):
+    """unit / 区域对象的字段校验：只含 fields；paths 非空数组；covers（若在 fields）是数组；cmd 非空。"""
+    errors = []
+    extra = sorted(str(k) for k in obj if k not in fields)
+    if extra:
+        errors.append("tiers: %s 有未知字段 %s" % (label, ", ".join(extra)))
+    paths = obj.get("paths")
+    if not (isinstance(paths, list) and paths and all(_nonblank(x) for x in paths)):
+        errors.append("tiers: %s 的 paths 须是非空数组、每项非空" % label)
+    if "covers" in fields:
+        covers = obj.get("covers")
+        if not (isinstance(covers, list) and all(_nonblank(x) for x in covers)):
+            errors.append("tiers: %s 的 covers 须是数组（可为空）、每项非空" % label)
+    if not _nonblank(obj.get("cmd")):
+        errors.append("tiers: %s 缺少 cmd（须是非空字符串）" % label)
+    return errors
+
+
+def _load_tiers_file(path):
+    """读分层文件 → (tiers | None, errors)。文件不存在 → (None, [])；有任何形状错误时 tiers 为 None。"""
+    if not os.path.isfile(path):
+        return None, []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            tiers = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, ["tiers: 测试分层文件 %s 无法解析：%s" % (path, e)]
+    if not isinstance(tiers, dict):
+        return None, ["tiers: 测试分层文件 %s 无法解析：顶层须是对象" % path]
+    errors = []
+    extra = sorted(k for k in tiers if k not in ("unit", "regions", "slow_allow"))
+    if extra:
+        errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
+    unit = tiers.get("unit")
+    if isinstance(unit, dict):
+        errors.extend(_tier_shape("unit", unit, ("paths", "cmd")))
+    else:
+        errors.append("tiers: 分层文件缺少 unit（须是含 paths 与 cmd 的对象）")
+    regions = tiers.get("regions", {})
+    if not isinstance(regions, dict):
+        errors.append("tiers: regions 须是对象（区域名 → {paths, covers, cmd}）")
+        regions = {}
+    for name in sorted(regions):
+        if not TIER_NAME_RE.fullmatch(name):
+            errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
+        if isinstance(regions[name], dict):
+            errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd")))
+        else:
+            errors.append("tiers: 区域 %s 须是对象（paths / covers / cmd）" % name)
+    slow = tiers.get("slow_allow", {})
+    if not isinstance(slow, dict):
+        errors.append("tiers: slow_allow 须是对象（nodeid → {reason, approved}）")
+        slow = {}
+    for nid in sorted(slow):
+        item = slow[nid]
+        if not isinstance(item, dict):
+            errors.append("tiers: slow_allow 的 %s 须是对象（reason / approved）" % nid)
+            continue
+        extra = sorted(str(k) for k in item if k not in ("reason", "approved"))
+        if extra:
+            errors.append("tiers: slow_allow 的 %s 有未知字段 %s" % (nid, ", ".join(extra)))
+        for k in ("reason", "approved"):
+            if not _nonblank(item.get(k)):
+                errors.append("tiers: slow_allow 的 %s 缺少 %s（须是非空字符串）" % (nid, k))
+    return (None if errors else tiers), errors
+
+
+def _load_tiers(change_dir):
+    return _load_tiers_file(_tiers_path(change_dir))
+
+
+def tiers_matching(path, tiers):
+    """path 落在哪些层：unit 在前，区域按名字排序；用 glob_match（与 owns 同一语义）。"""
+    out = ["unit"] if any(glob_match(path, g) for g in tiers["unit"]["paths"]) else []
+    regions = tiers.get("regions") or {}
+    out.extend(n for n in sorted(regions) if any(glob_match(path, g) for g in regions[n]["paths"]))
+    return out
+
+
+def tier_seconds(durations, tiers):
+    """逐用例耗时 {nodeid: 秒} 按分层文件归层（design D14）：文件部分取 nodeid 的第一段，tiers_matching 取第一个；
+    不在任何层 → unclassified（为 0 时不出现）；integration = 各区域之和；各项保留 1 位小数。"""
+    unit, loose, regions = 0.0, 0.0, {}
+    for nodeid, sec in durations.items():
+        hit = tiers_matching(nodeid.split("::", 1)[0], tiers)
+        if not hit:
+            loose += sec
+        elif hit[0] == "unit":
+            unit += sec
+        else:
+            regions[hit[0]] = regions.get(hit[0], 0.0) + sec
+    ts = {"unit": round(unit, 1), "integration": round(sum(regions.values()), 1),
+          "regions": {n: round(regions[n], 1) for n in sorted(regions)}}
+    if round(loose, 1):
+        ts["unclassified"] = round(loose, 1)
+    return ts
+
+
+def _tier_add(ts, unit=0.0, regions=None):
+    """把墙钟秒数并入已有 tier_sec（返回新 dict）：重算 integration，各项保留 1 位小数。"""
+    regs = dict(ts.get("regions") or {})
+    for n, sec in (regions or {}).items():
+        regs[n] = regs.get(n, 0.0) + sec
+    out = dict(ts, unit=round(ts.get("unit", 0.0) + unit, 1), regions={n: round(regs[n], 1) for n in sorted(regs)})
+    out["integration"] = round(sum(regs.values()), 1)
+    return out
+
+
+def _tier_note(ts):
+    return "单元 %.1fs · 集成 %.1fs" % (ts["unit"], ts["integration"])
+
+
+def _lint_tiers(data, change_dir):
+    """计划 × 分层文件的校验（design D1–D3）；违规文本都以 tiers: 开头。"""
+    gate = data.get("gate") or {}
+    path = _tiers_path(change_dir)
+    tiers, errors = _load_tiers_file(path)
+    if tiers is None:
+        if not errors and ("integration" in gate or "integration_skip" in gate):
+            errors.append("tiers: 计划写了 gate.integration / integration_skip，但缺少测试分层文件 %s" % path)
+        return errors
+    regions = tiers.get("regions") or {}
+    if (gate.get("test") or "").strip() != tiers["unit"]["cmd"].strip():
+        errors.append("tiers: gate.test（%s）须与单元层 unit.cmd（%s）相同" % (gate.get("test"), tiers["unit"]["cmd"]))
+    integration = gate.get("integration")
+    if integration is not None and not isinstance(integration, list):
+        errors.append("tiers: gate.integration 须是区域名数组")
+        integration = []
+    chosen = set()
+    for name in integration or []:
+        if not (isinstance(name, str) and name in regions):
+            errors.append("tiers: gate.integration 的 %s 不是分层文件 regions 里的区域" % (name,))
+        elif name in chosen:
+            errors.append("tiers: gate.integration 里区域 %s 重复" % name)
+        else:
+            chosen.add(name)
+    skip = gate.get("integration_skip")
+    if skip is not None and not isinstance(skip, dict):
+        errors.append("tiers: gate.integration_skip 须是对象（区域名 → 理由）")
+        skip = {}
+    for name, reason in (skip or {}).items():
+        if name not in regions:
+            errors.append("tiers: gate.integration_skip 的 %s 不是分层文件 regions 里的区域" % name)
+        if not _nonblank(reason):
+            errors.append("tiers: gate.integration_skip 的区域 %s 理由须是非空字符串" % name)
+        if name in chosen:
+            errors.append("tiers: 区域 %s 同时出现在 gate.integration 与 gate.integration_skip" % name)
+    decided = chosen | set(skip or {})
+    for name in sorted(regions):
+        if name in decided:
+            continue
+        hit = next(((c, s.get("id"), o) for c in regions[name]["covers"] for s in data.get("slices") or []
+                    for o in s.get("owns") or [] if globs_intersect(c, o)), None)
+        if hit:
+            errors.append("tiers: 区域 %s 的 covers %s 与切片 %s 的 owns %s 相交，须写进 gate.integration 或在 gate.integration_skip 写理由"
+                          % (name, hit[0], hit[1], hit[2]))
+    allowed = {"unit"} | chosen
+    for sid, target in sorted((data.get("scenario_tests") or {}).items()):
+        if not isinstance(target, str):
+            continue
+        rel = target.split("::", 1)[0]
+        if not set(tiers_matching(rel, tiers)) & allowed:
+            errors.append("tiers: scenario %s 的测试文件 %s 不在单元层或已选区域的 paths 内" % (sid, rel))
+    return errors
+
+
 def lint_plan(data, change_dir=None):
     errors = []
     if not ((data.get("gate") or {}).get("test") or "").strip():
@@ -461,6 +829,7 @@ def lint_plan(data, change_dir=None):
         for name in defaults or []:
             if name not in check_names and name not in skip_keys:
                 errors.append("checks: 仓库默认检查 %s 未出现在 gate.checks，也没有在 gate.checks_skip 写理由" % name)
+        errors.extend(_lint_tiers(data, change_dir))
     return errors, waves
 
 
@@ -856,8 +1225,9 @@ def _g7_timeout(gate):
     return 600
 
 
-def _pytest_outcomes(root, targets, gate=None):
-    """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。"""
+def _pytest_outcomes(root, targets, gate=None, durations=None):
+    """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。
+    durations 是 dict 时把逐用例耗时（setup + call + teardown）按 nodeid 累加进去。"""
     gate = gate or {}
     prefix, _ = _g7_runner(gate)
     timeout = _g7_timeout(gate)
@@ -868,6 +1238,10 @@ def _pytest_outcomes(root, targets, gate=None):
         # 不写字节码：__pycache__ 落进被测 worktree 会被当成改动（G5 起点测量、source 判定）
         env = dict(os.environ, FLIGHT_G7_OUT=out, PYTHONDONTWRITEBYTECODE="1",
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        sec_out = os.path.join(tmp, "seconds.jsonl")
+        env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
+        if isinstance(durations, dict):
+            env["FLIGHT_G7_SEC"] = sec_out
         argv = prefix + ["-p", "flight_g7_outcomes", "-p", "no:cacheprovider", "--rootdir", root, *targets]
         timed_out, rc, text = False, None, ""
         try:
@@ -891,7 +1265,40 @@ def _pytest_outcomes(root, targets, gate=None):
         if os.path.isfile(out):
             with open(out, "r", encoding="utf-8") as f:
                 outcomes = [tuple(json.loads(line)) for line in f if line.strip()]
+        if isinstance(durations, dict) and os.path.isfile(sec_out):
+            with open(sec_out, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        nid, sec = json.loads(line)
+                        durations[nid] = durations.get(nid, 0.0) + sec
         return outcomes, rc, text or "", timed_out
+
+
+def _tier_rerun(root, gate, nodeids):
+    """单独重跑慢候选（带探针）→ {nodeid: sec}；拿不到探针输出 / 超时 / 起不来 → None（调用方按「未取得」处理）。"""
+    prefix, _ = _g7_runner(gate)
+    with tempfile.TemporaryDirectory(prefix="flight-tier-") as tmp:
+        with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
+            f.write(TIER_PROBE_PLUGIN)
+        out = os.path.join(tmp, "tier-probe.jsonl")
+        env = dict(os.environ, FLIGHT_TIER_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+                   PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        argv = prefix + ["-p", "flight_tier_probe", "-p", "no:cacheprovider", "--rootdir", root, *nodeids]
+        try:
+            subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=_g7_timeout(gate))
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        probe, _ = _read_probe(out)
+    if probe is None:
+        return None
+    return {n: r["sec"] for n, r in probe.items()}
+
+
+def _unit_tier_verdict(root, gate, tg, allow):
+    """单元层 G10 / G11：有慢候选才重跑，再交给 tier_verdicts。"""
+    cands = slow_candidates(tg["probe"])
+    rerun = (_tier_rerun(root, gate, cands) or {}) if cands else {}
+    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow)
 
 
 def _g7_diag(text):
@@ -900,7 +1307,7 @@ def _g7_diag(text):
     return hit[:200]
 
 
-def scenario_status(root, data, slice_ids=None):
+def scenario_status(root, data, slice_ids=None, durations=None):
     """返回 (violations, total, passed)。passed = 有映射、函数存在、无 xfail/skip 标记，且 .py 目标实跑结果全为 PASSED。"""
     tests = data.get("scenario_tests") or {}
     wanted = []
@@ -954,7 +1361,7 @@ def scenario_status(root, data, slice_ids=None):
         _, warn = _g7_runner(gate)
         if warn:
             warnings.append(warn)
-        outcomes, rc, text, timed_out = _pytest_outcomes(root, [t for _, t in py_targets], gate)
+        outcomes, rc, text, timed_out = _pytest_outcomes(root, [t for _, t in py_targets], gate, durations)
         for sid, target in py_targets:
             outs = [o for i, o in outcomes if i == target or i.startswith(target + "[")]
             if timed_out:
@@ -1258,6 +1665,13 @@ def cmd_gate(args):
     if source and not tests:
         failed.append("G3 pairing: 改了源码 %s 但区间内没有测试文件改动" % ", ".join(sorted(source)[:6]))
     failed.extend(gwt_violations(root, tests))
+    tiers, _ = _load_tiers(args.change_dir)  # 不合法由 lint 管，这里只在合法时判 G12
+    if tiers is not None:
+        integration = gate.get("integration")
+        chosen = {"unit"} | set(n for n in (integration if isinstance(integration, list) else []) if isinstance(n, str))
+        for f in sorted(tests):
+            if TEST_FILE_RE.search(f) and os.path.isfile(os.path.join(root, f)) and not set(tiers_matching(f, tiers)) & chosen:
+                failed.append("G12 tiers: %s 不在单元层或本 change 已选区域的 paths 内（挪到对应目录，或在 gate.integration 选上该区域）" % f)
     ev = evidence_state(args.change_dir, args.slice)
     hooks_missing = ev == "missing_file"
     if ev == "missing_file":
@@ -1267,7 +1681,8 @@ def cmd_gate(args):
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
-    v7, _, _, w7 = scenario_status(root, data, {args.slice})
+    durations = {} if tiers is not None else None
+    v7, _, _, w7 = scenario_status(root, data, {args.slice}, durations=durations)
     failed.extend(v7)
     warnings.extend(w7)
     v8, ceilings = ceiling_rows(root, base)
@@ -1277,13 +1692,19 @@ def cmd_gate(args):
               "failed": failed, "warnings": warnings, "hooks_missing": hooks_missing,
               "ceilings": [[rel, ln, limit, up] for rel, ln, limit, up in ceilings],
               "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files))}
+    gate_note = args.slice
+    if durations is not None:
+        ts = tier_seconds(durations, tiers)
+        result["tier_sec"] = ts
+        result["summary"] += "；" + _tier_note(ts)
+        gate_note = "%s %s" % (args.slice, _tier_note(ts))
     if result["ok"]:
         err = _gate_save(root, args.change_dir, result)
         if err:
             warnings.append("门禁结论未能留存：%s" % err)
     append_report(args.change_dir, result)
     record_ceilings(args.change_dir, args.slice, ceilings)
-    timeline_record(args.change_dir, "gate", "%s %s" % (args.slice, "ok" if result["ok"] else "red"))
+    timeline_record(args.change_dir, "gate", "%s %s" % (gate_note, "ok" if result["ok"] else "red"))
     if marker is not None:
         if result["ok"]:
             try:
@@ -1360,7 +1781,10 @@ def cmd_final(args):
     dirty = _dirty_paths(root, args.change_dir)
     if dirty:
         warnings.append("工作树有未提交改动，结论不对应 commit：%s" % ", ".join(dirty[:8]))
-    v7, total, passed, w7 = scenario_status(root, data)
+    tiers, terrs = _load_tiers(args.change_dir)
+    durations = {} if tiers is not None else None
+    unit_wall, region_wall = 0.0, {}
+    v7, total, passed, w7 = scenario_status(root, data, durations=durations)
     failed.extend(v7)
     warnings.extend(w7)
     baseline = load_baseline(args.change_dir)
@@ -1376,14 +1800,40 @@ def cmd_final(args):
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
     else:
         test_cmd = gate.get("test") or detect_test_cmd(root)
+        if terrs:  # 分层文件不合法：单元层照旧差分，不跑探针与区域
+            failed.append("G2 tiers：测试分层文件不合法，先跑 lint 修好")
+            tiers = None
         if not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
-        else:
+        elif tiers is None:
             f2, w2 = full_suite_verdict(test_cmd, root, baseline)
             if f2:
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
+        else:
+            t0 = time.time()
+            tg = run_test_gate(test_cmd, root, probe=True)
+            f2, w2 = _diff_verdict("test", tg, ((baseline or {}).get("test") or {}).get("failed"))
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            unit_wall = time.time() - t0
+            failed.extend([f2] if f2 else [])
+            warnings.extend([w2] if w2 else [])
+            failed.extend(f10)
+            warnings.extend(w10)
+            bregions = (baseline or {}).get("regions")
+            for rname in _selected_regions(gate):
+                rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
+                rec = bregions.get(rname) if isinstance(bregions, dict) else None
+                if not isinstance(rec, dict) or not rcmd or rec.get("cmd") != rcmd:
+                    failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
+                    continue
+                t0 = time.time()
+                rg = run_test_gate(rcmd, root)
+                region_wall[rname] = time.time() - t0
+                f2, w2 = _diff_verdict("region " + rname, rg, rec.get("failed"))
+                failed.extend([f2] if f2 else [])
+                warnings.extend([w2] if w2 else [])
     checks = gate.get("checks") or []
     cerrs = _lint_checks(gate)[0]
     if cerrs:  # /opsx-verify 可不经 preflight 直接跑 final（design D8）：形状非法时不运行任何检查
@@ -1398,8 +1848,16 @@ def cmd_final(args):
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
     if dirty:
         result["dirty"] = True
+    final_note = "ok" if result["ok"] else "red"
+    if durations is not None:
+        ts = tier_seconds(durations, tiers)
+        if not v7:  # G7 红时全量与区域未跑，只报 G7 部分
+            ts = _tier_add(ts, unit_wall, region_wall)
+        result["tier_sec"] = ts
+        result["summary"] += "；" + _tier_note(ts)
+        final_note = "%s %s" % (_tier_note(ts), final_note)
     append_report(args.change_dir, result)
-    timeline_record(args.change_dir, "final", "ok" if result["ok"] else "red")
+    timeline_record(args.change_dir, "final", final_note)
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(0 if result["ok"] else 1)
 
@@ -1416,6 +1874,13 @@ def cmd_baseline(args):
     cerrs = _lint_checks(gate)[0]
     if cerrs:
         die("gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
+    tiers, terrs = _load_tiers(args.change_dir)
+    if terrs:
+        die("测试分层文件不合法，先跑 lint 修好：%s" % "；".join(terrs))
+    regions = _selected_regions(gate)
+    unknown = [n for n in regions if n not in ((tiers or {}).get("regions") or {})]
+    if unknown:
+        die("gate.integration 的区域 %s 不在测试分层文件 regions 里，先跑 lint 修好" % ", ".join(unknown))
     sha0 = plan_sha(data)
     name = os.path.basename(os.path.realpath(args.change_dir))
     change_rel = _change_rel(root, args.change_dir)
@@ -1432,7 +1897,8 @@ def cmd_baseline(args):
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
         f.write("\n")
-    cands = _baseline_candidates(root, old, key, name, args.full)
+    # 有分层文件时恒走全量：G10 / G11 要单元层探针，复用的旧结果没有（design D5）
+    cands = _baseline_candidates(root, old, key, name, args.full or tiers is not None)
     # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用
     own = cands[0] if cands and old is not None and cands[0].get("snapshot") is old.get("snapshot") else None
     hit, src, skipped, rerun_cache = None, None, [], {}
@@ -1445,6 +1911,7 @@ def cmd_baseline(args):
         if abort:  # 补跑红 / 超时 / 异常退出码与候选无关，直接走全量（design D3）
             break
     reasons, warnings, out = [], [], ""
+    unit_wall = 0.0
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons}
     if hit is not None:
@@ -1454,7 +1921,7 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     else:
         t0 = time.time()
-        tg = run_test_gate(test_cmd, root)
+        tg = run_test_gate(test_cmd, root, probe=tiers is not None)
         rc, out = tg["rc"], tg["out"]
         gate["full_suite_sec"] = round(time.time() - t0, 1)
         bl["test"] = {"exit": rc, "sec": gate["full_suite_sec"]}
@@ -1463,6 +1930,12 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条已记录，final 按基线差分" % len(tg["failed"]))
         elif rc != 0:
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
+        if tiers is not None:
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            reasons.extend(f10)
+            warnings.extend(w10)
+            unit_wall = time.time() - t0
+            bl["tiers"] = {"measured": True} if tg["probe"] is not None else {"measured": False, "why": tg["probe_why"]}
     # lint / typecheck 沿用（design D10）：只看本 change 旧基线；严格差异（含其他 change 目录）为空且命令与指纹不变
     strict_delta = None
     if hit is not None and src is own:
@@ -1505,6 +1978,23 @@ def cmd_baseline(args):
         bl["verify"][s["id"]] = {"exit": vrc, "cmd": vcmd}
         if vrc != 0:
             reasons.append("%s verify 在基线上红（exit %d）：命令不可运行或含既有错误" % (s["id"], vrc))
+    # 已选区域（design D9）：可度量的红记 failed 供 final 差分；不可度量的红 → 基线红
+    if tiers is not None:
+        bl["regions"] = {}
+    for rname in regions:
+        rcmd = tiers["regions"][rname]["cmd"]
+        t0 = time.time()
+        rg = run_test_gate(rcmd, root)
+        rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+        if rg["rc"] != 0 and rg["failed"] is not None:
+            rec["failed"] = rg["failed"]
+            warnings.append("区域 %s 预存红 %d 条已记录，final 按基线差分" % (rname, len(rg["failed"])))
+        elif rg["rc"] != 0:
+            reasons.append("区域 %s 在基线上红（exit %d；按退出码判：%s）" % (rname, rg["rc"], rg["why"]))
+        bl["regions"][rname] = rec
+    if tiers is not None:
+        bl["tier_sec"] = _tier_add({"unit": 0.0, "regions": {}}, unit_wall,
+                                   {n: r["sec"] for n, r in bl["regions"].items()})
     # 成对检查的 baseline 半（design D5）：沿用条件同 lint / typecheck（D10）外加共用目录仍在；否则清空目录后实跑
     checks = gate.get("checks") or []
     if checks:
@@ -1590,7 +2080,8 @@ def cmd_baseline(args):
         note = "增量（复用 %s 的全量 exit %s, %ss；补跑 %d 个测试文件 %ss） %s" % (
             hit["from"].get("change"), t.get("exit"), t.get("sec"), len(hit["files"]), hit["sec"], verdict)
     else:
-        note = "exit %s, %ss %s" % (t.get("exit"), t.get("sec"), verdict)
+        note = "exit %s, %ss%s" % (t.get("exit"), t.get("sec"),
+                                    "；%s %s" % (_tier_note(bl["tier_sec"]), verdict) if "tier_sec" in bl else " " + verdict)
         if derived:
             note += "；verify 推导 %d 片" % derived
     timeline_record(args.change_dir, "baseline", note)
@@ -1638,6 +2129,13 @@ def cmd_preflight(args):
         die("基线红，不能起飞：\n  - " + "\n  - ".join(bl.get("reasons") or ["ok 为 false 但无 reasons"]))
     if bl.get("plan_sha") != plan_sha(data):
         die("基线过期：gate / verify 改动后需重跑 baseline")
+    tiers, _ = _load_tiers(args.change_dir)
+    if tiers is not None:
+        bregions = bl.get("regions")
+        for rname in _selected_regions(data.get("gate") or {}):
+            rec = bregions.get(rname) if isinstance(bregions, dict) else None
+            if not isinstance(rec, dict) or rec.get("cmd") != ((tiers.get("regions") or {}).get(rname) or {}).get("cmd"):
+                die("基线过期：区域 %s 的命令已变或没有基线记录；重跑 baseline" % rname)
     # 不能用 git()：--is-ancestor 不成立时退出 1，git() 会当成异常抛
     p = subprocess.run(["git", "merge-base", "--is-ancestor", str(bl.get("commit") or ""), "HEAD"],
                        cwd=root, capture_output=True, text=True)

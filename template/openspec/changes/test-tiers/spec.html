@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+test-tiers · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+test-tiers
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">tasks</span><span class="chip" data-state="done">specs/test-tiers</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">飞行流程的 baseline 与 final 每次都跑 <code>gate.test</code> 全量，没有「单元 / 集成」之分。本仓实测（2026-10-28，main <code>a20e532</code>，Python 3.9.6 / pytest 8.4.2，审计钩子探针逐用例记录）：</p><p class="why-body">- 323 个用例里 312 个碰了真实文件或起了子进程，按「纯函数」口径只有 11 个是单元测试；
+- 全量 84s，其中约 70s 来自 slice-gate 系列的子进程 + 临时仓库测试；
+- 最慢单个用例 2.44s，目前没有 ≥3s 的单测，但没有任何机制防止它出现。</p><p class="why-body">用户要求（2026-10-28）：</p><p class="why-body">1. 测试分单元测试（纯函数、不碰真实文件，<strong>基线就是它</strong>）与集成测试（其余全部，只在判断确实影响到真实文件时，按模块 / package / library 分区域发起）；提供一个命令快速重划分；<strong>设计新用例时先按这个划分定层</strong>。
+2. 每个单元测试必须 &lt;3s，一旦超线需要人工审核放行。
+3. （同日追加）每次跑门禁都要分别报告单元层耗时与集成层耗时。</p><p class="why-body">用户决策（2026-10-28，决策页 <code>template/openspec/superpower/2026-10-28-test-tiers-decisions.html</code> 逐项选择，代替 grill-me 访谈；5 项全取推荐）：</p><p class="why-body">- <strong>Q1 粒度</strong>：文件级，按路径归层；混合文件拆开。跨语言通用，区域天然对应目录 / package。
+- <strong>Q2 放行</strong>：脚本核验人类原话后才写放行名单，判据复用 takeoff-gate 的「人类消息」口径。
+- <strong>Q3 纯度</strong>：门禁机械强制——baseline / final 跑单元层时注入探针，碰真实文件即红。
+- <strong>Q4 范围</strong>：本 change 只交付机制；本仓自己的 323 个测试留给下一个 change，用新命令重划分。
+- <strong>Q5 计时</strong>：含 setup + call + teardown；超线者单独重跑一次仍 ≥3s 才判红。
+- 「不得&lt;3s」按笔误处理：每个单测必须 &lt;3s，≥3s 触发放行流程（决策页已列明此解读，用户未反对）。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>仓库级分层文件</strong> <code>openspec/test-tiers.json</code>（openspec 根，与 <code>gate-checks.json</code> 同级）：</li><li><code>unit</code>：<code>paths</code>（路径 glob）+ <code>cmd</code>（单元层运行命令）；</li><li><code>regions</code>：每个区域 <code>paths</code> / <code>covers</code>（它守护的源码 glob）/ <code>cmd</code>；</li><li><code>slow_allow</code>：经人工放行的慢单测，<code>{nodeid: {reason, approved}}</code>。</li><li><strong>计划</strong>：<code>slices.json</code> 的 <code>gate</code> 新增 <code>integration</code>（本 change 要跑的区域名）与 <code>integration_skip</code>（<code>{区域: 理由}</code>）。</li><li><strong>lint</strong>（前缀 <code>tiers:</code>）：分层文件形状；<code>gate.test</code> 必须等于 <code>unit.cmd</code>（基线就是单元层）；区域选择合法；<code>covers</code> 与任一切片 <code>owns</code> 相交的区域必须选上或写理由；每个 scenario 测试文件必须落在单元层或已选区域的 <code>paths</code> 内。</li><li><strong>探针</strong>：baseline / final 跑单元层时经 <code>PYTEST_ADDOPTS</code> 注入临时 pytest 插件，逐用例记「碰了文件 / 子进程 / 网络」与 setup+call+teardown 耗时；插件加载失败时去掉探针重跑，判为不可度量。</li><li><strong>新失败编号</strong>：</li><li><code>G10</code> 慢单测：≥3s 且单独重跑仍 ≥3s、不在 <code>slow_allow</code> → 红；在 <code>slow_allow</code> → 警告；</li><li><code>G11</code> 单测不纯：单元层用例碰了真实文件 / 子进程 / 网络 → 红；</li><li><code>G12</code> 测试未归层：切片改动的测试文件不在单元层或已选区域的 <code>paths</code> 内 → 切片门禁红；</li><li>区域差分沿用 <code>G2</code>：<code>G2 region &lt;name&gt;</code>。</li><li><strong>baseline</strong>：配置了分层时只跑单元层（带探针）与已选区域；不走增量复用；区域失败按 junit 记基线；G10 / G11 红即基线红。</li><li><strong>final</strong>：G7 绿时，单元层差分 + G10 + G11，再逐个已选区域按基线差分。</li><li><strong>preflight</strong>：已选区域的命令与基线记录不符 → 基线过期。</li><li><strong>分层耗时报告</strong>：配置了分层时，<code>gate</code> / <code>baseline</code> / <code>final</code> 的输出带 <code>tier_sec</code>（<code>unit</code> / <code>integration</code> / 各区域秒数），并写进 <code>summary</code> 与 timeline 备注，飞行记录逐行可见；G7 按用例耗时归层，单元层与区域运行按墙钟计。</li><li><strong>新命令 <code>/test-tiers</code></strong> 与脚本 <code>.claude/hooks/test-tiers.py</code>：</li><li><code>probe</code>：实跑一次，逐用例给出层级证据与耗时，按文件汇总「单元 / 集成 / 混合」；</li><li><code>render</code>：把探针结果与划分稿渲染成带导出按钮的审批页；</li><li><code>check</code>：每个测试文件恰好归一层；</li><li><code>allow-slow</code>：核验最新一条人类消息含该用例名与放行词后，写入 <code>slow_allow</code>。</li><li><strong>文档</strong>：schema tasks instruction、<code>opsx-propose</code> / <code>opsx-verify</code> 命令与同名 skill、TDD skill（写测试前先定层）、slice-executor、README、<code>install.sh</code> 提示、<code>CLAUDE.md.snippet</code>。</li></ul><div class="impact"><span class="tag"><code>template/.claude/hooks/slice-gate.py</code>：</span><span class="tag">分层文件读取与形状校验、<code>lint_plan</code> 的 <code>tiers:</code> 规则、<code>plan_sha</code> 在有 <code>gate.integration</code> 时追加区域名；</span><span class="tag"><code>run_test_gate</code> 可选注入探针；<code>cmd_gate</code> 加 G12；</span><span class="tag"><code>cmd_baseline</code> / <code>cmd_final</code> / <code>cmd_preflight</code> 接入单元层探针、G10 / G11 与区域差分；</span><span class="tag">G7 插件可选记录逐用例耗时；<code>cmd_gate</code> / <code>cmd_baseline</code> / <code>cmd_final</code> 输出 <code>tier_sec</code>。</span><span class="tag">新增 <code>template/.claude/hooks/test-tiers.py</code>（导入 slice-gate 与 takeoff-gate 的函数，不改它们的 CLI）。</span><span class="tag">新增 <code>template/.claude/commands/test-tiers.md</code>（命令本身即逻辑，无同名 skill，同 <code>/opsx-mini</code>、<code>/pr-ship</code>）。</span><span class="tag">文档：<code>schema.yaml</code>、<code>opsx-propose</code> / <code>opsx-verify</code> 命令与同名 skill、<code>test-driven-development/SKILL.md</code>、<code>agents/slice-executor.md</code>、<code>README.md</code>、<code>install.sh</code>（命令数提示）、<code>CLAUDE.md.snippet</code>。</span><span class="tag">测试：新增 <code>tests/test_tiers_plan.py</code>、<code>tests/test_tiers_probe.py</code>、<code>tests/test_tiers_verdict.py</code>、<code>tests/test_tiers_gate.py</code>、<code>tests/test_tiers_cli.py</code>、<code>tests/test_tiers_docs.py</code>、<code>tests/test_tiers_timing.py</code>；既有测试不改。</span><span class="tag">ADR：新增 <code>DRAFT-test-tiers-unit-baseline-by-audit-probe</code>；<code>DRAFT-test-gate-baseline-diff</code>、<code>DRAFT-baseline-reuse-by-content-fingerprint</code>、<code>DRAFT-gate-evidence-not-self-reported</code> 继续有效，不 supersede（关系见 design D12）。</span><span class="tag">兼容：没有 <code>openspec/test-tiers.json</code> 的仓库，lint / gate / baseline / final / preflight 的行为与输出不变，<code>plan_sha</code> 不变，<code>gate-baseline.json</code> 不出现 <code>tiers</code> / <code>regions</code> / <code>tier_sec</code> 键。</span><span class="tag">已知边界：</span><span class="tag">探针只认 pytest；非 pytest runner 的 G10 / G11 降级为警告；</span><span class="tag"><code>os.stat</code> / <code>os.path.exists</code> 不触发审计事件，只做存在性判断的用例测不出；C 扩展绕过 Python 层直接做的 I/O 也测不出；</span><span class="tag">未选区域在本 change 内不跑；靠 lint 逼出「选上或写理由」与计划审批兜住；</span><span class="tag">本仓自己的测试本 change 不重划分（Q4），本仓不放 <code>test-tiers.json</code>，本 change 的 <code>gate.test</code> 仍是全量。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>test-tiers</code>：测试分层（单元层 = 基线、纯函数、每用例 &lt;3s；集成层按区域按需发起）的配置与 lint、探针、G10–G12、baseline / final / preflight 接线、<code>/test-tiers</code> 重划分脚本、文档。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>test-tiers <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 分层文件与计划里的区域选择由 lint 校验</p><p>仓库级分层文件 <code>test-tiers.json</code> SHALL 从 openspec 根目录读取，openspec 根目录 = change 目录的上两级（<code>&lt;change_dir&gt;/../..</code>，与 <code>gate-checks.json</code> 同一解析）。</p><p>文件存在时，<code>slice-gate.py lint</code>（preflight 内的同一份计划校验也一样）SHALL 在下面任一条不满足时退出非 0，stderr 每条违规以 <code>tiers:</code> 开头并点名对象：</p><p>- 文件可读、是合法 JSON、顶层是对象，否则只报一行并点名该文件；
+- 顶层只含 <code>unit</code>、<code>regions</code>、<code>slow_allow</code>，且必有 <code>unit</code>；
+- <code>unit</code> 只含 <code>paths</code> 与 <code>cmd</code>：<code>paths</code> 是非空数组、每项去掉首尾空白后非空；<code>cmd</code> 是非空字符串；
+- <code>regions</code> 是对象；区域名匹配 <code>^[a-z0-9-]+$</code>；每个区域只含 <code>paths</code>、<code>covers</code>、<code>cmd</code>，<code>paths</code> 同上，<code>covers</code> 是数组（可以为空）、每项非空，<code>cmd</code> 是非空字符串；
+- <code>slow_allow</code> 是对象；每项只含 <code>reason</code> 与 <code>approved</code>，都是非空字符串；
+- <code>gate.test</code> 去掉首尾空白后等于 <code>unit.cmd</code> 去掉首尾空白后（基线就是单元层）；
+- <code>gate.integration</code> 缺省，或是数组、每项是 <code>regions</code> 里的区域名、不重复；
+- <code>gate.integration_skip</code> 缺省，或是对象、每个键是 <code>regions</code> 里的区域名、理由去掉首尾空白后非空、键不同时出现在 <code>gate.integration</code>；
+- 区域的 <code>covers</code> 里任一 glob 与任一切片 <code>owns</code> 里任一 glob 相交（与同 wave owns 重叠同一判定）时，该区域 SHALL 出现在 <code>gate.integration</code> 或 <code>gate.integration_skip</code>；
+- <code>scenario_tests</code> 指向的每个测试文件路径 SHALL 匹配 <code>unit.paths</code>，或匹配某个已选区域（<code>gate.integration</code> 里的区域）的 <code>paths</code>。</p><p>文件不存在时上面各条都不触发；但计划里出现 <code>gate.integration</code> 或 <code>gate.integration_skip</code> 时，lint SHALL 报一行以 <code>tiers:</code> 开头、指出缺少分层文件。</p><p><code>plan_sha</code> SHALL 只在 <code>gate.integration</code> 是非空数组时把它追加进哈希内容；其余情况结果与本 change 之前相同。</p><div class="scenario"><p class="scenario-name">Scenario: lint-rejects-unreadable-tiers-file</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>openspec/test-tiers.json</code> 的内容不是合法 JSON；本 change 的计划其余部分合法</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 有一行以 <code>tiers:</code> 开头并含 <code>test-tiers.json</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-rejects-malformed-tiers-file</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件的 <code>unit</code> 缺 <code>cmd</code>；区域 <code>Bad</code> 的名字不合法；区域 <code>typo</code> 带未知字段 <code>cover</code>；<code>slow_allow</code> 里 <code>tests/unit/test_a.py::test_x</code> 的 <code>reason</code> 是空白</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 里以 <code>tiers:</code> 开头的行分别点名 <code>unit</code>、<code>Bad</code>、<code>typo</code>、<code>tests/unit/test_a.py::test_x</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-requires-gate-test-to-be-unit-cmd</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件的 <code>unit.cmd</code> 是 <code>python3 -m pytest -q tests/unit</code>；计划的 <code>gate.test</code> 是 <code>python3 -m pytest -q tests</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 有一行以 <code>tiers:</code> 开头并含 <code>gate.test</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-rejects-bad-region-selection</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件只有区域 <code>hooks</code> 与 <code>docs</code>；计划的 <code>gate.integration</code> 是 <code>[&quot;hooks&quot;, &quot;ghost&quot;, &quot;hooks&quot;]</code>，<code>gate.integration_skip</code> 是 <code>{&quot;docs&quot;: &quot;  &quot;, &quot;hooks&quot;: &quot;不碰&quot;}</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 里以 <code>tiers:</code> 开头的行分别点名 <code>ghost</code>、重复的 <code>hooks</code>、理由空白的 <code>docs</code>、同时出现在两处的 <code>hooks</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-rejects-integration-without-tiers-file</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根目录下没有 <code>test-tiers.json</code>；计划的 <code>gate.integration</code> 是 <code>[&quot;hooks&quot;]</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 有一行以 <code>tiers:</code> 开头并含 <code>test-tiers.json</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-requires-decision-for-covered-region</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>区域 <code>hooks</code> 的 <code>covers</code> 是 <code>[&quot;src/hooks/**&quot;]</code>；切片 S1 的 <code>owns</code> 含 <code>src/hooks/gate.py</code>；计划的 <code>gate.integration</code> 与 <code>gate.integration_skip</code> 都没有 <code>hooks</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 有一行以 <code>tiers:</code> 开头并点名 <code>hooks</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-requires-scenario-test-in-tier</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>unit.paths</code> 是 <code>[&quot;tests/unit/<strong>&quot;]</code>；区域 <code>hooks</code> 的 <code>paths</code> 是 <code>[&quot;tests/integration/hooks/</strong>&quot;]</code> 但没被选上；<code>scenario_tests</code> 把一条 scenario 映射到 <code>tests/integration/hooks/test_g.py::test_g</code>，另一条映射到 <code>tests/test_loose.py::test_loose</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 里以 <code>tiers:</code> 开头的行分别点名 <code>tests/integration/hooks/test_g.py</code> 与 <code>tests/test_loose.py</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-accepts-valid-tiers-plan</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法，<code>unit.cmd</code> 与 <code>gate.test</code> 相同；区域 <code>hooks</code> 的 <code>covers</code> 与 S1 的 <code>owns</code> 相交且在 <code>gate.integration</code> 里；区域 <code>docs</code> 的 <code>covers</code> 也相交，在 <code>gate.integration_skip</code> 里写了理由；scenario 测试分别在 <code>tests/unit/</code> 与 <code>tests/integration/hooks/</code> 下</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 打印 waves</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: no-tiers-file-lint-unchanged</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根目录下没有 <code>test-tiers.json</code>；计划没有 <code>gate.integration</code> 与 <code>gate.integration_skip</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code>，并对同一份计划计算 <code>plan_sha</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>lint 退出 0，stderr 没有以 <code>tiers:</code> 开头的行</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>plan_sha</code> 与按本 change 之前的算法（<code>[test, lint, typecheck, [[id, verify]]]</code>，有 <code>gate.checks</code> 时追加检查）算出的相同</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 切片改动的测试文件必须归层（G12）</p><p>分层文件存在时，<code>slice-gate.py gate</code> SHALL 检查本切片区间（<code>base..HEAD</code> 加未提交改动）里改动过、当前仍存在、文件名符合测试文件命名（<code>test_*.py</code>、<code>*_test.py</code>、<code>*.test.*</code>、<code>*.spec.*</code>）的每个文件：路径匹配 <code>unit.paths</code> 或某个已选区域的 <code>paths</code>；否则 <code>failed</code> 加一条 <code>G12 tiers: &lt;路径&gt; …</code>。分层文件不存在时不做这项检查。</p><div class="scenario"><p class="scenario-name">Scenario: gate-flags-test-file-outside-tiers</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>unit.paths</code> 是 <code>[&quot;tests/unit/<strong>&quot;]</code>，已选区域 <code>hooks</code> 的 <code>paths</code> 是 <code>[&quot;tests/integration/hooks/</strong>&quot;]</code>；切片区间里新增了 <code>tests/integration/hooks/test_ok.py</code> 与 <code>tests/test_stray.py</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>failed</code> 里有一条以 <code>G12</code> 开头并点名 <code>tests/test_stray.py</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有任何 <code>G12</code> 项点名 <code>tests/integration/hooks/test_ok.py</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 单元层运行时用探针逐用例记录触碰与耗时</p><p>slice-gate 以探针方式运行单元层（<code>gate.test</code>）时 SHALL：</p><p>- 经 <code>PYTEST_ADDOPTS</code> 追加 <code>-p flight_tier_probe</code>；插件文件写进临时目录并把该目录加进 <code>PYTHONPATH</code>，不写进被测仓库；
+- 对每个用例记录耗时 = setup、call、teardown 三个阶段耗时之和；
+- 对每个用例记录在这三个阶段内发生的审计事件，归为三类，每类保留第一条样例：
+  - 文件：<code>open</code>、<code>os.mkdir</code>、<code>os.remove</code>、<code>os.rename</code>、<code>os.rmdir</code>、<code>os.chmod</code>、<code>os.truncate</code>、<code>os.utime</code>、<code>os.symlink</code>、<code>os.link</code>、<code>os.listdir</code>、<code>os.scandir</code>、<code>os.walk</code>、<code>glob.glob</code>、<code>shutil.copyfile</code>、<code>shutil.copytree</code>、<code>shutil.move</code>、<code>shutil.rmtree</code>、<code>shutil.copymode</code>、<code>shutil.copystat</code>；
+  - 子进程：<code>subprocess.Popen</code>、<code>os.system</code>、<code>os.exec</code>、<code>os.spawn</code>、<code>os.posix_spawn</code>、<code>os.fork</code>；
+  - 网络：<code>socket.connect</code>、<code>socket.bind</code>、<code>urllib.Request</code>；
+- 不计入：发生在 import 机制（<code>importlib._bootstrap*</code>、<code>zipimport</code>）或 pytest 断言重写读源文件期间的事件；三个阶段之外（如失败报告生成）的事件；
+- 插件加载失败（输出含 <code>Error importing plugin &quot;flight_tier_probe&quot;</code>）时，去掉探针把单元层重跑一次；本次结果判「不可度量」并写明原因，失败用例差分照常用重跑的结果；
+- 输出里没有探针的开跑记录（如 <code>gate.test</code> 不是 pytest）时判「不可度量」。</p><div class="scenario"><p class="scenario-name">Scenario: probe-classifies-each-test</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层有四个用例：只做算术的；在 <code>tmp_path</code> 里写文件的；用子进程运行当前解释器的；在测试函数里首次 import 测试目录下另一个模块的</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 以探针方式运行单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>写文件的用例被记为碰了「文件」，用子进程的被记为碰了「子进程」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>只做算术的与首次 import 模块的都没有任何触碰记录</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: probe-counts-setup-and-teardown</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层有一个用例，它的 fixture 在准备阶段与清理阶段各睡 0.4 秒，测试函数本身不睡</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 以探针方式运行单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>该用例记录的耗时不少于 0.8 秒</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: probe-falls-back-when-plugin-cannot-load</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate.test</code> 是 <code>env PYTHONPATH= python3 -m pytest -q tests/unit</code>（包装命令清空了 <code>PYTHONPATH</code>），单元层用例全绿</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 以探针方式运行单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>结果的退出码为 0，判为不可度量，原因含「探针」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有任何用例被记为触碰或超时</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: probe-unmeasurable-for-non-pytest</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate.test</code> 是 <code>true</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 以探针方式运行单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>结果判为不可度量，没有逐用例记录</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 单元层的慢单测（G10）与不纯（G11）判定</p><p>对一次单元层运行的逐用例记录，slice-gate SHALL：</p><p>- 把耗时 ≥ 3 秒的用例当作候选，在同一次 pytest 调用里单独重跑这些候选一次；重跑耗时仍 ≥ 3 秒，或重跑没有取得它的耗时，即确认超线；
+- 确认超线且不在 <code>slow_allow</code> 里的用例，各给一条失败 <code>G10 slow unit test: &lt;nodeid&gt; …</code>，写明首跑与重跑耗时及处理方式（提速、移入集成区域、或经 <code>test-tiers.py allow-slow</code> 由人类放行）；
+- 确认超线但在 <code>slow_allow</code> 里的用例，各给一条警告，带放行记录；
+- 有任何触碰记录的用例，各给一条失败 <code>G11 impure unit test: &lt;nodeid&gt; …</code>，写明触碰类别与样例；
+- 本次运行不可度量时，只给一条警告 <code>G10/G11 不可度量：&lt;原因&gt;</code>，不判红。</p><div class="scenario"><p class="scenario-name">Scenario: slow-unit-test-confirmed-is-red</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层记录里 <code>tests/unit/test_a.py::test_big</code> 首跑 3.4 秒，单独重跑 3.3 秒，<code>slow_allow</code> 为空</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 判定单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>失败里有一条以 <code>G10</code> 开头、点名 <code>tests/unit/test_a.py::test_big</code>，含 3.4 与 3.3</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: slow-unit-test-not-confirmed-on-rerun-passes</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层记录里 <code>tests/unit/test_a.py::test_jitter</code> 首跑 3.1 秒，单独重跑 0.2 秒</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 判定单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>没有任何 <code>G10</code> 失败</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: allowed-slow-unit-test-is-warning</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>tests/unit/test_a.py::test_big</code> 首跑 3.4 秒、重跑 3.3 秒；<code>slow_allow</code> 里有它，<code>approved</code> 是 <code>2026-10-28T08:00:00Z · 放行 test_big</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 判定单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>没有任何 <code>G10</code> 失败</span></li><li><span class="step-key" data-kw="AND">AND</span><span>警告里有一条点名 <code>tests/unit/test_a.py::test_big</code> 并含 <code>2026-10-28T08:00:00Z</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: impure-unit-test-is-red</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层记录里 <code>tests/unit/test_a.py::test_io</code> 碰了「文件」，样例是 <code>open /tmp/x</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 判定单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>失败里有一条以 <code>G11</code> 开头、点名 <code>tests/unit/test_a.py::test_io</code>，含 <code>open /tmp/x</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: unmeasurable-unit-run-only-warns</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>单元层运行不可度量，原因是「没有探针输出」</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>slice-gate 判定单元层</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>没有任何 <code>G10</code> 或 <code>G11</code> 失败</span></li><li><span class="step-key" data-kw="AND">AND</span><span>恰有一条警告以 <code>G10/G11 不可度量</code> 开头并含「没有探针输出」</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: baseline、final、preflight 按分层运行</p><p>分层文件存在时，baseline、final、preflight SHALL 按下面的方式运行：</p><p>- <strong>baseline</strong> SHALL：
+  - 分层文件或区域选择不合法时停下，不写运行标记、不碰现有 <code>gate-baseline.json</code>；
+  - 不走增量复用（与 <code>--full</code> 相同）；
+  - 以探针方式运行 <code>gate.test</code>（即单元层），按上一条 Requirement 判 G10 / G11，任一失败即基线红；在 <code>gate-baseline.json</code> 记 <code>tiers</code>：<code>{&quot;measured&quot;: true}</code>，或 <code>{&quot;measured&quot;: false, &quot;why&quot;: &lt;原因&gt;}</code>；
+  - 在每片 verify 之后、<code>gate.checks</code> 之前，逐个运行 <code>gate.integration</code> 里区域的 <code>cmd</code>，按 junit 记 <code>regions.&lt;区域名&gt; = {exit, sec, cmd[, failed]}</code>：可度量的红记预存红并警告，不可度量的红即基线红；
+  - 不运行未选区域。
+- <strong>final</strong> SHALL 在 G7 绿时：单元层按基线差分并判 G10 / G11；再逐个已选区域——基线没有它的记录、或记录的 <code>cmd</code> 与分层文件当前命令不同时，失败 <code>G2 region &lt;区域名&gt;：基线缺记录或命令已变，重跑 baseline</code>；否则按它的基线失败逐条差分，新增失败记 <code>G2 region &lt;区域名&gt;: …</code>。G7 红时不跑单元层与区域并给警告（与现状一致）。
+- <strong>preflight</strong> SHALL 在已选区域缺基线记录、或记录的 <code>cmd</code> 与分层文件当前命令不同时报「基线过期」。</p><p>分层文件不存在时，baseline / final / preflight / gate 的行为与输出不变：不注入探针，<code>gate-baseline.json</code> 没有 <code>tiers</code> 与 <code>regions</code> 键。</p><div class="scenario"><p class="scenario-name">Scenario: baseline-red-when-unit-test-impure</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法；单元层里有一个在 <code>tmp_path</code> 写文件的用例 <code>tests/unit/test_u.py::test_writes</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-baseline.json</code> 的 <code>reasons</code> 里有一条以 <code>G11</code> 开头并点名 <code>tests/unit/test_u.py::test_writes</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-red-when-unit-test-slow</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法、<code>slow_allow</code> 为空；单元层里有一个每次都睡 3.1 秒的纯函数用例 <code>tests/unit/test_u.py::test_sleepy</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-baseline.json</code> 的 <code>reasons</code> 里有一条以 <code>G10</code> 开头并点名 <code>tests/unit/test_u.py::test_sleepy</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-records-selected-regions-only</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件有区域 <code>hooks</code> 与 <code>docs</code>，计划只选了 <code>hooks</code>；<code>hooks</code> 里有一个预存失败的用例；单元层全绿且纯</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行两次 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次都退出 0，<code>gate-baseline.json</code> 的 <code>mode</code> 都是 <code>full</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>regions</code> 只有 <code>hooks</code>，它的 <code>failed</code> 含那个预存失败用例；<code>docs</code> 的命令一次都没有运行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-diffs-regions-against-baseline</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>基线已记录区域 <code>hooks</code> 的预存失败 <code>test_old</code>；之后的提交让 <code>hooks</code> 里另一个用例 <code>test_new</code> 也失败</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>failed</code> 里有一条以 <code>G2 region hooks</code> 开头并点名 <code>test_new</code>，没有任何失败项点名 <code>test_old</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-red-on-new-impure-unit-test</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>基线绿；之后的提交在单元层新增一个起子进程的用例 <code>tests/unit/test_u.py::test_spawns</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>failed</code> 里有一条以 <code>G11</code> 开头并点名 <code>tests/unit/test_u.py::test_spawns</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-red-when-region-record-stale</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>基线记录了区域 <code>hooks</code> 的结果；之后分层文件里 <code>hooks</code> 的 <code>cmd</code> 被改成另一条命令</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>failed</code> 里有一条以 <code>G2 region hooks</code> 开头并含「重跑 baseline」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: preflight-stale-when-region-cmd-changed</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>基线绿且记录了区域 <code>hooks</code>；之后分层文件里 <code>hooks</code> 的 <code>cmd</code> 被改成另一条命令</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py preflight</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 含「基线过期」并点名 <code>hooks</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: no-tiers-file-gate-unchanged</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根目录下没有 <code>test-tiers.json</code>；计划没有 <code>gate.integration</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code>，再运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两者都退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-baseline.json</code> 没有 <code>tiers</code> 与 <code>regions</code> 键，final 的 <code>failed</code> 与 <code>warnings</code> 里都没有 <code>G10</code>、<code>G11</code>、<code>G12</code> 或 <code>G2 region</code> 项</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 每次门禁分层报告耗时</p><p>分层文件存在时，跑测试的门禁子命令（<code>gate</code>、<code>baseline</code>、<code>final</code>）SHALL 在输出 JSON 里给出 <code>tier_sec</code>，并写进 <code>summary</code> 与 timeline 备注，让每次门禁都能看出单元层与集成层各花了多少秒：</p><p>- 形状 <code>{&quot;unit&quot;: 秒, &quot;integration&quot;: 秒, &quot;regions&quot;: {区域名: 秒}}</code>，秒数保留 1 位小数；<code>integration</code> = <code>regions</code> 各项之和；有未归层用例的耗时时另加 <code>&quot;unclassified&quot;: 秒</code>；
+- 归层：按用例文件（nodeid 里 <code>::</code> 之前的部分）匹配分层文件的 <code>paths</code>；匹配到多层时取第一个（单元层优先，区域按名字排序）；
+- 计入：
+  - G7 实跑 scenario 测试时，每个用例的 setup + call + teardown 耗时，按归层累加；
+  - baseline / final 里单元层运行（<code>gate.test</code>，含探针加载失败后的重跑与 G10 候选重跑）的墙钟，计入 <code>unit</code>；
+  - 每个已选区域 <code>cmd</code> 运行的墙钟，计入该区域；
+- 不计入：lint、typecheck、每片 verify、<code>gate.checks</code>；
+- <code>summary</code> 末尾追加 <code>；单元 X.Xs · 集成 Y.Ys</code>；timeline 备注在结论词（<code>ok</code> / <code>red</code>）之前插入 <code>单元 X.Xs · 集成 Y.Ys</code>，结论词仍在末尾，飞行记录照常逐行打印；
+- <code>preflight</code> 不跑测试，不报告。</p><p>分层文件不存在时，输出、<code>summary</code> 与 timeline 备注都不变（没有 <code>tier_sec</code> 键）。</p><div class="scenario"><p class="scenario-name">Scenario: tier-seconds-split-by-file</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>逐用例耗时为：单元层两个用例 0.5 秒与 0.3 秒（其中一个带参数后缀）、区域 <code>hooks</code> 一个 2.0 秒、区域 <code>docs</code> 一个 1.0 秒、不在任何层的 <code>tests/test_loose.py</code> 一个 0.1 秒</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>按分层文件归层累加</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>单元 0.8 秒；集成 3.0 秒，其中 <code>hooks</code> 2.0、<code>docs</code> 1.0；未归层 0.1 秒</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: slice-gate-reports-tier-seconds</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法、计划选了区域 <code>hooks</code>；切片 S1 起跑后提交两个 scenario 测试：单元层用例睡 0.3 秒，<code>hooks</code> 的用例睡 0.6 秒</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>tier_sec</code> 的单元不少于 0.25 秒且少于 0.6 秒，集成与 <code>regions.hooks</code> 都不少于 0.55 秒</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>summary</code> 含「单元」与「集成」；timeline 里 gate 那行的备注以 <code>S1</code> 开头、含「单元」与「集成」，仍以 <code>ok</code> 或 <code>red</code> 结尾</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-and-final-report-tier-seconds</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法、计划只选了区域 <code>hooks</code>；单元层用例睡 0.3 秒，<code>hooks</code> 的用例睡 0.6 秒，两者都是已去标记的 scenario 测试</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code>，再运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>baseline 退出 0，<code>gate-baseline.json</code> 的 <code>tier_sec</code> 单元不少于 0.25 秒，<code>regions</code> 只有 <code>hooks</code> 且不少于 0.55 秒，集成等于 <code>regions</code> 之和</span></li><li><span class="step-key" data-kw="AND">AND</span><span>final 输出的 <code>tier_sec</code> 单元不少于 0.25 秒、集成不少于 0.55 秒，<code>summary</code> 含「单元」与「集成」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>timeline 里 baseline 与 final 那两行的备注都含「单元」与「集成」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: no-tiers-file-no-tier-seconds</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根目录下没有 <code>test-tiers.json</code>；计划没有 <code>gate.integration</code>；两个 scenario 测试已去标记</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code>，再运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>gate-baseline.json</code> 与 final 输出都没有 <code>tier_sec</code> 键</span></li><li><span class="step-key" data-kw="AND">AND</span><span>final 的 <code>summary</code> 与 timeline 备注都不含「单元」</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: /test-tiers 的重划分脚本</p><p><code>.claude/hooks/test-tiers.py</code> SHALL 提供：</p><p>- <code>probe [--cmd CMD] [--json PATH]</code>：在 git toplevel 以探针方式运行 <code>CMD</code>（缺省 <code>&lt;当前解释器&gt; -m pytest -q</code>）；stdout 每个测试文件一行：层级（单元 / 集成 / 混合）、单元与集成用例数、最慢耗时、一条触碰样例；末行写合计与耗时 ≥ 3 秒且无触碰的用例数；<code>--json</code> 写逐用例记录与按文件汇总；不可度量时退出 2。
+- <code>check [--openspec-root DIR]</code>：在 git 跟踪的文件与未被忽略的未跟踪文件里，取文件名符合测试文件命名的；每个 SHALL 恰好匹配一层（<code>unit</code> 或某个区域）；有未归层或匹配多层的文件时逐个点名并退出 1；全部恰好一层时退出 0；分层文件缺失或不合法时退出 2。
+- <code>allow-slow NODEID --reason TEXT [--openspec-root DIR] [--session PATH]</code>：按 takeoff-gate 的方式定位会话转录，取时间最新的一条人类消息（人类消息判据同 takeoff-gate）；它 SHALL 同时含 NODEID 的函数名（最后一个 <code>::</code> 之后、去掉参数化后缀 <code>[...]</code>）与放行词（放行、允许、allow、approve，不分大小写）。成立时写入 <code>slow_allow[NODEID] = {&quot;reason&quot;: TEXT, &quot;approved&quot;: &quot;&lt;ISO 时间&gt; · &lt;原话摘要&gt;&quot;}</code>，保留文件其余内容，退出 0；不成立或定位不到转录时退出 3，不改文件，stderr 写明原因。
+- <code>render --probe PATH --plan PATH --out PATH</code>：plan 是 <code>{&quot;tiers&quot;: &lt;拟写入的分层文件内容&gt;, &quot;moves&quot;: {&lt;源文件或 nodeid&gt;: &lt;目标文件&gt;}}</code>；输出单文件 HTML：每个源、目标、目标所属层、探针证据；每层的用例数与耗时合计；问题清单（落点不属于恰好一层的用例、落进单元层却有触碰或耗时 ≥ 3 秒的用例）；导出按钮。有问题时 stderr 逐条列出并退出 1，否则退出 0。</p><div class="scenario"><p class="scenario-name">Scenario: probe-cli-reports-file-tiers</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个仓库有 <code>tests/test_pure.py</code>（只有纯函数用例）、<code>tests/test_io.py</code>（用例都写临时文件）、<code>tests/test_mixed.py</code>（一个纯函数、一个起子进程）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>test-tiers.py probe --json out.json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0；stdout 把三个文件分别标为「单元」「集成」「混合」</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>out.json</code> 的逐用例记录里 <code>tests/test_mixed.py</code> 的子进程用例带「子进程」样例，纯函数用例没有触碰</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: check-flags-unclassified-and-ambiguous-files</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>unit.paths</code> 是 <code>[&quot;tests/unit/<strong>&quot;]</code>，区域 <code>hooks</code> 的 <code>paths</code> 是 <code>[&quot;tests/integration/</strong>&quot;, &quot;tests/unit/test_both.py&quot;]</code>；仓库里有 <code>tests/unit/test_a.py</code>、<code>tests/unit/test_both.py</code>、<code>tests/test_loose.py</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>test-tiers.py check</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 1</span></li><li><span class="step-key" data-kw="AND">AND</span><span>输出点名 <code>tests/test_loose.py</code>（未归层）与 <code>tests/unit/test_both.py</code>（匹配多层），不点名 <code>tests/unit/test_a.py</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: allow-slow-requires-latest-human-message</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>会话转录里较早的一条人类消息是「放行 test_big，fixture 要读大样本」，最新的一条人类消息是「继续」</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>test-tiers.py allow-slow tests/unit/test_a.py::test_big --reason 读大样本</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 3，分层文件不变</span></li><li><span class="step-key" data-kw="AND">AND</span><span>当最新一条人类消息改成「放行 test_big，fixture 要读大样本」后再运行同一命令，退出 0，<code>slow_allow</code> 里 <code>tests/unit/test_a.py::test_big</code> 的 <code>approved</code> 含该消息的时间与「放行 test_big」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: render-writes-approval-page</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份探针结果含 <code>tests/test_mixed.py</code> 的纯函数用例与子进程用例；划分稿把纯函数用例移到 <code>tests/unit/test_mixed.py</code>、把子进程用例移到 <code>tests/integration/hooks/test_mixed.py</code>，<code>tiers</code> 里 <code>unit.paths</code> 是 <code>[&quot;tests/unit/<strong>&quot;]</code>、区域 <code>hooks</code> 的 <code>paths</code> 是 <code>[&quot;tests/integration/hooks/</strong>&quot;]</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>test-tiers.py render --probe … --plan … --out page.html</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0；<code>page.html</code> 含两个目标路径与「导出」按钮</span></li><li><span class="step-key" data-kw="AND">AND</span><span>把子进程用例的目标改成 <code>tests/unit/test_mixed.py</code> 后再运行，退出 1，stderr 点名该用例</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 文档写明分层规则与命令</p><p>文档 SHALL 写明：</p><p>- <code>template/.claude/commands/test-tiers.md</code>：<code>/test-tiers</code> 的步骤（probe → 起草划分 → render 审批页并等人类批准 → 搬文件与拆混合文件 → check 与用例数复核）、mini 留痕、放行慢单测的方式、门禁的分层耗时报告（<code>tier_sec</code>）；
+- schema 的 tasks instruction：<code>gate.integration</code> / <code>gate.integration_skip</code>、分层文件存在时 <code>gate.test</code> 必须等于 <code>unit.cmd</code>、写 scenario 骨架前先定层；
+- <code>opsx-propose</code> 命令与同名 skill：写骨架前先定层；配置了分层时 baseline 只跑单元层（带探针）与已选区域、不走增量；
+- <code>opsx-verify</code> 命令与同名 skill：final 的区域差分、G10、G11；
+- TDD skill：写测试前先定层，单元层 = 不碰真实文件 / 子进程 / 网络、每个用例含准备与清理 &lt;3 秒；
+- slice-executor：新测试先定层，G12；
+- README：命令数 16 并列出 <code>/test-tiers</code>，测试分层一节；<code>install.sh</code> 的命令数提示同步；
+- <code>CLAUDE.md.snippet</code>：一行指向分层规则。</p><div class="scenario"><p class="scenario-name">Scenario: docs-describe-test-tiers</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>本 change 的文档改动已完成</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>检查上述各文件</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>test-tiers.md</code> 含 <code>test-tiers.py probe</code>、<code>render</code>、<code>check</code>、<code>allow-slow</code>、<code>/opsx-mini</code> 与 <code>tier_sec</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>schema 的 tasks instruction 含 <code>gate.integration</code>、<code>gate.integration_skip</code> 与 <code>unit.cmd</code>；propose 命令与同名 skill 都含「先定层」；verify 命令与同名 skill 都含 <code>G10</code> 与 <code>G11</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>TDD skill 含「先定层」与「3 秒」；slice-executor 含 <code>G12</code>；README 含 <code>/test-tiers</code> 与「16 个 slash 命令」；<code>install.sh</code> 含 <code>16 个 slash command</code>；<code>CLAUDE.md.snippet</code> 含 <code>test-tiers.json</code></span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><ul><li><strong>现状</strong>（本仓 main <code>a20e532</code>，<code>template/.claude/hooks/slice-gate.py</code>）：</li><li><code>lint_plan(data, change_dir=None)</code>（<code>:421</code>）校验切片、<code>gate.test</code>、<code>gate.checks</code>；按 change 目录上两级找仓库默认检查 <code>gate-checks.json</code>（<code>_repo_default_checks</code>，<code>:393</code>）。调用方 <code>cmd_lint</code>（<code>:986</code>）与 <code>cmd_preflight</code>（<code>:1625</code>）。</li><li><code>plan_sha</code>（<code>:247</code>）哈希 <code>[test, lint, typecheck, [[id, verify]]]</code>，有 <code>gate.checks</code> 时追加 <code>[name, baseline]</code>。</li><li><code>run_test_gate(cmd, root)</code>（<code>:182</code>）经 <code>PYTEST_ADDOPTS</code> 注入 <code>--junitxml</code>，可度量的 exit 1 给出失败用例集；<code>full_suite_verdict</code>（<code>:293</code>）按基线 <code>test.failed</code> 逐条差分。</li><li><code>cmd_gate</code>（<code>:1222</code>）跑 G1–G8，G3 配对与 G4 GWT 用区间内的测试文件列表（<code>:1258-1260</code>）。</li><li><code>cmd_baseline</code>（<code>:1407</code>）次序：候选复用（<code>:1435</code>）→ 全量（<code>:1457</code>）→ lint / typecheck → 每片 verify → <code>gate.checks</code>（<code>:1508</code>）→ 运行期间改动判定（<code>:1547</code>）→ 写回耗时、入池 → 写 <code>gate-baseline.json</code>。</li><li><code>cmd_final</code>（<code>:1354</code>）次序：G7 → lint / typecheck → G7 绿才跑全量（<code>:1382</code>）→ <code>gate.checks</code>（G9，<code>:1387</code>）。</li><li>G7 实跑用临时 pytest 插件（<code>G7_PLUGIN</code>，<code>:85</code>；<code>_pytest_outcomes</code>，<code>:859</code>）：插件写进临时目录、目录加进 <code>PYTHONPATH</code>、<code>-p</code> 加载，不落被测仓库。</li><li>失败编号 G0–G9 已用；G10–G12 空闲。</li><li>耗时现状：只有 baseline 记全量墙钟（<code>bl.test.sec</code> / <code>full_suite_sec</code>）；<code>run_test_gate</code> 不返回耗时；G7 插件（<code>G7_PLUGIN</code>）只记 <code>[nodeid, 结果]</code>，<code>_pytest_outcomes</code> 返回四元组、按二元组解析每行。</li><li>timeline 备注（<code>timeline_record</code>，<code>:469</code>）被 <code>timeline.py</code> 解析：gate 行取备注首词为切片号、以 <code> ok</code> 结尾判通过（<code>timeline.py:80-85</code>），<code>red</code> 结尾计红次数。</li><li><strong>实测</strong>（2026-10-28，Python 3.9.6 / pytest 8.4.2，一次性探针插件 + <code>sys.addaudithook</code>）：</li><li>本仓 323 个用例里 312 个碰了文件或子进程，11 个纯函数；全量 84s，开探针 101s；最慢单个用例 2.44s。</li><li>import 也会触发 <code>open</code> 事件（<code>io.open_code</code> 读源文件、写字节码缓存时还有 <code>os.mkdir</code>），必须按调用栈排除 import 机制。</li><li><code>os.path.exists</code> / <code>os.stat</code> 不触发审计事件。</li><li><code>-p</code> 指向的插件模块找不到时，pytest 打印 <code>ImportError: Error importing plugin &quot;&lt;name&gt;&quot;</code>，<strong>退出码 1</strong>（与「有用例失败」同码）。</li><li>审计事件名对照 docs.python.org「Audit events table」核实。</li><li><strong>调用方</strong>：<code>/opsx-propose</code> 第 5 步后台跑 baseline；<code>/opsx-apply</code> 起飞前 preflight、每片 gate、收口 final；<code>/opsx-verify</code> 可直接跑 final；新命令 <code>/test-tiers</code> 调用 <code>test-tiers.py</code>。</li><li><strong>用户决策（2026-10-28，决策页 Q1–Q5 全取推荐）</strong>：见 proposal。</li><li><strong>约束</strong>：</li><li>铁律 3 / 9（判据由脚本取得、零 token）、铁律 5（门禁红不收口）、铁律 7（人类审批由机械证据核验）、铁律 10（未配置时行为不变即回退）；</li><li>ADR <code>DRAFT-gate-evidence-not-self-reported</code>：新门禁先回答「判据从哪来、谁能伪造」（D12）；</li><li>ADR <code>DRAFT-test-gate-baseline-diff</code>：失败用例按基线逐条差分；它否决过「自写插件经 <code>-p</code> 加载」做差分（包装脚本会覆写 <code>PYTHONPATH</code>）——本 change 的探针不承担差分，并且加载失败有回退（D4、D12）；</li><li>ADR <code>DRAFT-baseline-reuse-by-content-fingerprint</code>：本 change 在配置了分层时不走复用（D7、D12）。</li></ul><p>C4 组件视图（轻量，<code>slice-gate.py</code> 与新脚本 <code>test-tiers.py</code>；格式沿用先例 <code>slice-gate-paired-checks</code>，plain Mermaid）：</p><ul><li><strong>边界</strong>：模板负责「哪层何时跑、纯度与耗时怎么判、区域怎么选」；区域怎么切、每层用什么命令由仓库在分层文件里写。</li><li><strong>关键关系</strong>：<code>gate.test</code> 与 <code>unit.cmd</code> 由 lint 绑成同一条命令，单元层因此天然进入 <code>plan_sha</code>；区域命令留在分层文件，由 preflight / final 与基线记录对账。</li><li><strong>假设</strong>：仓库用 pytest 时探针全功能；其他 runner 只得到区域运行与 lint，G10 / G11 降级为警告。</li><li><strong>开放问题</strong>：未选区域长期不跑的回归风险（见 Open Questions）。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong> - 单元层 = 基线：飞行的 baseline / final 只跑单元层与本 change 选中的区域。 - 「纯函数」与「&lt;3 秒」两条单元层定义由脚本逐用例判定，不靠自报。 - 区域发起靠判断，但判断必须显式写进计划、随飞行计划审批；漏表态由 lint 拦下。 - 新用例先定层：scenario 测试的位置由 lint 管，切片里的其他测试文件由 G12 管。 - 慢单测的人工放行有人类原话证据。 - 一条命令完成重划分：实测分类 → 审批页 → 搬家 → 复核。 - 每次门禁（gate / baseline / final）分别报告单元层与集成层耗时，进飞行记录（铁律 8）。 - 未配置分层文件时行为、输出、<code>plan_sha</code> 与本 change 之前一致。</p><p><strong>Non-Goals:</strong> - 不改写测试逻辑（把「经子进程测纯逻辑」的集成测试重写成单元测试）。 - 集成区域不设耗时上限。 - 不支持非 pytest runner 的探针（只降级）。 - 未选区域不兜底全跑。 - 本 change 不重划分本仓自己的测试，本仓不放分层文件（Q4）。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><strong>位置</strong></summary><p><code>&lt;change_dir&gt;/../../test-tiers.json</code>，与 <code>gate-checks.json</code> 同一解析；安装后的仓库（<code>openspec/</code>）与本仓（<code>template/openspec/</code>）两种布局都成立。</p></details><details><summary><strong>形状</strong></summary><p><code>{&quot;unit&quot;: {&quot;paths&quot;, &quot;cmd&quot;}, &quot;regions&quot;: {NAME: {&quot;paths&quot;, &quot;covers&quot;, &quot;cmd&quot;}}, &quot;slow_allow&quot;: {NODEID: {&quot;reason&quot;, &quot;approved&quot;}}}</code>；路径相对 git toplevel，glob 语义与 <code>owns</code> 相同（<code>glob_match</code>）。</p></details><details><summary><strong>不认识的字段报错</strong></summary><p>写成 <code>cover</code> 这类笔误时区域会静默失去 <code>covers</code>，lint 再也逼不出表态。宁可红。</p></details><details><summary><strong>区域名 <code>[a-z0-9-]+</code></strong></summary><p>它出现在失败编号文本与 <code>gate-baseline.json</code> 键里，限制字符集免去转义问题。</p></details><details><summary><strong><code>unit.cmd</code> 与 <code>gate.test</code> 必须相同</strong></summary><p>「基线就是单元层」由 lint 机械保证；<code>gate.test</code> 已在 <code>plan_sha</code> 里，单元层命令改了基线自然过期。</p></details><details><summary><strong>否决</strong></summary><p>只在 <code>slices.json</code> 写 <code>gate.test</code>、分层文件不写单元命令——lint 无从判断 <code>gate.test</code> 是否只跑单元层，全量会悄悄继续当基线。</p></details><details><summary><strong>否决</strong></summary><p>pytest marker 分层（Q1 否决）——只适用 Python，区域要靠多个 marker 组合。</p></details><details><summary><strong>形状</strong></summary><p><code>gate.integration = [NAME, …]</code>，<code>gate.integration_skip = {NAME: 理由}</code>；与 <code>gate.checks</code> / <code>checks_skip</code> 同一模式。</p></details><details><summary><strong>表态规则</strong></summary><p>区域 <code>covers</code> 与任一切片 <code>owns</code> 相交（<code>globs_intersect</code>）→ 必须选上或写理由。这是「你或用户判断」的机械化：判断由模型写、人在 spec.html 里批，漏写由 lint 拦。</p></details><details><summary><strong>只写区域名，不抄命令</strong></summary><p>命令只在分层文件里有一份；<code>plan_sha</code> 只追加区域名（D9），命令改动由 preflight / final 与基线记录对账。</p></details><details><summary><strong>否决</strong></summary><p>按 <code>covers</code> 自动选区域——用户要求「判断确实影响到真实文件时」才发起，<code>covers</code> 相交只是信号，可能只改了注释。</p></details><details><summary><strong>否决</strong></summary><p>final 兜底全跑所有区域——违背用户「仅在……时有区域地发起」；漏网风险靠表态规则与审批兜住。</p></details><details><summary><strong>lint</strong></summary><p><code>scenario_tests</code> 指向的文件必须匹配 <code>unit.paths</code> 或已选区域的 <code>paths</code>。tasks 阶段写骨架时就得先定层。</p></details><details><summary><strong>G12</strong>（<code>cmd_gate</code>，接在 G4 之后）</summary><p>本切片区间改动、仍存在、文件名符合测试文件命名的文件，路径必须落在单元层或已选区域；用测试文件命名（<code>TEST_FILE_RE</code>）而不是 <code>is_test_path</code>，免得 <code>conftest.py</code>、测试数据文件被误判。</p></details><details><summary><strong>为什么要 G12</strong></summary><p>执行体额外写的测试若落在任何层之外，baseline 与 final 都不会跑它——这是静默失败。</p></details><details><summary><strong>否决</strong></summary><p>G12 放进 final——执行体在自己的切片里就能挪文件修好，放 final 要多一轮修复。</p></details><details><summary><strong>注入</strong></summary><p><code>run_test_gate(cmd, root, probe=False)</code> 新增参数；<code>probe=True</code> 时插件源 <code>TIER_PROBE_PLUGIN</code> 写进与 junit 相同的临时目录，<code>PYTHONPATH</code> 前置该目录，<code>PYTEST_ADDOPTS</code> 追加 <code>-p flight_tier_probe</code>，<code>FLIGHT_TIER_OUT</code> 指向临时 jsonl。与 G7 插件同法。</p></details><details><summary><strong>窗口</strong></summary><p>用 hookwrapper 包住 <code>pytest_runtest_setup</code> / <code>call</code> / <code>teardown</code>，只在这三段内记录；失败报告生成（读源码拼 traceback）不在窗口内。</p></details><details><summary><strong>事件表</strong></summary><p>见 spec 第三条 Requirement；按事件名集合先过滤，命中才查调用栈，控制开销。</p></details><details><summary><strong>排除</strong></summary><p>调用栈上有 <code>importlib._bootstrap*</code>、<code>zipimport</code> 或 <code>_pytest.assertion.rewrite</code> 帧时不计——实测 import 会触发 <code>open</code> 与 <code>os.mkdir</code>。</p></details><details><summary><strong>耗时</strong></summary><p><code>pytest_runtest_logreport</code> 的 <code>report.duration</code> 三段相加（Q5）。</p></details><details><summary><strong>输出</strong></summary><p>会话开始写一行开跑记录；每个用例 teardown 后写一行 <code>{nodeid, sec, hits}</code>；写之前先关窗口，免得记到插件自己。</p></details><details><summary><strong>xdist</strong></summary><p>主进程与 worker 都可能写同一 nodeid；读取时按 nodeid 合并，耗时取最大、触碰取并集。追加写、每行一条，不依赖单进程。</p></details><details><summary><strong>回退</strong></summary><p>输出含 <code>Error importing plugin &quot;flight_tier_probe&quot;</code>（实测退出码 1，与用例失败同码）→ 去掉探针重跑一次，<code>probe=None</code>、<code>probe_why</code> 写明「探针插件加载失败（包装命令覆写了 PYTHONPATH？）」；差分用重跑结果。没有开跑记录 → <code>probe=None</code>、「没有探针输出（不是 pytest？）」。</p></details><details><summary><strong>返回</strong></summary><p><code>res[&quot;probe&quot;] = {nodeid: {&quot;sec&quot;: float, &quot;hits&quot;: {&quot;文件&quot;|&quot;子进程&quot;|&quot;网络&quot;: 样例}}} | None</code>，<code>res[&quot;probe_why&quot;]</code>。</p></details><details><summary><strong>否决</strong></summary><p>把插件放进 hooks 目录直接加 <code>PYTHONPATH</code>——hooks 目录里有 <code>timeline.py</code> 等可导入模块，会遮住被测仓库的同名模块。</p></details><details><summary><strong>否决</strong></summary><p>解析 <code>--durations</code> 输出取耗时——拿不到触碰信息，还要第二套解析。</p></details><details><summary><strong>阈值</strong></summary><p>常量 <code>UNIT_MAX_SEC = 3.0</code>，不可配置（用户定的规则，不给环境变量开口，见 D12）。</p></details><details><summary><strong>候选与确认</strong></summary><p>耗时 ≥ 3.0 为候选；用 G7 同款前缀（<code>_g7_runner(gate)</code>）在同一次 pytest 调用里带探针重跑全部候选（<code>--rootdir</code> 为 toplevel）；重跑 ≥ 3.0 或重跑没有该 nodeid 的记录（如 <code>cd</code> 子目录跑导致 nodeid 不同）→ 确认。fail-closed。</p></details><details><summary><strong>纯函数判定</strong></summary><p><code>tier_verdicts(probe, probe_why, rerun, allow)</code> → <code>(failed, warnings)</code>，不做 I/O；候选列表由 <code>slow_candidates(probe)</code> 给出，重跑由调用方做。判定逻辑因此能用纯函数单测覆盖，不必每个场景真睡 3 秒。</p></details><details><summary><strong>放行</strong></summary><p>nodeid 在 <code>slow_allow</code> → 警告，带 <code>approved</code>；否则失败。</p></details><details><summary><strong>否决</strong></summary><p>一次超线即红（Q5 否决）——切片并行时负载抖动会让飞行误停。</p></details><details><summary><strong>否决</strong></summary><p>每个候选单独起一次 pytest——候选通常很少，同一调用足够，省进程启动。</p></details><details><summary>任何触碰 → 失败，写明类别与第一条样例。</summary></details><details><summary>不可度量 → 一条警告 `G10/G11 不可度量</summary><p>&lt;原因&gt;`，不判红（与「非 pytest 按退出码判」同一降级口径）。</p></details><details><summary><strong>已知盲区</strong></summary><p><code>os.stat</code> 类不触发事件；C 扩展直接做的 I/O 不经审计钩子。写进文档与 ADR。</p></details><details><summary><strong>否决</strong></summary><p>静态扫描测试源码找 <code>open</code> / <code>subprocess</code>（Q3 选了门禁强制实测）——间接调用看不见，误报也多。</p></details><details><summary><strong>先校验后动作</strong></summary><p>分层文件或区域选择不合法 → <code>die</code>，不写运行标记，与 <code>gate.checks</code> 形状校验同位置。</p></details><details><summary><strong>不走增量</strong></summary><p>配置了分层时 <code>_baseline_candidates(..., full=True)</code>。单元层按定义每个用例 &lt;3 秒，复用机器省不了多少；而复用会跳过探针，G10 / G11 无从判。lint / typecheck 的沿用依赖复用命中，随之不沿用。</p></details><details><summary><strong>次序</strong></summary><p>单元层（原全量位置，带探针，判 G10 / G11，失败进 <code>reasons</code>）→ lint / typecheck → 每片 verify → <strong>已选区域</strong> → <code>gate.checks</code> → 运行期间改动判定。区域放在 verify 之后，与 checks 同属「更贵、按需」的一段。</p></details><details><summary><strong>区域记录</strong></summary><p><code>regions.NAME = {exit, sec, cmd[, failed]}</code>；可度量的红记 <code>failed</code> 并警告；不可度量的红进 <code>reasons</code>。区域每次实跑，不沿用。</p></details><details><summary><strong><code>tiers</code> 记录</strong></summary><p><code>{&quot;measured&quot;: true}</code> 或 <code>{&quot;measured&quot;: false, &quot;why&quot;: …}</code>，供 timeline 与人看。</p></details><details><summary><strong>verify 推导</strong>（<code>_derive_verify</code>）照旧</summary><p>单元层是直接 pytest 调用时，落在单元层里的 verify 仍可由它的 junit 推导；区域测试的 verify 照跑。</p></details><details><summary><strong>入池不变</strong></summary><p>池只按 <code>cmd_key</code> 匹配，分层仓库的单元命令与他人不同，不会误用；不改池逻辑。</p></details><details><summary><strong>次序</strong></summary><p>G7 → lint / typecheck → G7 绿时：单元层（探针 + 差分 + G10 + G11）→ 已选区域逐个差分 → <code>gate.checks</code>（G9）。</p></details><details><summary><strong>差分复用</strong></summary><p>把 <code>full_suite_verdict</code> 的差分部分抽成 <code>_diff_verdict(label, tg, known_failed)</code>；单元层用 <code>test</code> 标签（文本与现状一致），区域用 <code>region NAME</code>。</p></details><details><summary><strong>区域记录核对</strong></summary><p>基线没有 <code>regions.NAME</code>，或记录 <code>cmd</code> ≠ 分层文件当前 <code>cmd</code> → <code>G2 region NAME：基线缺记录或命令已变，重跑 baseline</code>，不跑该区域。</p></details><details><summary>G7 红时沿用现有警告「G2 全量未跑」，单元层与区域都不跑。</summary></details><details><summary><code>plan_sha</code> 在 <code>gate.integration</code> 非空时追加 <code>[&quot;integration&quot;, 区域名列表]</code>；其余情况结果不变（兼容旧基线）。</summary></details><details><summary>preflight 紧接 <code>plan_sha</code> 校验之后（早于基线 commit 祖先校验与按内容判过期）</summary><p>分层文件存在且有已选区域时，逐个核对基线 <code>regions.NAME.cmd</code> 与分层文件当前命令，缺记录或不符 → 「基线过期：区域 NAME …；重跑 baseline」。放在内容判过期之前，是为了让人看到具体是哪个区域的命令变了，而不只是「test-tiers.json 有改动」。</p></details><details><summary>分层文件本身的其他改动（<code>paths</code>、<code>covers</code>、<code>slow_allow</code>）不让基线过期</summary><p>它们不改变基线跑了什么；首次起飞前的内容差异判定（ADR 复用）仍会把它当代码树改动。</p></details><details><summary><strong>判据</strong></summary><p>复用 takeoff-gate 的 <code>locate_cli</code> / <code>human_text</code> / <code>parse_ts</code> / <code>summarize</code>（按路径导入，不改 takeoff-gate）；取<strong>时间最新</strong>的一条人类消息，须同时含函数名与放行词。</p></details><details><summary><strong>为什么取最新一条</strong></summary><p>门禁红后飞行停下，人回复放行，模型随即运行 <code>allow-slow</code>；取最新一条避免拿很久以前的一句话当证据。</p></details><details><summary><strong>写入</strong></summary><p><code>approved = &quot;&lt;ISO 时间&gt; · &lt;摘要 ≤40 字&gt;&quot;</code>；保留分层文件其余键，<code>ensure_ascii=False</code>、缩进 2。</p></details><details><summary><strong>谁能绕过</strong></summary><p>直接编辑 JSON 可以绕过脚本。飞行中执行体改分层文件会被 G6 所有权拦下（文件在 change 目录外，不在任何 <code>owns</code> 里时）；飞行外的改动出现在 PR diff 里。与起飞批准的信任模型相同。</p></details><details><summary><strong>命令即逻辑</strong></summary><p><code>template/.claude/commands/test-tiers.md</code>，无同名 skill（同 <code>/opsx-mini</code>、<code>/pr-ship</code>）。</p></details><details><summary><strong>步骤</strong></summary></details><details><summary><strong>非 pytest 仓库</strong></summary><p>跳过 <code>probe</code>，模型静态推断并在审批页标「未实测」；门禁侧 G10 / G11 降级。</p></details><details><summary><strong><code>test-tiers.py</code> 复用 slice-gate</strong></summary><p>按路径导入 slice-gate（<code>_load_tiers_file</code>、<code>tiers_matching</code>、<code>run_test_gate</code>、<code>TEST_FILE_RE</code>、<code>toplevel</code>），不复制逻辑；slice-gate 不反向依赖它。</p></details><details><summary><strong><code>check</code> 的文件来源</strong></summary><p><code>git ls-files --cached --others --exclude-standard</code>，取文件名符合测试命名的。</p></details><details><summary><strong><code>render</code></strong></summary><p>Python 字符串模板生成单文件 HTML（不依赖外网），导出按钮下载 Markdown（含划分摘要与人类批注框）。模型不逐字写 HTML。</p></details><details><summary><strong>判据</strong></summary><p>探针记录与重跑耗时由 slice-gate 自己运行取得；插件源在 slice-gate 内、写进临时目录，执行体改不到。</p></details><details><summary><strong>阈值不开口</strong></summary><p>不设环境变量覆盖 3 秒（不同于 <code>FLIGHT_G7_TIMEOUT</code>），免得被门禁的一方在命令前缀里改判据。测试用纯函数判定（D5）解决「不想真睡 3 秒」。</p></details><details><summary><strong>被测代码能否骗过探针</strong></summary><p>测试可以导入 <code>flight_tier_probe</code> 改它的状态，属蓄意作弊，评审可见；审计钩子装上后不能卸载。</p></details><details><summary><strong>放行</strong></summary><p>D10。</p></details><details><summary><strong>判定不出时</strong></summary><p>区域记录缺失 → final 红；分层文件读不出 → lint 红、baseline 停下；重跑取不到耗时 → 按超线算。都是 fail-closed。唯一的降级是探针不可度量时 G10 / G11 只给警告，失败用例差分照常（与非 pytest 全量按退出码判同一取舍）。</p></details><details><summary><strong>与 <code>DRAFT-test-gate-baseline-diff</code></strong></summary><p>差分仍只靠 junit；探针只服务 G10 / G11，加载失败时回退保住差分。不 supersede。</p></details><details><summary><strong>与 <code>DRAFT-baseline-reuse-by-content-fingerprint</code></strong></summary><p>配置了分层时不复用，是该 ADR 适用范围外的新情形（单元层快、复用会跳过探针）；未配置时复用完全照旧。不 supersede。</p></details><details><summary>分层文件 <code>test-tiers.json</code>；计划字段 <code>gate.integration</code> / <code>gate.integration_skip</code>；lint 前缀 <code>tiers:</code>。</summary></details><details><summary>失败编号</summary><p><code>G10 slow unit test</code>、<code>G11 impure unit test</code>、<code>G12 tiers</code>、<code>G2 region &lt;NAME&gt;</code>。</p></details><details><summary>插件模块 <code>flight_tier_probe</code>、环境变量 <code>FLIGHT_TIER_OUT</code>；常量 <code>UNIT_MAX_SEC</code>、<code>TIER_PROBE_PLUGIN</code>、<code>TIER_FILE</code>。</summary></details><details><summary>触碰类别用中文「文件 / 子进程 / 网络」，与门禁其余文本一致。</summary></details><details><summary><strong>来源</strong>（2026-10-28 用户追加</summary><p>每次跑门禁区分单元层、集成层耗时）：</p></details><details><summary><strong>G7</strong></summary><p><code>G7_PLUGIN</code> 在环境变量 <code>FLIGHT_G7_SEC</code> 存在时，另把每个用例三个阶段 <code>report.duration</code> 之和按 <code>[nodeid, 秒]</code> 写进该文件；结果行格式不变。<code>_pytest_outcomes(..., durations=None)</code>、<code>scenario_status(..., durations=None)</code> 加可选关键字参数，传入 dict 时才设该变量并回填；返回形状不变，既有调用方不受影响。</p></details><details><summary><strong>单元层</strong></summary><p>baseline / final 里围住「<code>run_test_gate(gate.test, probe=True)</code> + <code>_unit_tier_verdict</code>」计墙钟（含探针回退重跑与候选重跑）。</p></details><details><summary><strong>区域</strong></summary><p>围住每个区域的 <code>run_test_gate(rcmd)</code> 计墙钟；baseline 的 <code>regions.NAME.sec</code> 即此值。</p></details><details><summary><strong>归层</strong></summary><p>纯函数 <code>tier_seconds(durations, tiers)</code> 按 nodeid 的文件部分调 <code>tiers_matching</code>，取第一个匹配（单元层优先）；都不匹配计入 <code>unclassified</code>（lint 与 G12 正常时不会出现，出现即说明有漏网文件，照实报出）。</p></details><details><summary><strong>为什么 G7 用用例耗时、层运行用墙钟</strong></summary><p>G7 一次 pytest 调用混跑两层，墙钟无法拆分；层运行各自独立，墙钟才是真实成本（含收集与启动）。两者相加即「本次门禁花在该层上的秒数」，口径写进 spec。</p></details><details><summary><strong>为什么不计 verify / lint / checks</strong></summary><p>verify 是混层的切片命令，拆分需要再注入耗时插件，收益低；lint / checks 不属于任何测试层。</p></details><details><summary><strong>输出位置</strong></summary><p>结果 JSON 的 <code>tier_sec</code>（baseline 同时写进 <code>gate-baseline.json</code>）；<code>summary</code> 末尾追加；timeline 备注把「单元 X.Xs · 集成 Y.Ys」插在结论词之前——<code>timeline.py</code> 的切片号与 <code> ok</code> / <code>red</code> 解析不受影响，飞行记录逐行打印即可见，<code>timeline.py</code> 不改。</p></details><details><summary><strong>未配置分层时</strong></summary><p>不设 <code>FLIGHT_G7_SEC</code>、不计时、不加键，输出逐字不变（铁律 10）。</p></details><details><summary><strong>切片</strong></summary><p>放在 S5（依赖 S2），因为 baseline / final 的单元层与区域运行由 S2 接入；S2 不感知耗时报告。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary>[未选区域里的回归不会被本 change 跑到] → 表态规则 + 计划审批；<code>/test-tiers check</code> 可放进 CI 定期全跑（不在本 change）。</summary></details><details><summary>[探针开销拉高耗时，接近 3 秒的用例被误判] → 只对候选重跑确认；实测全量开销约 20%，单元层用例本身应远低于 3 秒。</summary></details><details><summary>[包装命令覆写 <code>PYTHONPATH</code>，探针失效] → 回退重跑并降级为警告，差分不受影响；文档提示可在 <code>gate.test</code> 里直接调用 pytest。</summary></details><details><summary>[探针盲区</summary><p><code>os.stat</code>、C 扩展 I/O] → 文档与 ADR 写明；<code>/test-tiers</code> 的人工审批页是第二道。</p></details><details><summary>[配置分层后 baseline 不复用] → 单元层快；区域每次实跑，成本与今天全量同量级或更低。</summary></details><details><summary>[<code>slow_allow</code> 被直接编辑绕过脚本] → G6 所有权 + PR diff，与起飞批准同一信任模型。</summary></details><details><summary>[<code>test-tiers.py</code> 按路径导入 slice-gate / takeoff-gate，私有函数改名会让它坏] → <code>tests/test_tiers_cli.py</code> 覆盖，改名时测试先红。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><ul><li>纯增量：没有分层文件的仓库不受影响；现有 <code>gate-baseline.json</code> 照常可读，<code>plan_sha</code> 不变。</li><li>启用：在目标仓库跑 <code>/test-tiers</code> 生成分层文件，再把进行中 change 的 <code>gate.test</code> 改成 <code>unit.cmd</code> 并重跑 baseline。</li><li>本仓：本 change 合入后另立 change，用 <code>/test-tiers</code> 重划分 <code>tests/</code>（Q4）。</li><li>回退：删掉分层文件与计划里的 <code>gate.integration</code> / <code>gate.integration_skip</code>，行为即回到本 change 之前（铁律 10）。</li></ul></div><div class="design-block"><h3>Open Questions</h3><ul><li>未选区域的定期全跑由谁负责（CI、<code>/opsx-archive</code> 前、还是人工）？本 change 不做。</li><li>非 pytest runner（jest / go test / cargo test）的耗时与纯度度量是否值得做？本 change 只降级。</li><li>没有在役 ADR 需要 supersede。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+<div class="diagram-frame"><div class="mermaid">flowchart LR
+  subgraph repo[&quot;仓库（用户数据）&quot;]
+    TIERS[(&quot;openspec/test-tiers.json\nunit · regions · slow_allow&quot;)]
+    UT[&quot;单元层测试\nunit.paths&quot;]
+    RT[&quot;集成区域测试\nregions.NAME.paths&quot;]
+  end
+  subgraph wt[&quot;change worktree&quot;]
+    PLAN[(&quot;slices.json\ngate.test = unit.cmd\ngate.integration · integration_skip&quot;)]
+    LINT[&quot;lint / preflight\ntiers: 规则 · plan_sha · 区域命令对账&quot;]
+    GATE[&quot;gate（每片）\nG12 测试文件归层&quot;]
+    BL[&quot;baseline\n单元层 + 已选区域，不复用&quot;]
+    FN[&quot;final\n单元层差分 + G10 + G11 + 区域差分&quot;]
+    GB[(&quot;gate-baseline.json\ntest · tiers · regions.NAME&quot;)]
+  end
+  subgraph tmp[&quot;临时目录（不落仓库）&quot;]
+    PROBE[&quot;flight_tier_probe 插件\n审计钩子 · 逐用例 触碰 + 耗时&quot;]
+  end
+  CLI[&quot;test-tiers.py\nprobe · render · check · allow-slow&quot;]
+  TG[&quot;takeoff-gate.py\n人类消息判据&quot;]
+  LINT -- 读 --&gt; PLAN
+  LINT -- 读 --&gt; TIERS
+  GATE -- 读 --&gt; TIERS
+  BL -- 探针方式跑 gate.test --&gt; PROBE
+  FN -- 探针方式跑 gate.test --&gt; PROBE
+  PROBE -- 观察 --&gt; UT
+  BL -- 跑区域 cmd --&gt; RT
+  FN -- 跑区域 cmd --&gt; RT
+  BL -- 写 --&gt; GB
+  FN -- 核对 --&gt; GB
+  CLI -- 复用 slice-gate 函数 --&gt; PROBE
+  CLI -- 写 slow_allow --&gt; TIERS
+  CLI -- 复用判据 --&gt; TG</div><pre class="diagram-fallback">flowchart LR
+  subgraph repo[&quot;仓库（用户数据）&quot;]
+    TIERS[(&quot;openspec/test-tiers.json\nunit · regions · slow_allow&quot;)]
+    UT[&quot;单元层测试\nunit.paths&quot;]
+    RT[&quot;集成区域测试\nregions.NAME.paths&quot;]
+  end
+  subgraph wt[&quot;change worktree&quot;]
+    PLAN[(&quot;slices.json\ngate.test = unit.cmd\ngate.integration · integration_skip&quot;)]
+    LINT[&quot;lint / preflight\ntiers: 规则 · plan_sha · 区域命令对账&quot;]
+    GATE[&quot;gate（每片）\nG12 测试文件归层&quot;]
+    BL[&quot;baseline\n单元层 + 已选区域，不复用&quot;]
+    FN[&quot;final\n单元层差分 + G10 + G11 + 区域差分&quot;]
+    GB[(&quot;gate-baseline.json\ntest · tiers · regions.NAME&quot;)]
+  end
+  subgraph tmp[&quot;临时目录（不落仓库）&quot;]
+    PROBE[&quot;flight_tier_probe 插件\n审计钩子 · 逐用例 触碰 + 耗时&quot;]
+  end
+  CLI[&quot;test-tiers.py\nprobe · render · check · allow-slow&quot;]
+  TG[&quot;takeoff-gate.py\n人类消息判据&quot;]
+  LINT -- 读 --&gt; PLAN
+  LINT -- 读 --&gt; TIERS
+  GATE -- 读 --&gt; TIERS
+  BL -- 探针方式跑 gate.test --&gt; PROBE
+  FN -- 探针方式跑 gate.test --&gt; PROBE
+  PROBE -- 观察 --&gt; UT
+  BL -- 跑区域 cmd --&gt; RT
+  FN -- 跑区域 cmd --&gt; RT
+  BL -- 写 --&gt; GB
+  FN -- 核对 --&gt; GB
+  CLI -- 复用 slice-gate 函数 --&gt; PROBE
+  CLI -- 写 slow_allow --&gt; TIERS
+  CLI -- 复用判据 --&gt; TG</pre><div class="caption">C4 组件视图（轻量，<code>slice-gate.py</code> 与新脚本 <code>test-tiers.py</code>；格式沿用先例 <code>slice-gate-paired-checks</code>，plain Mermaid）：</div></div>
+<!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <div class="mockup-frame">
+        <div class="caption">原型示意 1：一次飞行里各层何时跑（有 openspec/test-tiers.json 的仓库）</div>
+<pre> /opsx-propose              baseline                         每片 gate              final
+ ─────────────              ────────                         ─────────              ─────
+ 写骨架前先定层             单元层 = gate.test（带探针）     G1–G8（不变）          G7（不变）
+ lint（tiers:）              ├ 失败用例按 junit 记基线        <b style="color:var(--color-removed)">G12</b> 测试文件归层     lint / typecheck（不变）
+  · gate.test = unit.cmd     ├ <b style="color:var(--color-removed)">G10</b> ≥3s 且重跑仍 ≥3s                           G7 绿时：
+  · covers∩owns 必须表态     └ <b style="color:var(--color-removed)">G11</b> 碰了文件/子进程/网络                          单元层差分 + <b style="color:var(--color-removed)">G10</b> + <b style="color:var(--color-removed)">G11</b>
+  · scenario 测试必须归层   lint / typecheck、每片 verify                            已选区域逐个差分（<b style="color:var(--color-modified)">G2 region</b>）
+                            <b style="color:var(--color-modified)">已选区域</b>：失败用例记基线                              gate.checks（G9，不变）
+                            gate.checks（不变）
+                            不走增量复用
+ <span style="color:var(--color-fg-muted)">没有分层文件：全部同今天，不注入探针，gate-baseline.json 无 tiers / regions 键。</span></pre>
+      </div>
+      <div class="mockup-frame">
+        <div class="caption">原型示意 2：/test-tiers 第 1 步 `test-tiers.py probe` 的终端输出（以本仓实测数据示意）</div>
+<pre>$ python3 .claude/hooks/test-tiers.py probe --json /tmp/probe.json
+<b style="color:var(--color-removed)">集成</b>  tests/test_slice_gate.py          单元 0  · 集成 66   最慢 1.31s  subprocess.Popen …/python3
+<b style="color:var(--color-removed)">集成</b>  tests/test_template_docs.py       单元 0  · 集成 20   最慢 0.00s  open …/template/.claude/commands/…
+<b style="color:var(--color-modified)">混合</b>  tests/test_memory_lint.py         单元 11 · 集成 23   最慢 0.00s  os.scandir …/pytest-of-…/
+…
+合计 323：单元 11 · 集成 312 · ≥3s 的单元候选 0</pre>
+      </div>
+      <div class="mockup-frame">
+        <div class="caption">原型示意 3：/test-tiers 第 4 步 `test-tiers.py render` 生成的划分审批页（简化）</div>
+        <div style="border:1px solid var(--color-border);border-radius:12px;padding:16px;background:var(--color-bg);font-size:13px">
+          <div style="font-weight:700;margin-bottom:8px">测试重划分 · 待你批准</div>
+          <div style="background:var(--color-new-soft);color:var(--color-new);border-radius:8px;padding:6px 10px;margin-bottom:10px">问题清单：无问题</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="color:var(--color-fg-muted);text-align:left"><th>源</th><th>目标</th><th>所属层</th><th>耗时</th><th>触碰样例</th></tr></thead>
+            <tbody>
+              <tr><td><code>tests/test_memory_lint.py::test_parse_*</code></td><td><code>tests/unit/test_memory_lint.py</code></td><td>unit</td><td>0.00s</td><td>—</td></tr>
+              <tr><td><code>tests/test_memory_lint.py::test_memory目录…</code></td><td><code>tests/integration/memory-lint/…</code></td><td>memory-lint</td><td>0.00s</td><td>os.scandir …</td></tr>
+              <tr><td><code>tests/test_slice_gate.py</code></td><td><code>tests/integration/slice-gate/test_slice_gate.py</code></td><td>slice-gate</td><td>29.3s</td><td>subprocess.Popen …</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:10px;color:var(--color-fg-muted)">每层合计：unit 11 个 / 0.0s · slice-gate 145 个 / ≈70s · docs 59 个 / 0.5s · …</div>
+          <div style="margin-top:10px;border:1px dashed var(--color-border);border-radius:8px;padding:8px;color:var(--color-fg-muted)">批注（可空）</div>
+          <div style="margin-top:10px;display:flex;gap:8px"><span style="border:1px solid var(--color-border-strong);border-radius:8px;padding:4px 10px">复制</span><span style="background:var(--color-fg);color:var(--color-bg);border-radius:8px;padding:4px 10px">导出 Markdown</span></div>
+        </div>
+        <p style="color:var(--color-fg-muted);font-size:12px;margin-top:8px">示意中的区域名与目标路径只是举例；本仓的实际划分在下一个 change 里由 /test-tiers 出稿、你批准（Q4）。</p>
+      </div>
+            <div class="mockup-frame">
+        <div class="caption">原型示意 4：每次门禁的分层耗时（tier_sec）——门禁 JSON 与飞行记录（数字为示意，非实测）</div>
+<pre>$ python3 .claude/hooks/slice-gate.py gate S2 --change-dir openspec/changes/c
+{"slice": "S2", "ok": true, …,
+ <b>"tier_sec": {"unit": 1.8, "integration": 6.4, "regions": {"hooks": 6.4}}</b>,
+ "summary": "通过：0 项失败，1 项警告；改动 4 个文件<b>；单元 1.8s · 集成 6.4s</b>"}
+
+$ python3 .claude/hooks/timeline.py report --change-dir openspec/changes/c   <span style="color:var(--color-fg-muted)"># 收口飞行记录</span>
+2026-10-28T08:00:00Z  baseline  exit 0, 9.1s；<b>单元 9.1s · 集成 41.7s</b> ok
+2026-10-28T08:20:00Z  gate      S1 <b>单元 0.9s · 集成 0.0s</b> ok
+2026-10-28T08:31:00Z  gate      S2 <b>单元 1.8s · 集成 6.4s</b> ok
+2026-10-28T08:40:00Z  final     <b>单元 10.2s · 集成 44.0s</b> ok
+ <span style="color:var(--color-fg-muted)">计入：G7 scenario 用例耗时按文件归层 + 单元层运行墙钟 + 已选区域运行墙钟；不计 lint / typecheck / verify / checks。没有分层文件：输出与今天逐字相同。</span></pre>
+      </div>
+<!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody><tr><td class="mono">S1</td><td>判定器：分层文件读取与 lint 的 tiers: 规则、plan_sha 追加区域、切片门禁 G12、探针插件与 run_test_gate(probe=True)</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_tiers_plan.py<br>tests/test_tiers_probe.py</td><td><code>python3 -m pytest -q tests/test_tiers_plan.py tests/test_tiers_probe.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate_coverage.py</code></td></tr><tr><td class="mono">S2</td><td>判定器：G10 / G11 纯函数判定与候选重跑，baseline / final / preflight 按分层运行（单元层探针、已选区域差分、不走增量）</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_tiers_verdict.py<br>tests/test_tiers_gate.py</td><td><code>python3 -m pytest -q tests/test_tiers_verdict.py tests/test_tiers_gate.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py</code></td></tr><tr><td class="mono">S3</td><td>脚本：test-tiers.py 的 probe / check / allow-slow / render（复用 slice-gate 与 takeoff-gate 的函数）</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/test-tiers.py<br>tests/test_tiers_cli.py</td><td><code>python3 -m pytest -q tests/test_tiers_cli.py tests/test_approval_gate.py</code></td></tr><tr><td class="mono">S4</td><td>文档：/test-tiers 命令、schema tasks instruction、propose / verify 命令与同名 skill、TDD skill 先定层、slice-executor、README、install.sh、CLAUDE.md.snippet</td><td>wave 1</td><td>-</td><td>template/.claude/commands/test-tiers.md<br>template/openspec/schemas/intent-driven/schema.yaml<br>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>template/.claude/commands/opsx-verify.md<br>template/.claude/skills/openspec-verify-change/SKILL.md<br>template/.claude/skills/test-driven-development/SKILL.md<br>template/.claude/agents/slice-executor.md<br>README.md<br>install.sh<br>template/CLAUDE.md.snippet<br>tests/test_tiers_docs.py</td><td><code>python3 -m pytest -q tests/test_tiers_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_baseline_incremental_docs.py tests/test_agents_workflow.py tests/test_install.py</code></td></tr><tr><td class="mono">S5</td><td>判定器：每次门禁分层报告耗时（G7 逐用例耗时归层、单元层与区域墙钟，gate / baseline / final 输出 tier_sec 并写进 summary 与 timeline）</td><td>wave 3</td><td>S2</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_tiers_timing.py</td><td><code>python3 -m pytest -q tests/test_tiers_timing.py tests/test_tiers_gate.py tests/test_tiers_verdict.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_timeline.py tests/test_baseline_incremental.py</code></td></tr></tbody></table><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>test-tiers#lint-rejects-unreadable-tiers-file</td><td><code>tests/test_tiers_plan.py::test_lint_rejects_unreadable_tiers_file</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-rejects-malformed-tiers-file</td><td><code>tests/test_tiers_plan.py::test_lint_rejects_malformed_tiers_file</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-requires-gate-test-to-be-unit-cmd</td><td><code>tests/test_tiers_plan.py::test_lint_requires_gate_test_to_be_unit_cmd</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-rejects-bad-region-selection</td><td><code>tests/test_tiers_plan.py::test_lint_rejects_bad_region_selection</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-rejects-integration-without-tiers-file</td><td><code>tests/test_tiers_plan.py::test_lint_rejects_integration_without_tiers_file</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-requires-decision-for-covered-region</td><td><code>tests/test_tiers_plan.py::test_lint_requires_decision_for_covered_region</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-requires-scenario-test-in-tier</td><td><code>tests/test_tiers_plan.py::test_lint_requires_scenario_test_in_tier</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#lint-accepts-valid-tiers-plan</td><td><code>tests/test_tiers_plan.py::test_lint_accepts_valid_tiers_plan</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#no-tiers-file-lint-unchanged</td><td><code>tests/test_tiers_plan.py::test_no_tiers_file_lint_unchanged</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#gate-flags-test-file-outside-tiers</td><td><code>tests/test_tiers_plan.py::test_gate_flags_test_file_outside_tiers</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#probe-classifies-each-test</td><td><code>tests/test_tiers_probe.py::test_probe_classifies_each_test</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#probe-counts-setup-and-teardown</td><td><code>tests/test_tiers_probe.py::test_probe_counts_setup_and_teardown</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#probe-falls-back-when-plugin-cannot-load</td><td><code>tests/test_tiers_probe.py::test_probe_falls_back_when_plugin_cannot_load</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#probe-unmeasurable-for-non-pytest</td><td><code>tests/test_tiers_probe.py::test_probe_unmeasurable_for_non_pytest</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#slow-unit-test-confirmed-is-red</td><td><code>tests/test_tiers_verdict.py::test_slow_unit_test_confirmed_is_red</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#slow-unit-test-not-confirmed-on-rerun-passes</td><td><code>tests/test_tiers_verdict.py::test_slow_unit_test_not_confirmed_on_rerun_passes</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#allowed-slow-unit-test-is-warning</td><td><code>tests/test_tiers_verdict.py::test_allowed_slow_unit_test_is_warning</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#impure-unit-test-is-red</td><td><code>tests/test_tiers_verdict.py::test_impure_unit_test_is_red</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#unmeasurable-unit-run-only-warns</td><td><code>tests/test_tiers_verdict.py::test_unmeasurable_unit_run_only_warns</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#baseline-red-when-unit-test-impure</td><td><code>tests/test_tiers_gate.py::test_baseline_red_when_unit_test_impure</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#baseline-red-when-unit-test-slow</td><td><code>tests/test_tiers_gate.py::test_baseline_red_when_unit_test_slow</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#baseline-records-selected-regions-only</td><td><code>tests/test_tiers_gate.py::test_baseline_records_selected_regions_only</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#final-diffs-regions-against-baseline</td><td><code>tests/test_tiers_gate.py::test_final_diffs_regions_against_baseline</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#final-red-on-new-impure-unit-test</td><td><code>tests/test_tiers_gate.py::test_final_red_on_new_impure_unit_test</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#final-red-when-region-record-stale</td><td><code>tests/test_tiers_gate.py::test_final_red_when_region_record_stale</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#preflight-stale-when-region-cmd-changed</td><td><code>tests/test_tiers_gate.py::test_preflight_stale_when_region_cmd_changed</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#no-tiers-file-gate-unchanged</td><td><code>tests/test_tiers_gate.py::test_no_tiers_file_gate_unchanged</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#probe-cli-reports-file-tiers</td><td><code>tests/test_tiers_cli.py::test_probe_cli_reports_file_tiers</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#check-flags-unclassified-and-ambiguous-files</td><td><code>tests/test_tiers_cli.py::test_check_flags_unclassified_and_ambiguous_files</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#allow-slow-requires-latest-human-message</td><td><code>tests/test_tiers_cli.py::test_allow_slow_requires_latest_human_message</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#render-writes-approval-page</td><td><code>tests/test_tiers_cli.py::test_render_writes_approval_page</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#docs-describe-test-tiers</td><td><code>tests/test_tiers_docs.py::test_docs_describe_test_tiers</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#tier-seconds-split-by-file</td><td><code>tests/test_tiers_timing.py::test_tier_seconds_split_by_file</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#slice-gate-reports-tier-seconds</td><td><code>tests/test_tiers_timing.py::test_slice_gate_reports_tier_seconds</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#baseline-and-final-report-tier-seconds</td><td><code>tests/test_tiers_timing.py::test_baseline_and_final_report_tier_seconds</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>test-tiers#no-tiers-file-no-tier-seconds</td><td><code>tests/test_tiers_timing.py::test_no_tiers_file_no_tier_seconds</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr></tbody></table><h3>飞行记录</h3><table class="flight-table"><thead><tr><th>时间</th><th>事件</th><th>备注</th></tr></thead><tbody><tr><td class="mono">2026-10-28T06:18:12Z</td><td>baseline</td><td>exit 0, 130.2s ok；verify 推导 4 片</td></tr></tbody></table>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 判定器：分层文件读取与 lint 的 tiers: 规则、plan_sha 追加区域、切片门禁 G12、探针插件与 run_test_gate(probe=True) （deps: - · verify: <code>python3 -m pytest -q tests/test_tiers_plan.py tests/test_tiers_probe.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate_coverage.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 判定器：G10 / G11 纯函数判定与候选重跑，baseline / final / preflight 按分层运行（单元层探针、已选区域差分、不走增量） （deps: S1 · verify: <code>python3 -m pytest -q tests/test_tiers_verdict.py tests/test_tiers_gate.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 脚本：test-tiers.py 的 probe / check / allow-slow / render（复用 slice-gate 与 takeoff-gate 的函数） （deps: S1 · verify: <code>python3 -m pytest -q tests/test_tiers_cli.py tests/test_approval_gate.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 文档：/test-tiers 命令、schema tasks instruction、propose / verify 命令与同名 skill、TDD skill 先定层、slice-executor、README、install.sh、CLAUDE.md.snippet （deps: - · verify: <code>python3 -m pytest -q tests/test_tiers_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_baseline_incremental_docs.py tests/test_agents_workflow.py tests/test_install.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S5 判定器：每次门禁分层报告耗时（G7 逐用例耗时归层、单元层与区域墙钟，gate / baseline / final 输出 tier_sec 并写进 summary 与 timeline） （deps: S2 · verify: <code>python3 -m pytest -q tests/test_tiers_timing.py tests/test_tiers_gate.py tests/test_tiers_verdict.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_timeline.py tests/test_baseline_incremental.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-10-28 07:19 · 章节 9 · 图示 1 · 任务 5
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,119 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 323,
+      "summary": "probe=True 时 FLIGHT_TIER_OUT、PYTHONPATH（含插件目录）和 PYTEST_ADDOPTS 里的 ` -p flight_tier_probe` 都会被被测用例里再起的 pytest 子进程继承，比如 G7 的 run_targets，或用例自己 subprocess 跑 pytest。这些嵌套会话会把自己的 {\"probe\":\"start\"} 和以嵌套 rootdir 为基准的 nodeid（如 tests/unit/test_touch.py::test_writes）追加进外层 jsonl。_read_probe 不分来源，全部按 nodeid 合并进 probe，于是返回契约 {nodeid: ...} 里混进了外层套件中并不存在的幽灵用例，nodeid 碰巧重名时 hits 还会并到真实用例上。另外，in-process 的 pytester 会话会在内层 teardown 时把共享的 _cur 置为 None，外层用例窗口剩下的事件就漏记了。如果 S2 的 G10/G11 直接遍历 probe 判定，幽灵 nodeid 会被 unit.paths 命中，产生指向不存在用例的红项。需进一步确认：S2 是否只消费 junit cases 里有的 nodeid。",
+      "fix": "run_test_gate 在 probe=True 时另设 env FLIGHT_TIER_ROOT=root。插件在 pytest_sessionstart / pytest_runtest_logreport 里比对 str(session.config.rootpath)（3.8 下用 config.rootdir）与 FLIGHT_TIER_ROOT（两边都 realpath），不一致就不写、也不改 _cur；xdist worker 的 rootdir 和主进程相同，不受影响。也可以退一步，在 _read_probe 里只保留第一个 start 段的记录，或在 S2 消费时与 junit cases 取交集。补一条用例：外层用例里起一个嵌套 pytest 子进程，断言 probe 里不出现嵌套会话的 nodeid。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 139,
+      "summary": "审计钩子排除 import 帧时一路回溯到栈底，只要整条调用栈上有一帧 importlib._bootstrap*，事件就整体不计。如果 pytest 本身是在某个模块的 import 期间启动的（例如 `python -c \"import run_tests\"`，run_tests 在顶层调用 pytest.main），全部窗口内事件都会被静默排除，probe 显示所有用例都没碰任何东西，属于假阴性。用例在函数里 importlib.import_module 一个顶层有写文件副作用的模块，同样会被吞掉。",
+      "fix": "回溯到插件 hookwrapper 所在的帧就停，只看窗口内（即 pytest_runtest_* 以下）的帧。做法：在 hookwrapper 里记下 sys._getframe() 作为栈底哨兵，回溯遇到哨兵即停。或者在 docstring 里注明这个已知局限。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/test-tiers.md",
+      "line": 24,
+      "summary": "第 1 步要求用 /opsx-mini 留痕。但 opsx-mini.md 第 1 步的 rubric 规定命中「跨模块 / 跨子系统」就拒绝登记，而按模块把测试拆到多个集成区域、写仓库级 openspec/test-tiers.json，很可能被执行 /opsx-mini 的模型判成跨模块，直接拒登，流程卡在第一步。这个流程是 design D11 定的，不算 S4 自己发明的偏离，需进一步确认实际运行时会不会被拒",
+      "fix": "在 test-tiers.md 第 1 步加一句：只搬测试、不改被测代码与断言，属于 mini 的「无行为变化」类；或者在 opsx-mini.md 的 rubric 里给 /test-tiers 留一条明确例外（这要另走变更，不在本切片 owns 内）"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_tiers_docs.py",
+      "line": 24,
+      "summary": "文档测试只做子串检查。\"check\"、\"render\" 这类通用词在任何文本里都容易出现，测不出命令文档是否真的写了 `test-tiers.py check` / `test-tiers.py render` 子命令；verify 两份文档也只查 G10/G11 字样，没查 `G2 region`。这个骨架是计划阶段写好的，S4 只去掉了 xfail 标记，所以只记录，不阻断",
+      "fix": "把断言改成完整调用形式，比如 \"test-tiers.py render\"、\"test-tiers.py check\"、\"test-tiers.py allow-slow\"；verify 两份文档补查 \"G2 region\""
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-verify.md",
+      "line": 21,
+      "summary": "final 的分层说明漏了 S2 第 7 步定义的那条红：分层文件存在但不合法时记一条 `G2 tiers：测试分层文件不合法，先跑 lint 修好`，并且不跑单元层探针与区域。同改的 openspec-verify-change/SKILL.md:28 也漏了。两份文档措辞一致，没有漂移，只是不完整",
+      "fix": "在这两份文档的分层段末尾，逐字同句补上：分层文件不合法时记 `G2 tiers：测试分层文件不合法，先跑 lint 修好`，不跑单元层探针与区域"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1739,
+      "summary": "cmd_final 只用 _load_tiers 判断分层文件的形状，没有核对计划。如果计划写了 gate.integration 但分层文件不存在，final 会照旧路径跑，单元层探针（G10 / G11）和已选区域都静默跳过，不报失败也不给警告。cmd_baseline 遇到同样配置会直接 die，两边不一致。按 design D8，/opsx-verify 可以不经 preflight 直接跑 final，所以这里没有其他环节兜底。另外，分层文件合法但 test_cmd 为空时，区域也一并被跳过，同样没有任何提示。",
+      "fix": "在 final 的 G7 绿分支加一条判断：tiers 为 None、terrs 为空、但 _selected_regions(gate) 非空时，追加失败 \"G2 tiers：计划选了区域但缺测试分层文件，先跑 lint 修好\"。tiers 合法而 test_cmd 为空时，已选区域照样逐个对账并差分；如果决定不跑，至少给一条警告。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1807,
+      "summary": "分层文件不存在而 gate.integration 非空时，baseline 报的是「区域 X 不在测试分层文件 regions 里」，真正的原因是分层文件缺失，提示会让人去查错地方。",
+      "fix": "tiers 为 None 且 regions 非空时单独 die：「计划写了 gate.integration，但缺少测试分层文件 <path>」，与 _lint_tiers 的文案保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 459,
+      "summary": "_selected_regions 遇到 gate.integration 不是数组（比如写成字符串 \"hooks\"）时，按「未选区域」处理。baseline 因此不会停下，区域选择也没有落进 plan_sha，这和 spec「区域选择不合法时停下」不完全一致。preflight 里的 lint_plan 最终能拦住，影响有限。",
+      "fix": "在 cmd_baseline 的校验位置加一句：gate.integration 存在但不是 list 时 die（或复用 _lint_tiers 的结果）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_tiers_verdict.py",
+      "line": 4,
+      "summary": "XF 标记已经去掉，但模块 docstring 还写着「骨架：每个 scenario 一个 strict xfail……去掉标记即解锁」。tests/test_tiers_gate.py 第 3-4 行也一样，描述已经过时。",
+      "fix": "把两个文件 docstring 里关于骨架和 xfail 的句子删掉，或改成现状描述。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 164,
+      "summary": "allow-slow 判断函数名用的是子串包含（`func not in text`）。所以「放行 test_bigger」也会让 test_big 通过，放行的是别的用例。另外 NODEID 以 `::` 结尾时 func 为空串，`\"\" in text` 恒为真，最新消息里只要有任何一个放行词就会写入 slow_allow。这是人类审批证据门，误判会悄悄放过，不会报错",
+      "fix": "func 为空时 fail(code 2)。函数名改用带边界的匹配：`re.search(r'(?<![\\w])%s(?![\\w])' % re.escape(func), text)`。补一条反例测试：最新消息写「放行 test_bigger」时，对 test_big 退出 3"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 29,
+      "summary": "放行词正则 `放行|允许|allow|approve` 不处理否定和词边界。「不要放行 test_big」「不允许 test_big」都算批准；「allow」还会命中「allow-slow」「disallow」，比如人类只说「跑下 allow-slow 看 test_big 多慢」也会被当成批准。这是按切片包第 5 步原样实现的，属于规格层面的风险，需进一步确认是否收紧",
+      "fix": "交回规划决定。一种做法是排除紧挨在放行词前面的否定词（不 / 别 / 不要 / not / don't）；另一种是英文放行词加 `\\b` 词边界，避免命中 allow-slow。决定后同步改 spec 与测试"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 211,
+      "summary": "render 只校验了 tiers.unit 是不是对象。unit 缺 paths、regions 里某项不是对象或缺 paths、moves 不是对象时，tiers_matching 和 moves.get 会直接抛异常。未捕获异常的退出码是 1，和约定里「有问题」的 1 撞了，调用方会把崩溃当成「落点不合规」，而且 HTML 没写出",
+      "fix": "在推算落点前完整校验划分稿形状。可以复用 sg._tier_shape：unit 校验 (paths, cmd)，regions 每项校验 (paths, covers, cmd)。moves 必须是 dict 且值为非空字符串。任一不满足就 fail(..., 2)，与「输入不可用 = 2」的约定一致"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 114,
+      "summary": "check 用 `git ls-files` 时没加 `-z`。默认 core.quotePath 会把含非 ASCII 的路径输出成带引号的转义串，结尾是 `\"`，TEST_FILE_RE 的 `$` 锚点就匹配不上。这类文件会被悄悄漏掉，check 仍然报「全部恰好归一层」。另外 sg.git 失败时抛的 RuntimeError 没有捕获，会变成退出码 1",
+      "fix": "改为 `sg.git(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\\0')` 并过滤空串。外面包一层 try/except RuntimeError，捕获后 fail(..., 2)"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_tiers_timing.py",
+      "line": 137,
+      "summary": "final 的断言阈值太松，测不出墙钟合并这一段：ft[\"unit\"] >= 0.25 和 ft[\"integration\"] >= 0.55 只靠 G7 本身的用例耗时（单元 0.3 秒、hooks 0.6 秒）就能满足。cmd_final 里的 `_tier_add(ts, unit_wall, region_wall)` 整行删掉，或 unit_wall / region_wall 没赋值，这条测试照样是绿的。所以「G7 绿时把单元层与区域运行的墙钟并入」这个行为（S5 做法第 6 步、design D14）实际上没有测试守护。",
+      "fix": "按「G7 用例耗时 + 层运行墙钟」的口径把下限抬高：ft[\"unit\"] >= 0.55（G7 0.3 + 全量里再跑一次 0.3），ft[\"integration\"] >= 1.15（G7 0.6 + 区域 hooks 运行 0.6）。另外按切片包「注意」里 mutation 自证的做法，确认注释掉 `_tier_add` 后这条测试会变红。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 104,
+      "summary": "G7_PLUGIN 在 xdist 下大概率把耗时算两遍（需进一步确认）。用 `-p` 加载的插件 xdist worker 也会加载，worker 本地会调用 pytest_runtest_logreport，controller 收到转发的报告后又调用一次，而 FLIGHT_G7_SEC 会被 worker 继承。结果是每个 nodeid 往 seconds.jsonl 写两行，_pytest_outcomes 回填时又用 `durations[nid] += sec` 累加，G7 这部分的 tier_sec 会翻倍。插件头部注释明确说要兼容 addopts 里带 xdist `-n` 的情况，结果行重复写两遍对 outcomes 没有影响，但对耗时有影响。",
+      "fix": "耗时分支只在 controller 或非 xdist 进程里记：开头加 `if \"FLIGHT_G7_SEC\" in os.environ and \"PYTEST_XDIST_WORKER\" not in os.environ:`。也可以在 _pytest_outcomes 回填时同一个文件里对同一 nodeid 取一次（覆盖或取 max），不累加。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 716,
+      "summary": "`if round(loose, 1):` 的判断会把耗时不到 0.05 秒的未归层用例悄悄丢掉。design D14 说 unclassified 一出现就说明有漏网文件，要照实报出，但很快的漏网用例（大多数单元测试都很快）在这里不会留下任何信号。",
+      "fix": "改成 `if loose > 0:` 或按「durations 里有没有未归层 nodeid」来判断，有就输出 unclassified 键（值可以是 0.0）。如果 spec 本意就是舍入后为 0 时不输出，就在 spec 或 design 里写明这个口径。"
+    }
+  ],
+  "fix": null
+}
