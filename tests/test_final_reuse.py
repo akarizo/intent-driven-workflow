@@ -94,3 +94,18 @@ def test_final_not_reused_when_slice_scenarios_change(git_repo):
     # Then: 指纹含每片 scenarios，不沿用；G7 判新 scenario 无测试映射而红
     assert (out.get("incremental") or {}).get("mode") != "reused", out.get("incremental")
     assert out["ok"] is False, out
+
+
+def test_final_record_write_failure_warned_in_report(git_repo):
+    # Given: baseline 绿；final 记录目录 <git common dir>/flight-final 被一个同名普通文件占住（记录写不进去）
+    d = make_repo(git_repo)
+    baseline(git_repo, d)
+    (git_repo / ".git" / "flight-final").write_text("占位\n", encoding="utf-8")
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 写入失败的警告既在 stdout JSON 里，也进了 gate-report 的 final 行
+    assert any("final 记录写入失败" in w for w in out["warnings"]), out["warnings"]
+    last = [l for l in (d / "gate-report.md").read_text(encoding="utf-8").splitlines() if "| final |" in l][-1]
+    assert "final 记录写入失败" in last, last

@@ -2648,16 +2648,16 @@ def cmd_final(args):
         final_note = "%s %s" % (_tier_note(ts), final_note)
     if inc_note:  # 结论词恒在末尾（timeline.py 按末尾取结论）
         final_note = "%s %s" % (inc_note, final_note)
-    append_report(args.change_dir, result)
-    timeline_record(args.change_dir, "final", final_note)
     if cur_snap is not None:  # 每次实跑结束（绿或红）都写记录，供下次同树沿用（design D6）
         entry = {"commit": head, "snapshot": cur_snap, "fps": fps, "result": result}
         green = None if result["ok"] else _last_green(rec)
         if green:  # 红记录带上最近一次绿的树，供 gate.impacted 取锚点（design D8）
             entry["green"] = green
-        w = _final_rec_write(root, name, entry)
+        w = _final_rec_write(root, name, entry)  # 先写记录（其 result 不含本条警告），警告再并进报告留痕
         if w:
             result["warnings"].append(w)
+    append_report(args.change_dir, result)
+    timeline_record(args.change_dir, "final", final_note)
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(0 if result["ok"] else 1)
 
