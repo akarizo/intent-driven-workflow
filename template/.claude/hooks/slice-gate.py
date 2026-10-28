@@ -139,7 +139,7 @@ def pytest_runtest_logreport(report):
 '''
 # 嵌套会话防护插件（design D1）：写进临时目录为 flight_guard.py，与 --junitxml 一起经 -p 恒加载；
 # 环境里没有 FLIGHT_GUARD_OWNER 且不是 worker → 外层（设 OWNER，给自己的 xdist worker 写 flight_outer）；
-# 带 flight_outer 的 worker 算外层；其余是嵌套：抢在 junitxml 之前清掉 xmlpath，并设 FLIGHT_GUARD_NESTED=1（探针 / 依赖图据此不写）；
+# 带 flight_outer 的 worker 算外层；其余是嵌套：抢在 junitxml 之前清掉门禁注入的 xmlpath（等于 FLIGHT_GUARD_JUNIT 才清，用例显式写的保留），并设 FLIGHT_GUARD_NESTED=1（探针 / 依赖图据此不写）；
 # 外层写 FLIGHT_GUARD_OK 标记文件：走到 configure 说明外层的全部 -p 插件都已导入，输出里的插件导入错误只能来自嵌套会话
 GUARD_PLUGIN = '''import os
 
@@ -160,7 +160,9 @@ def pytest_configure(config):
         return
     if wi is not None and wi.get("flight_outer"):
         return
-    config.option.xmlpath = None
+    xp, mine = getattr(config.option, "xmlpath", None), os.environ.get("FLIGHT_GUARD_JUNIT")
+    if xp and mine and os.path.realpath(os.path.abspath(xp)) == os.path.realpath(mine):  # 只清门禁注入的 junit
+        config.option.xmlpath = None
     os.environ["FLIGHT_GUARD_NESTED"] = "1"
 
 
@@ -586,8 +588,8 @@ except Exception:
 finally:
     sys.path[:] = _saved_path
 '''
-FLIGHT_ENV = ("FLIGHT_GUARD_OWNER", "FLIGHT_GUARD_NESTED", "FLIGHT_GUARD_OK", "FLIGHT_DEPS_OUT", "FLIGHT_DEPS_FILE",
-              "FLIGHT_ROOT")
+FLIGHT_ENV = ("FLIGHT_GUARD_OWNER", "FLIGHT_GUARD_NESTED", "FLIGHT_GUARD_OK", "FLIGHT_GUARD_JUNIT", "FLIGHT_DEPS_OUT",
+              "FLIGHT_DEPS_FILE", "FLIGHT_ROOT")
 # 三个 flight 插件任一导入失败（包装命令覆写了 PYTHONPATH 等）的 pytest 输出特征；只在外层没写 FLIGHT_GUARD_OK 标记时才算外层失败
 FLIGHT_PLUGIN_FAIL = re.compile(r'Error importing plugin "flight_(?:guard|deps|tier_probe)"')
 # 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
@@ -890,6 +892,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
         if not _plain:
             deps_out = _flight_plugins(tmp, env, root, deps)
             env["FLIGHT_GUARD_OK"] = guard_ok
+            env["FLIGHT_GUARD_JUNIT"] = junit
             env["PYTEST_ADDOPTS"] += " -p flight_guard" + (" -p flight_deps" if deps else "")
         if probe and not _plain:
             with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:

@@ -126,3 +126,28 @@ def test_nested_plugin_failure_not_taken_as_outer_failure(git_repo, tmp_path):
     assert count.read_text().count("x") == 1, count.read_text()
     assert not [w for w in out["warnings"] if "依赖图未测" in w], out["warnings"]
     assert latest_anchor(git_repo)["measured"] is True
+
+
+def test_nested_explicit_junitxml_kept(tmp_path):
+    # Given: 被测用例起一个继承环境的嵌套 pytest，命令行显式写 --junitxml=<临时目录>/out.xml 并读取它
+    write(tmp_path / "pytest.ini", "[pytest]\n")
+    write(tmp_path / "tests" / "test_junit.py", """
+        import os
+        import subprocess
+        import sys
+
+
+        def test_junit(tmp_path):
+            (tmp_path / "test_inner.py").write_text("def test_inner():\\n    pass\\n")
+            xml = tmp_path / "out.xml"
+            subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml=%s" % xml,
+                            str(tmp_path / "test_inner.py")], check=True)
+            assert xml.is_file()
+    """)
+    sg = load_hook("slice-gate")
+
+    # When: 门禁以 run_test_gate 运行这个套件
+    res = sg.run_test_gate(CMD, str(tmp_path), deps=True)
+
+    # Then: 嵌套会话显式指定的 junit 照常写出，用例通过
+    assert res["rc"] == 0, res["out"][-1500:]
