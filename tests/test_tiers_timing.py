@@ -1,8 +1,7 @@
 """每次门禁分层报告耗时：gate / baseline / final 输出 tier_sec，并写进 summary 与 timeline 备注
 （scenario: test-tiers#tier-seconds-split-by-file、#slice-gate-reports-tier-seconds、
 #baseline-and-final-report-tier-seconds、#no-tiers-file-no-tier-seconds）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。
-护栏（no-tiers-file-no-tier-seconds）在 base 上已成立，不带 xfail。"""
+护栏（no-tiers-file-no-tier-seconds）在 base 上已成立。"""
 import json
 import shlex
 import sys
@@ -11,7 +10,6 @@ import pytest
 
 from conftest import commit_all, load_hook, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S5 尚未实现")
 PY = shlex.quote(sys.executable)
 UNIT_CMD = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
 HOOKS_CMD = "%s -m pytest -q -p no:cacheprovider tests/integration/hooks" % PY
@@ -68,7 +66,6 @@ def timeline_rows(d, event):
     return [r[2] for r in rows if len(r) >= 3 and r[1] == event]
 
 
-@XF
 def test_tier_seconds_split_by_file():
     # Given: 逐用例耗时：单元层两个用例 0.5 与 0.3 秒（其中一个带参数后缀）、区域 hooks 一个 2.0 秒、
     #        区域 docs 一个 1.0 秒、不在任何层的 tests/test_loose.py 一个 0.1 秒
@@ -91,7 +88,6 @@ def test_tier_seconds_split_by_file():
     assert ts["unclassified"] == pytest.approx(0.1), ts
 
 
-@XF
 def test_slice_gate_reports_tier_seconds(git_repo):
     # Given: 分层文件合法、计划选了区域 hooks；切片 S1 起跑后提交两个 scenario 测试：
     #        单元层用例睡 0.3 秒，区域 hooks 的用例睡 0.6 秒
@@ -119,7 +115,6 @@ def test_slice_gate_reports_tier_seconds(git_repo):
     assert note.endswith((" ok", " red")), note
 
 
-@XF
 def test_baseline_and_final_report_tier_seconds(git_repo):
     # Given: 分层文件合法、计划只选了区域 hooks；单元层用例睡 0.3 秒，hooks 的用例睡 0.6 秒，两者都是已去标记的 scenario 测试
     d = setup_change(git_repo, owns=("src/app.py",))
