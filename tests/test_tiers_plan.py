@@ -1,15 +1,11 @@
 """分层文件与计划的 lint 规则、plan_sha 追加区域、切片门禁 G12
 （scenario: test-tiers#lint-rejects-unreadable-tiers-file … #no-tiers-file-lint-unchanged、#gate-flags-test-file-outside-tiers）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。
-护栏（lint-accepts-valid-tiers-plan、no-tiers-file-lint-unchanged）在 base 上已成立，不带 xfail。"""
+护栏（lint-accepts-valid-tiers-plan、no-tiers-file-lint-unchanged）在实现前后都须为绿。"""
 import hashlib
 import json
 
-import pytest
-
 from conftest import commit_all, load_hook, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S1 尚未实现")
 UNIT_CMD = "python3 -m pytest -q tests/unit"
 
 
@@ -62,7 +58,6 @@ def tier_lines(p):
 # ---------------------------------------------------------------- lint：分层文件
 
 
-@XF
 def test_lint_rejects_unreadable_tiers_file(tmp_path):
     # Given: openspec/test-tiers.json 的内容不是合法 JSON；本 change 的计划其余部分合法
     d = make(tmp_path, plan(), "{not json")
@@ -75,7 +70,6 @@ def test_lint_rejects_unreadable_tiers_file(tmp_path):
     assert any("test-tiers.json" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_lint_rejects_malformed_tiers_file(tmp_path):
     # Given: unit 缺 cmd；区域 Bad 名字不合法；区域 typo 带未知字段 cover（且缺 covers）；
     #        slow_allow 里 tests/unit/test_a.py::test_x 的 reason 是空白
@@ -98,7 +92,6 @@ def test_lint_rejects_malformed_tiers_file(tmp_path):
     assert any("tests/unit/test_a.py::test_x" in l for l in lines), lines
 
 
-@XF
 def test_lint_requires_gate_test_to_be_unit_cmd(tmp_path):
     # Given: unit.cmd 是 python3 -m pytest -q tests/unit；计划的 gate.test 是 python3 -m pytest -q tests
     d = make(tmp_path, plan(test="python3 -m pytest -q tests"), tiers())
@@ -114,7 +107,6 @@ def test_lint_requires_gate_test_to_be_unit_cmd(tmp_path):
 # ---------------------------------------------------------------- lint：区域选择
 
 
-@XF
 def test_lint_rejects_bad_region_selection(tmp_path):
     # Given: 分层文件只有区域 hooks 与 docs；gate.integration = [hooks, ghost, hooks]；
     #        gate.integration_skip = {docs: 空白理由, hooks: 不碰}
@@ -132,7 +124,6 @@ def test_lint_rejects_bad_region_selection(tmp_path):
     assert len([l for l in lines if "hooks" in l]) >= 2, lines
 
 
-@XF
 def test_lint_rejects_integration_without_tiers_file(tmp_path):
     # Given: openspec 根目录下没有 test-tiers.json；计划的 gate.integration 是 [hooks]
     d = make(tmp_path, plan(integration=["hooks"]))
@@ -145,7 +136,6 @@ def test_lint_rejects_integration_without_tiers_file(tmp_path):
     assert any("test-tiers.json" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_lint_requires_decision_for_covered_region(tmp_path):
     # Given: 区域 hooks 的 covers 是 src/hooks/**；切片 S1 的 owns 含 src/hooks/gate.py；
     #        gate.integration 与 gate.integration_skip 都没有 hooks
@@ -159,7 +149,6 @@ def test_lint_requires_decision_for_covered_region(tmp_path):
     assert any("hooks" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_lint_requires_scenario_test_in_tier(tmp_path):
     # Given: 区域 hooks 没被选上；一条 scenario 映射到 tests/integration/hooks/test_g.py，另一条映射到 tests/test_loose.py
     st = {"cap#a": "tests/integration/hooks/test_g.py::test_g", "cap#b": "tests/test_loose.py::test_loose"}
@@ -211,7 +200,6 @@ def test_no_tiers_file_lint_unchanged(tmp_path):
 # ---------------------------------------------------------------- 切片门禁 G12
 
 
-@XF
 def test_gate_flags_test_file_outside_tiers(git_repo):
     # Given: unit.paths 是 tests/unit/**，已选区域 hooks 的 paths 是 tests/integration/hooks/**；
     #        切片 S1 起跑后，区间里新增 tests/integration/hooks/test_ok.py 与 tests/test_stray.py
