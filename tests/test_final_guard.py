@@ -4,11 +4,8 @@
 import shlex
 import sys
 
-import pytest
-
 from conftest import load_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S1 尚未实现")
 PY = shlex.quote(sys.executable)
 CMD = "%s -m pytest -q -p no:cacheprovider tests" % PY
 
@@ -32,7 +29,6 @@ LATE_NESTED_CONFTEST = """
 """
 
 
-@XF
 def test_nested_pytest_does_not_overwrite_junit(tmp_path):
     # Given: 被测套件有一个必然失败的用例 test_bad 与一个通过的用例；
     #        conftest 在外层会话结束、junit 写完之后起一个继承全部环境变量的嵌套 pytest（跑 0 个失败用例）
@@ -50,7 +46,6 @@ def test_nested_pytest_does_not_overwrite_junit(tmp_path):
     assert res["failed"] == ["tests.test_x::test_bad"], res["failed"]
 
 
-@XF
 def test_nested_pytest_not_recorded_in_probe_or_deps(tmp_path):
     # Given: 被测套件有一个用例用子进程起嵌套 pytest，嵌套会话跑的 inner/test_ghost.py 不在外层套件里
     write(tmp_path / "pytest.ini", "[pytest]\n")
@@ -80,7 +75,6 @@ def test_nested_pytest_not_recorded_in_probe_or_deps(tmp_path):
     assert not [n for n in res["deps"]["nodes"] if "test_ghost" in n], res["deps"]
 
 
-@XF
 def test_guard_plugin_load_failure_falls_back(tmp_path):
     # Given: gate.test 是把 PYTHONPATH 覆写成固定值再运行 pytest 的包装命令；套件一过一败
     write(tmp_path / "pytest.ini", "[pytest]\n")
