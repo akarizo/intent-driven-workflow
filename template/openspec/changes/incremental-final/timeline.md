@@ -22,3 +22,4 @@
 2026-10-28T10:25:07Z	pr-ready	https://github.com/akarizo/intent-driven-workflow/pull/6
 2026-10-28T11:12:08Z	final	全量（没有可用锚点） red
 2026-10-28T11:19:05Z	final	增量（锚点 703b034a65，重跑 23 个文件 / 沿用 152 个用例） ok
+2026-10-28T11:24:40Z	ship	ready
