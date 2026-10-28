@@ -2479,7 +2479,9 @@ def cmd_final(args):
                 if tiers is not None:
                     inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
                 anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
-                anchor_part["measured"] = bool(d) or not run_sel
+                # 超时 / 收集错误 / 异常退出：本次结论不全（收集失败的文件没有用例结论），锚点不可用，下次退回更早的锚点或全量
+                ran_ok = not timed_out and (rc in (0, 5) or (rc == 1 and bool(fails)))
+                anchor_part["measured"] = (bool(d) and ran_ok) or not run_sel
                 anchor_part["source"] = "final-incremental"
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）

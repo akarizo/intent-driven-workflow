@@ -139,3 +139,24 @@ def test_final_full_flag_forces_full(git_repo):
     # Then: 全量运行，full_why 说明是手动要求
     inc = out["incremental"]
     assert inc["mode"] == "full" and "--full" in inc["full_why"], inc
+
+
+A_BROKEN = "def a(:\n"
+
+
+def test_final_stays_red_after_incremental_collection_error(git_repo):
+    # Given: baseline 绿；随后 src/a.py 写入语法错误，第一次 final 增量重跑 tests/test_a.py 收集失败而红；
+    #        之后提交飞行记录，又只改了 data/b.json（仍然正确）
+    d = make_repo(git_repo)
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", A_BROKEN)
+    first, _ = final(git_repo, d)
+    assert first["ok"] is False and first["incremental"]["mode"] == "incremental", first
+    commit_all(git_repo, "flight")
+    change_and_commit(git_repo, "data/b.json", '{"b": 2, "x": 1}\n')
+
+    # When: 再运行一次 final
+    out, p = final(git_repo, d)
+
+    # Then: final 仍然红（src/a.py 仍坏，tests/test_a.py 仍收集失败）
+    assert out["ok"] is False, out
