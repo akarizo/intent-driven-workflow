@@ -212,3 +212,32 @@ def test_final_full_when_gate_pytest_changed_since_anchor(git_repo):
     # Then: 锚点的 gate.pytest 与当前不同 → 不可用，自动全量
     inc = out["incremental"]
     assert inc["mode"] == "full" and "没有可用锚点" in inc["full_why"], inc
+
+
+def test_final_full_when_gate_test_options_not_covered_by_gate_pytest(git_repo):
+    # Given: 配了 gate.pytest（不带 -W），gate.test 在 pytest 之后带了白名单外的选项 -W error；baseline 绿，之后只改了 src/a.py
+    d = make_repo(git_repo, gate_extra={"test": "%s -m pytest -q -p no:cacheprovider -W error tests" % PY})
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", A_OK)
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: gate.pytest 没覆盖 gate.test 的选项 → 自动全量，full_why 点名缺的选项词
+    inc = out["incremental"]
+    assert inc["mode"] == "full", inc
+    assert "gate.pytest" in inc["full_why"] and "-W" in inc["full_why"] and "error" in inc["full_why"], inc
+
+
+def test_final_incremental_when_gate_pytest_covers_gate_test_options(git_repo):
+    # Given: gate.test 与 gate.pytest 都带 -W error；baseline 绿，之后只改了 src/a.py
+    d = make_repo(git_repo, gate_extra={"test": "%s -m pytest -q -p no:cacheprovider -W error tests" % PY,
+                                        "pytest": PYTEST + " -W error"})
+    baseline(git_repo, d)
+    change_and_commit(git_repo, "src/a.py", A_OK)
+
+    # When: 运行 final
+    out, p = final(git_repo, d)
+
+    # Then: 选项已被 gate.pytest 覆盖 → 照常增量
+    assert out["incremental"]["mode"] == "incremental", out["incremental"]

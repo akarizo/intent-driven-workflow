@@ -1749,6 +1749,20 @@ def _derive_paths(rest):
     return paths
 
 
+def _uncovered_opts(root, rest, runner):
+    """rest 里白名单外、又不是仓库内现存路径的词（选项及其取值，如 -W error），不在 runner 词里的那些（保序）。"""
+    miss, i = [], 0
+    while i < len(rest):
+        t = rest[i]
+        if t == "-p" and i + 1 < len(rest) and rest[i + 1] == "no:cacheprovider":
+            i += 1
+        elif not (t in DERIVE_WHITELIST or t.startswith("--tb=") or t in runner
+                  or (t and not t.startswith("-") and os.path.exists(os.path.join(root, t)))):
+            miss.append(t)
+        i += 1
+    return miss
+
+
 def _derive_verify(root, full_head, vcmd, cases, failed):
     """全量 junit 能否替这片 verify 判绿：前缀与全量逐词相同、rest 只含白名单与至少一个测试文件路径（不含 ::），
     且每个文件对应的模块在全量里有用例、没有失败。任何不确定 → False（照跑）。"""
@@ -3466,10 +3480,14 @@ def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None):
     if impacted:
         return None, []
     gate = gate or {}
+    h = _pytest_head(gate.get("test") or "")
     if not gate.get("pytest"):  # 增量重跑用从 gate.test 截出的 pytest 前缀，其后的选项会丢
-        h = _pytest_head(gate.get("test") or "")
         if h is None or _derive_paths(h[1]) is None:
             return "gate.test 带 pytest 之后的选项（或认不出 pytest 前缀），增量无法等价复现；配置 gate.pytest 可走增量", []
+    elif h is not None:  # 增量重跑用 gate.pytest：gate.test 的白名单外选项词（不是现存路径的词）都得在 gate.pytest 里
+        miss = _uncovered_opts(root, h[1], shlex.split(gate["pytest"]))
+        if miss:
+            return "gate.test 的选项 %s 不在 gate.pytest 里，增量无法等价复现" % " ".join(miss), []
     seen = set()
     for v in (anchor.get("deps") or {}).values():
         seen.update(v)
