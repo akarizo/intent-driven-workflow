@@ -379,6 +379,7 @@ def _window(item):
 
 
 # ceiling: fixture 按名字归并、session fixture 里起的子进程仍记在首个使用者名下 -> 出现同名异义 fixture 误选或子进程漏记时按 fixturedef 身份区分并给子进程单独的 FLIGHT_DEPS_FILE
+# ceiling: 高 scope fixture 只在 setup 阶段归因：request.getfixturevalue 动态拉的不在使用者 fixturenames 里，teardown 阶段读的文件记到当时的用例窗口或丢掉 -> 出现漏选时包装 fixture finalizer 并按 fixturedef 记录动态依赖
 @pytest.hookimpl(hookwrapper=True)
 def pytest_fixture_setup(fixturedef, request):
     on = not _nested() and getattr(fixturedef, "scope", "function") not in ("function", "class", "module")
