@@ -34,3 +34,9 @@
 - `def _verify_paths(root, cmd, delta)` / `_verify_rerun(root, cmd, prev, delta)`
 - `def _final_fresh(root, change_dir, final_commit)` ship 按树判新鲜
 - `def cmd_final(args)` / `def cmd_ship(args)`
+
+## S3
+
+文件 template/.claude/hooks/slice-gate.py（final 增量路径与分层探针联动；签名沿用 S2，行为调整）；测试 tests/test_final_checks_env.py / test_final_impacted.py / test_final_tiers.py
+
+- `def cmd_final(args)`：gate.impacted 与分层同时配置时增量路径不挂单元层探针，记 warning「G10/G11 未判」
