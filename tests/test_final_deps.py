@@ -3,7 +3,7 @@
 #baseline-records-failed-nodes）。"""
 import json
 
-from conftest import load_hook
+from conftest import commit_all, load_hook
 from final_helpers import PY, baseline, latest_anchor, make_repo
 
 
@@ -151,4 +151,20 @@ def test_anchor_unmeasured_when_full_run_stops_early(git_repo):
     baseline(git_repo, d)
 
     # Then: 全量提前停止，没跑到的测试文件没有运行时依赖 → 锚点 measured 为假
+    assert latest_anchor(git_repo)["measured"] is False, latest_anchor(git_repo)
+
+
+def test_anchor_unmeasured_when_baseline_red(git_repo):
+    # Given: 全量测试全绿，但 S1 的 verify 在基线上红（基线 reasons 非空、ok 为假）
+    d = make_repo(git_repo)
+    data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    data["slices"][0]["verify"] = "false"
+    (d / "slices.json").write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    commit_all(git_repo, "verify red")
+
+    # When: baseline 跑全量
+    bl = baseline(git_repo, d)
+
+    # Then: 基线无效 → 锚点 measured 为假
+    assert bl["ok"] is False, bl
     assert latest_anchor(git_repo)["measured"] is False, latest_anchor(git_repo)

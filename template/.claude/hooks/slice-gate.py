@@ -2829,21 +2829,6 @@ def cmd_baseline(args):
         warnings.extend(warnings_d6)
     except RuntimeError as e:  # design D12：运行标记一定被结果覆盖
         reasons.append("基线结束时内容快照失败：%s；重跑 baseline" % e)
-    # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到 → measured false（照样写，供 final 判「没有可用锚点」）
-    if hit is None:
-        measured = adeps is not None and not deps_whys
-        if not measured:
-            warnings.append("依赖图未测：%s" % "；".join(w for w in deps_whys if w) if deps_whys else "依赖图未测")
-        tkey = _tiers_key(root, args.change_dir, tiers)
-        ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
-        w = _anchor_write(root, {
-            "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
-            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
-            "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
-            "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
-            "measured": measured, "source": "baseline"})
-        if w:
-            warnings.append(w)
     # 后台跑期间人可能改了 slices.json：重读当前文件，只写回耗时，不拿开跑时的旧数据整份覆盖
     cur = load_plan(args.change_dir)
     cg = cur.setdefault("gate", {})
@@ -2857,6 +2842,24 @@ def cmd_baseline(args):
     bl["plan_sha"] = sha0
     if plan_sha(cur) != sha0:
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
+    # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
+    # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）
+    if hit is None:
+        measured = adeps is not None and not deps_whys and not reasons
+        if adeps is None or deps_whys:
+            warnings.append("依赖图未测：%s" % "；".join(w for w in deps_whys if w) if deps_whys else "依赖图未测")
+        elif reasons:
+            warnings.append("锚点不可用：基线无效（%s）" % reasons[0])
+        tkey = _tiers_key(root, args.change_dir, tiers)
+        ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
+        w = _anchor_write(root, {
+            "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
+            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
+            "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
+            "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
+            "measured": measured, "source": "baseline"})
+        if w:
+            warnings.append(w)
     if warnings:
         bl["warnings"] = warnings
     bl.update({"change": name, "mode": "incremental" if hit is not None else "full", "snapshot": s1,
