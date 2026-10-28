@@ -47,6 +47,12 @@
 #             ceilings 由执行体转写后经 record --json 回流，形状不可信：解析见 ceiling_rows_from_json，绝不抛异常。
 #             探针：run_test_gate(cmd, root, probe=True) 另返回 probe = {nodeid: {"sec", "hits": {"文件"|"子进程"|"网络": 样例}}}
 #             或 None（不可度量，probe_why 写原因）；probe=False 时二者恒为 None。
+#             防护插件：run_test_gate 恒加载 flight_guard，嵌套 pytest 会话不写 junit、不写探针 / 依赖图记录；
+#             任一 flight 插件加载失败 → 去掉插件只带 junit 重跑一次，探针 / 依赖图判没测到（*_why 写原因）。
+#             依赖图：run_test_gate(..., deps=True) / _pytest_outcomes(..., deps_out={}) 另返回
+#             deps = {"deps": {测试文件: [仓库文件...]}, "blind", "files", "nodes": {仓库相对 nodeid: outcome}} 或 None（deps_why）。
+#             锚点池：baseline 跑全量后向 <git common dir>/flight-anchors/ 写一条锚点（只留最新 20 条），
+#             gate-baseline.json 的 test 段在有失败且依赖图测到时另记 failed_nodes（仓库相对 nodeid）。
 #             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
 #             gate-baseline.json 有分层文件时另有 "tiers": {"measured": bool[, "why"]} 与 "regions": {name: {exit, sec, cmd[, failed]}}；
 #             无分层文件时无这两个键。
@@ -83,6 +89,8 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # pytest-cov 覆盖率未达标的输出标记（pytest-cov 7.1.0 pytest_cov/plugin.py：
 # 前者在 pytest_runtestloop 收尾打印，后者在 pytest_terminal_summary 打印）
 COVERAGE_FAIL_MARKS = ("Coverage failure: total of", "FAIL Required test coverage of")
+# pytest 提前停止（-x / --maxfail / 收集错误中断）的输出特征：锚点不可度量
+EARLY_STOP_MARKS = ("stopping after", "Interrupted:")
 
 TEST_DIR_NAMES = {"tests", "test", "__tests__", "spec"}
 TEST_FILE_RE = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.py|[^/]*\.test\.[^/]+|[^/]*\.spec\.[^/]+)$")
@@ -95,7 +103,24 @@ JS_BLOCK_START = re.compile(r"^\s*(?:test|it|describe)\s*\(")
 MARK_RE = re.compile(r"xfail|skip", re.I)
 # G7 实跑用的临时 pytest 插件：直接记每个 report 的 nodeid 与结果，不依赖终端输出（addopts 含 -q / xdist 的 -n 都会改掉 -v 的逐条行）
 # junitxml 区分不出非 strict 的 XPASS（与 PASSED 同形），所以不用它
+# 逐用例结论口径（G7 插件与依赖图插件共用）：report → PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS，不记的返回 None
+OUTCOME_SRC = '''
+
+def _outcome(report):
+    if report.when == "call":
+        if hasattr(report, "wasxfail"):
+            return "XPASS" if report.passed else "XFAIL"
+        if report.failed and isinstance(report.longrepr, str) and report.longrepr.startswith("[XPASS(strict)]"):
+            return "XPASS"  # 严格 xfail 意外通过：pytest 记 failed、longrepr 带此前缀、不设 wasxfail
+        return report.outcome.upper()
+    if report.failed:
+        return "ERROR"
+    if report.skipped:
+        return "XFAIL" if hasattr(report, "wasxfail") else "SKIPPED"
+    return None
+'''
 G7_PLUGIN = '''import json, os
+''' + OUTCOME_SRC + '''
 
 _sec = {}
 
@@ -106,22 +131,487 @@ def pytest_runtest_logreport(report):
         if report.when == "teardown":
             with open(os.environ["FLIGHT_G7_SEC"], "a", encoding="utf-8") as f:
                 f.write(json.dumps([report.nodeid, _sec.pop(report.nodeid)]) + "\\n")
-    if report.when == "call":
-        if hasattr(report, "wasxfail"):
-            out = "XPASS" if report.passed else "XFAIL"
-        elif report.failed and isinstance(report.longrepr, str) and report.longrepr.startswith("[XPASS(strict)]"):
-            out = "XPASS"  # 严格 xfail 意外通过：pytest 记 failed、longrepr 带此前缀、不设 wasxfail
-        else:
-            out = report.outcome.upper()
-    elif report.failed:
-        out = "ERROR"
-    elif report.skipped:
-        out = "XFAIL" if hasattr(report, "wasxfail") else "SKIPPED"
-    else:
+    out = _outcome(report)
+    if out is None:
         return
     with open(os.environ["FLIGHT_G7_OUT"], "a", encoding="utf-8") as f:
         f.write(json.dumps([report.nodeid, out]) + "\\n")
 '''
+# 嵌套会话防护插件（design D1）：写进临时目录为 flight_guard.py，与 --junitxml 一起经 -p 恒加载；
+# 环境里没有 FLIGHT_GUARD_OWNER 且不是 worker → 外层（设 OWNER，给自己的 xdist worker 写 flight_outer）；
+# 带 flight_outer 的 worker 算外层；其余是嵌套：抢在 junitxml 之前清掉门禁注入的 xmlpath（等于 FLIGHT_GUARD_JUNIT 才清，用例显式写的保留），并设 FLIGHT_GUARD_NESTED=1（探针 / 依赖图据此不写）；
+# 外层写 FLIGHT_GUARD_OK 标记文件：走到 configure 说明外层的全部 -p 插件都已导入，输出里的插件导入错误只能来自嵌套会话
+GUARD_PLUGIN = '''import os
+
+import pytest
+
+_outer = [False]
+_saved = {}  # 嵌套会话 id(config) → 进入前的 FLIGHT_GUARD_NESTED（None = 原来没有）
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    wi = getattr(config, "workerinput", None)
+    if wi is None and not os.environ.get("FLIGHT_GUARD_OWNER"):
+        os.environ["FLIGHT_GUARD_OWNER"] = str(os.getpid())
+        os.environ.pop("FLIGHT_GUARD_NESTED", None)
+        _outer[0] = True
+        if os.environ.get("FLIGHT_GUARD_OK"):
+            open(os.environ["FLIGHT_GUARD_OK"], "w").close()
+        return
+    if wi is not None and wi.get("flight_outer"):
+        return
+    xp, mine = getattr(config.option, "xmlpath", None), os.environ.get("FLIGHT_GUARD_JUNIT")
+    if xp and mine and os.path.realpath(os.path.abspath(xp)) == os.path.realpath(mine):  # 只清门禁注入的 junit
+        config.option.xmlpath = None
+    _saved[id(config)] = os.environ.get("FLIGHT_GUARD_NESTED")
+    os.environ["FLIGHT_GUARD_NESTED"] = "1"
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):
+    # 同进程 pytest.main() 的嵌套会话结束：恢复 FLIGHT_GUARD_NESTED，外层后续用例照常记录
+    if id(config) in _saved:
+        old = _saved.pop(id(config))
+        if old is None:
+            os.environ.pop("FLIGHT_GUARD_NESTED", None)
+        else:
+            os.environ["FLIGHT_GUARD_NESTED"] = old
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node):
+    if _outer[0]:
+        node.workerinput["flight_outer"] = 1
+'''
+# 依赖图公共部分（flight_deps.py 与 sitecustomize.py 共用，design D2）：仓库文件判定、审计事件 → 依赖 / 盲
+DEPS_CORE = '''import json, os, sys
+
+_ROOT = os.path.realpath(os.environ.get("FLIGHT_ROOT") or os.getcwd())
+_TMP = os.path.dirname(os.path.realpath(__file__))
+_EXCLUDE = (os.path.join(_ROOT, ".git") + os.sep, _TMP + os.sep)
+_busy = [False]
+
+
+def _nested():
+    return os.environ.get("FLIGHT_GUARD_NESTED") == "1"
+
+
+def _abs_rel(p):
+    """绝对路径 → 仓库相对路径（/ 分隔）；不在仓库内、在 .git/ 或门禁临时目录内 → None。"""
+    if not p.startswith(_ROOT + os.sep) or p.startswith(_EXCLUDE):
+        return None
+    return os.path.relpath(p, _ROOT).replace(os.sep, "/")
+
+
+def _repo_rel(path, cwd=None):
+    """被打开 / 被执行的路径 → 仓库内现存文件的相对路径；__pycache__/<stem>.<tag>.pyc 映射回 <dir>/<stem>.py。"""
+    if isinstance(path, int):
+        return None
+    try:
+        p = os.fsdecode(path)
+        if not os.path.isabs(p):
+            p = os.path.join(os.fsdecode(cwd) if cwd else os.getcwd(), p)
+        p = os.path.realpath(p)
+    except (TypeError, ValueError, OSError):
+        return None
+    d, base = os.path.split(p)
+    if base.endswith(".pyc"):
+        if os.path.basename(d) != "__pycache__":
+            return None
+        p = os.path.join(os.path.dirname(d), base.split(".", 1)[0] + ".py")
+    if not os.path.isfile(p):
+        return None
+    return _abs_rel(p)
+
+
+def _argv(args):
+    if isinstance(args, (str, bytes)):
+        return [os.fsdecode(args)]
+    try:
+        return [os.fsdecode(a) for a in args]
+    except TypeError:
+        return []
+
+
+def _is_blind(executable, argv, env):
+    """Python 子进程看不见：env 显式给出且 PYTHONPATH 不含门禁临时目录，或带 -I / -S / -E。"""
+    names = [os.path.basename(a) for a in ([os.fsdecode(executable)] if executable else []) + argv[:1]]
+    if not any(n.startswith("python") for n in names):
+        return False
+    for a in argv[1:]:
+        if not a.startswith("-"):
+            break
+        if a in ("-I", "-S", "-E"):
+            return True
+    if env is None:
+        return False
+    try:
+        pp = env.get("PYTHONPATH") or env.get(b"PYTHONPATH") or ""
+        return _TMP not in [os.path.realpath(x) for x in os.fsdecode(pp).split(os.pathsep) if x]
+    except (AttributeError, TypeError):
+        return False
+
+
+def _observe(event, args, deps):
+    """审计事件 → 仓库文件加进 deps（set）；返回该事件是否让当前测试文件变盲。"""
+    if event == "open":
+        r = _repo_rel(args[0]) if args else None
+        if r:
+            deps.add(r)
+        return False
+    if event == "subprocess.Popen":
+        executable, argv, cwd, env = args[0], _argv(args[1]), args[2], args[3]
+    elif event in ("os.exec", "os.posix_spawn"):
+        executable, argv, cwd, env = args[0], _argv(args[1]), None, args[2]
+    else:
+        return False
+    for a in ([os.fsdecode(executable)] if executable else []) + argv:
+        r = _repo_rel(a, cwd)
+        if r:
+            deps.add(r)
+    return _is_blind(executable, argv, env)
+
+
+def _emit(recs):
+    """按进程写 <FLIGHT_DEPS_OUT>.<pid>：xdist worker 与子进程各写各的，行不会互相穿插。"""
+    out = os.environ.get("FLIGHT_DEPS_OUT")
+    if not out or not recs:
+        return
+    saved, _busy[0] = _busy[0], True
+    try:
+        data = "".join(json.dumps(rec) + "\\n" for rec in recs).encode("utf-8")
+        fd = os.open("%s.%d" % (out, os.getpid()), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            while data:
+                data = data[os.write(fd, data):]
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+    finally:
+        _busy[0] = saved
+'''
+# 依赖图插件：写进临时目录为 flight_deps.py，经 -p 加载；收集窗口与用例窗口里记 open / 子进程 argv，
+# 会话结束并入测试文件的静态 import 闭包；逐用例结论口径同 G7；记录以 JSON 行追加进 FLIGHT_DEPS_OUT.<pid>（每进程一份）
+DEPS_PLUGIN = DEPS_CORE + OUTCOME_SRC + '''
+import ast
+
+import pytest
+
+_cur = [None]
+_cfg = [None]
+_deps = {}
+_blind = set()
+_files = set()
+_keys = {}
+_nodes = []
+_edges = {}
+_fxcur = [None]  # 正在 setup 的 session / package 级 fixture 名（只执行一次，读到的文件归全部使用者）
+_fx = {}
+_fx_blind = set()
+_uses = {}  # 测试文件 → 其用例用到的 fixture 名
+
+
+def _hook(event, args):
+    key, fx = _cur[0], _fxcur[0]
+    if (key is None and fx is None) or _busy[0] or _nested():
+        return
+    _busy[0] = True
+    try:
+        sink = _fx.setdefault(fx, set()) if fx is not None else _deps.setdefault(key, set())
+        if _observe(event, args, sink):
+            (_fx_blind if fx is not None else _blind).add(fx if fx is not None else key)
+    except Exception:
+        pass
+    finally:
+        _busy[0] = False
+
+
+sys.addaudithook(_hook)
+
+
+def _key(node):
+    p = getattr(node, "path", None) or getattr(node, "fspath", None)
+    return _abs_rel(os.path.realpath(str(p))) if p is not None else None
+
+
+def _enter(key):
+    _cur[0] = key
+    if key is not None:
+        _files.add(key)
+        os.environ["FLIGHT_DEPS_FILE"] = key
+
+
+def _leave():
+    _cur[0] = None
+    os.environ.pop("FLIGHT_DEPS_FILE", None)
+
+
+def pytest_configure(config):
+    if _cfg[0] is None:  # 同进程 pytest.main() 的嵌套会话共用本模块，不得覆盖外层 config
+        _cfg[0] = config
+
+
+def pytest_sessionstart(session):
+    if not _nested():
+        _emit([{"flight_deps": "start"}])
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_make_collect_report(collector):
+    on = not _nested() and isinstance(collector, pytest.Module)
+    if on:
+        _enter(_key(collector))
+    yield
+    if on:
+        _leave()
+
+
+def _window(item):
+    if _nested():
+        return None
+    key = _key(item)
+    if key is not None:
+        _keys[item.nodeid] = key
+        _uses.setdefault(key, set()).update(getattr(item, "fixturenames", None) or ())
+    return key
+
+
+# ceiling: fixture 按名字归并、session fixture 里起的子进程仍记在首个使用者名下 -> 出现同名异义 fixture 误选或子进程漏记时按 fixturedef 身份区分并给子进程单独的 FLIGHT_DEPS_FILE
+# ceiling: 高 scope fixture 只在 setup 阶段归因：request.getfixturevalue 动态拉的不在使用者 fixturenames 里，teardown 阶段读的文件记到当时的用例窗口或丢掉 -> 出现漏选时包装 fixture finalizer 并按 fixturedef 记录动态依赖
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    on = not _nested() and getattr(fixturedef, "scope", "function") not in ("function", "class", "module")
+    saved = _fxcur[0]
+    if on:
+        _fxcur[0] = fixturedef.argname
+    yield
+    if on:
+        _fxcur[0] = saved
+
+
+def _run_window(item):
+    if _nested():  # 同进程嵌套会话：不动外层用例的窗口（_cur 与 FLIGHT_DEPS_FILE）
+        yield
+        return
+    _enter(_window(item))
+    yield
+    _leave()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    yield from _run_window(item)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    yield from _run_window(item)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item):
+    yield from _run_window(item)
+
+
+def _rootdir():
+    c = _cfg[0]
+    return os.path.realpath(str(getattr(c, "rootpath", None) or getattr(c, "rootdir", None) or os.getcwd()))
+
+
+def pytest_runtest_logreport(report):
+    if _nested():
+        return
+    out = _outcome(report)
+    if out is None:
+        return
+    head, sep, rest = report.nodeid.partition("::")
+    key = _keys.get(report.nodeid) or _abs_rel(os.path.normpath(os.path.join(_rootdir(), head)))
+    if key is not None:
+        _nodes.append([key + sep + rest, out])
+
+
+def _chain(path):
+    """path 所在目录到仓库根的目录链。"""
+    out, d = [], os.path.dirname(path)
+    while d.startswith(_ROOT + os.sep) or d == _ROOT:
+        out.append(d)
+        if d == _ROOT:
+            break
+        d = os.path.dirname(d)
+    return out
+
+
+def _resolve(mod, level, path, roots):
+    """模块名 → 仓库内 .py（含沿途包的 __init__.py）；完整解析不到 → []。"""
+    if level:
+        base = os.path.dirname(path)
+        for _ in range(level - 1):
+            base = os.path.dirname(base)
+        bases = [base]
+    else:
+        bases = roots
+    parts = [p for p in mod.split(".") if p]
+    for b in bases:
+        found, cur, ok = [], b, True
+        for i, part in enumerate(parts):
+            cur = os.path.join(cur, part)
+            if i == len(parts) - 1 and os.path.isfile(cur + ".py"):
+                found.append(cur + ".py")
+            elif os.path.isfile(os.path.join(cur, "__init__.py")):
+                found.append(os.path.join(cur, "__init__.py"))
+            elif not os.path.isdir(cur):
+                ok = False
+                break
+        if not parts and os.path.isfile(os.path.join(b, "__init__.py")):
+            found.append(os.path.join(b, "__init__.py"))
+        if ok and (found or parts):
+            return found
+    return []
+
+
+def _imports(path, roots):
+    """文件的全部 import（含函数体内）解析到的仓库内 .py 绝对路径；按文件缓存。"""
+    if path in _edges:
+        return _edges[path]
+    _edges[path] = out = set()
+    try:
+        with open(path, "rb") as f:
+            tree = ast.parse(f.read(), path)
+    except (OSError, SyntaxError, ValueError):
+        return out
+    roots = roots + _chain(path)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            mods = [(a.name, 0) for a in n.names]
+        elif isinstance(n, ast.ImportFrom):
+            base = n.module or ""
+            mods = [(base, n.level)] + [((base + "." if base else "") + a.name, n.level)
+                                         for a in n.names if a.name != "*"]
+        else:
+            continue
+        for mod, level in mods:
+            for q in _resolve(mod, level, path, roots):
+                q = os.path.realpath(q)
+                if _abs_rel(q):
+                    out.add(q)
+    return out
+
+
+def _closure(key, roots):
+    # ceiling: 逐测试文件 BFS 求闭包，O(测试文件 × 模块) -> 大仓收口变慢时改为 SCC 缩点后自底向上合并
+    start = os.path.join(_ROOT, key)
+    roots = roots + _chain(start)
+    seen, todo = set(), [start]
+    while todo:
+        for q in _imports(todo.pop(), roots):
+            if q not in seen:
+                seen.add(q)
+                todo.append(q)
+    return {_abs_rel(q) for q in seen} - {None, key}
+
+
+def _conftests(key):
+    """测试文件目录链（到仓库根）上现存的 conftest.py（仓库相对路径）。"""
+    out = []
+    for d in _chain(os.path.join(_ROOT, key)):
+        r = _abs_rel(os.path.join(d, "conftest.py"))
+        if r and os.path.isfile(os.path.join(d, "conftest.py")):
+            out.append(r)
+    return out
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session):
+    if _nested():
+        return
+    roots = [_rootdir()]
+    for p in sys.path:
+        rp = os.path.realpath(p or os.getcwd())
+        if _abs_rel(rp) is not None or rp == _ROOT:
+            roots.append(rp)
+    recs = []
+    for key in sorted(_files):
+        d = _deps.setdefault(key, set())
+        d |= _closure(key, roots)
+        for c in _conftests(key):  # conftest 在目录收集阶段导入，不在任何窗口内：并入它本身与其静态 import 闭包
+            d.add(c)
+            d |= _closure(c, roots)
+        for fx in _uses.get(key, ()):
+            d |= _fx.get(fx, set())
+            if fx in _fx_blind:
+                _blind.add(key)
+        d.discard(key)
+        recs.append({"file": key, "deps": sorted(d), "test": True})
+    recs += [{"file": k, "blind": True} for k in sorted(_blind)]
+    recs += [{"node": n, "outcome": o} for n, o in _nodes]
+    if getattr(session.config, "workerinput", None) is None:  # 会话结束标记只由外层 controller 写（xdist worker 不写）
+        recs.append({"flight_deps": "end"})
+    _emit(recs)
+'''
+# 依赖图的 Python 子进程端：写进临时目录为 sitecustomize.py，经 PYTHONPATH 生效；
+# FLIGHT_DEPS_OUT 与 FLIGHT_DEPS_FILE 都在且不是嵌套会话时装同样的审计钩子，atexit 把仓库内已加载模块与 open 过的文件
+# 按 FLIGHT_DEPS_FILE 追加；最后暂时去掉自身目录链到仓库自己的 sitecustomize（失败忽略），不遮蔽它
+SITECUSTOMIZE = DEPS_CORE + '''
+import atexit
+import importlib
+
+
+def _flight_site():
+    if getattr(sys, "_flight_deps_site", False):  # 同一进程里另一份门禁临时目录的 sitecustomize 已装过
+        return
+    sys._flight_deps_site = True
+    key = os.environ.get("FLIGHT_DEPS_FILE")
+    if not os.environ.get("FLIGHT_DEPS_OUT") or not key or _nested():
+        return
+    deps, blind = set(), [False]
+
+    def hook(event, args):
+        if _busy[0]:
+            return
+        _busy[0] = True
+        try:
+            if _observe(event, args, deps):
+                blind[0] = True
+        except Exception:
+            pass
+        finally:
+            _busy[0] = False
+
+    def dump():
+        _busy[0] = True
+        for m in list(sys.modules.values()):
+            f = getattr(m, "__file__", None)
+            r = _repo_rel(f) if isinstance(f, str) else None
+            if r:
+                deps.add(r)
+        _busy[0] = False
+        rec = {"file": key, "deps": sorted(deps)}
+        if blind[0]:
+            rec["blind"] = True
+        _emit([rec])
+
+    sys.addaudithook(hook)
+    atexit.register(dump)
+
+
+_flight_site()
+_saved_path = list(sys.path)
+sys.path[:] = [p for p in sys.path if os.path.realpath(p or os.getcwd()) != _TMP]
+_self = sys.modules.pop("sitecustomize", None)
+try:
+    importlib.import_module("sitecustomize")
+except Exception:
+    if _self is not None:
+        sys.modules["sitecustomize"] = _self
+finally:
+    sys.path[:] = _saved_path
+'''
+FLIGHT_ENV = ("FLIGHT_GUARD_OWNER", "FLIGHT_GUARD_NESTED", "FLIGHT_GUARD_OK", "FLIGHT_GUARD_JUNIT", "FLIGHT_DEPS_OUT",
+              "FLIGHT_DEPS_FILE", "FLIGHT_ROOT")
+# 三个 flight 插件任一导入失败（包装命令覆写了 PYTHONPATH 等）的 pytest 输出特征；只在外层没写 FLIGHT_GUARD_OK 标记时才算外层失败
+FLIGHT_PLUGIN_FAIL = re.compile(r'Error importing plugin "flight_(?:guard|deps|tier_probe)"')
 # 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
 TIER_FILE = "test-tiers.json"
 UNIT_MAX_SEC = 3.0
@@ -167,7 +657,7 @@ sys.addaudithook(_hook)
 
 def _write(rec):
     path = os.environ.get("FLIGHT_TIER_OUT")
-    if not path:
+    if not path or os.environ.get("FLIGHT_GUARD_NESTED") == "1":  # 嵌套会话不写（design D1）
         return
     saved, _cur[0] = _cur[0], None
     try:
@@ -208,7 +698,6 @@ def pytest_runtest_logreport(report):
     if report.when == "teardown":
         _write({"nodeid": nid, "sec": _sec.pop(nid, 0.0), "hits": _hits.pop(nid, {})})
 '''
-TIER_PLUGIN_FAIL = 'Error importing plugin "flight_tier_probe"'
 # G8 天花板标记：行首注释紧跟标记，两段用 -> 或 → 分隔（形如 `限制 -> 升级条件/路径`）
 CEILING_RE = re.compile(r"^\s*(?:#|//|--|\*)+\s*ceiling\s*:\s*(.*)$", re.I)
 CEILING_SPLIT = re.compile(r"->|→")
@@ -317,35 +806,163 @@ def _read_probe(path):
     return probe, None
 
 
-def run_test_gate(cmd, root, probe=False):
-    """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml。
+def _drop_inherited(env):
+    """本次运行是新的外层：清掉外层门禁漏下来的 flight 环境变量，并从 PYTEST_ADDOPTS 去掉外层注入的
+    -p flight_* 与 --junitxml（门禁里的用例再起门禁时，回退重跑与 G7 / 探针重跑都不能继承外层插件）。"""
+    mine = env.get("FLIGHT_GUARD_JUNIT")
+    for k in FLIGHT_ENV + ("FLIGHT_TIER_OUT",):
+        env.pop(k, None)
+    try:
+        toks = shlex.split(env.get("PYTEST_ADDOPTS", ""))
+    except ValueError:
+        return
+    keep, i = [], 0
+    while i < len(toks):
+        if toks[i] == "-p" and i + 1 < len(toks) and toks[i + 1] in ("flight_guard", "flight_deps", "flight_tier_probe"):
+            i += 2
+            continue
+        if not (mine and toks[i] == "--junitxml=" + mine):
+            keep.append(toks[i])
+        i += 1
+    if keep:
+        env["PYTEST_ADDOPTS"] = " ".join(shlex.quote(x) for x in keep)
+    else:
+        env.pop("PYTEST_ADDOPTS", None)
+
+
+def _flight_plugins(tmp, env, root, deps):
+    """把防护插件（deps=True 时另加依赖图插件与 sitecustomize）写进 tmp，tmp 放到 env 的 PYTHONPATH 最前；
+    先清掉外层门禁漏下来的 flight 环境变量（本次运行是新的外层）。返回依赖图输出路径（deps=False 时 None）。"""
+    for k in FLIGHT_ENV:
+        env.pop(k, None)
+    files = {"flight_guard.py": GUARD_PLUGIN}
+    if deps:
+        files.update({"flight_deps.py": DEPS_PLUGIN, "sitecustomize.py": SITECUSTOMIZE})
+    for name, text in files.items():
+        with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+            f.write(text)
+    parts = [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
+    env["PYTHONPATH"] = os.pathsep.join([tmp] + [p for p in parts if p != tmp])
+    if not deps:
+        return None
+    out = os.path.join(tmp, "deps.jsonl")
+    env["FLIGHT_ROOT"] = os.path.realpath(root)
+    env["FLIGHT_DEPS_OUT"] = out
+    return out
+
+
+def _read_deps(path):
+    """读依赖图 jsonl（path 与各进程的 path.<pid>）→ ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
+    没有开跑记录、没有会话结束标记（外层 controller 的 sessionfinish 末尾写）或有坏行（写入被中断，整条记录丢失）→ 不可度量；
+    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
+    started, ended, deps, blind, files, nodes = False, False, {}, set(), set(), {}
+    d, base = os.path.split(path)
+    try:
+        names = sorted(n for n in os.listdir(d or ".") if n == base or n.startswith(base + "."))
+    except OSError:
+        names = []
+    lines = []
+    for n in names:
+        try:
+            with open(os.path.join(d, n), "r", encoding="utf-8") as f:
+                lines += f.read().splitlines()
+        except OSError:
+            pass
+        except ValueError:
+            return None, "依赖图记录损坏（编码错误）"
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            return None, "依赖图记录损坏（写入被中断？）"
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("flight_deps") in ("start", "end"):
+            started = started or rec["flight_deps"] == "start"
+            ended = ended or rec["flight_deps"] == "end"
+            continue
+        if isinstance(rec.get("node"), str):
+            if nodes.get(rec["node"]) not in ("FAILED", "ERROR"):
+                nodes[rec["node"]] = rec.get("outcome")
+            continue
+        f = rec.get("file")
+        if not isinstance(f, str):
+            continue
+        if rec.get("test"):
+            files.add(f)
+        if isinstance(rec.get("deps"), list):
+            deps.setdefault(f, set()).update(x for x in rec["deps"] if isinstance(x, str))
+        if rec.get("blind"):
+            blind.add(f)
+    if not started:
+        return None, "没有依赖图输出（不是 pytest？）"
+    if not ended:
+        return None, "依赖图记录不完整（会话未正常结束）"
+    return {"deps":{f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(blind),
+            "files": sorted(files), "nodes": nodes}, None
+
+
+def _deps_merge(a, b):
+    """两份依赖图并起来（同一测试文件的依赖取并集；nodes 以 FAILED / ERROR 优先）。"""
+    deps = {f: set(v) for f, v in a["deps"].items()}
+    for f, v in b["deps"].items():
+        deps.setdefault(f, set()).update(v)
+    nodes = dict(a["nodes"])
+    for n, o in b["nodes"].items():
+        if nodes.get(n) not in ("FAILED", "ERROR"):
+            nodes[n] = o
+    return {"deps": {f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(set(a["blind"]) | set(b["blind"])),
+            "files": sorted(set(a["files"]) | set(b["files"])), "nodes": nodes}
+
+
+def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None):
+    """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml 并恒加载防护插件 flight_guard（design D1）。
     返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
-          "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None}；
+          "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
+          "deps": {"deps", "blind", "files", "nodes"} | None, "deps_why": str | None}；
+    deps=True 时另加载依赖图插件（design D2）；deps=False 时 deps / deps_why 恒为 None。
+    外层自己的 flight 插件加载失败（输出有插件导入错误、且外层没写 guard 标记；嵌套会话的同类错误不算）→ 去掉全部插件、只带 junit 重跑一次（_plain）并返回其结果，探针 / 依赖图判没测到；
     failed 非 None ⇔ 可度量（rc 1、junit 可解析、汇总行恰一行、汇总与 junit 计数一致且非 0，
     且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
     cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。
     probe=True 时另加载探针插件（design D4）：插件加载失败 → 不带探针重跑一次并返回其结果，probe 判不可度量；
-    probe=False 时 probe / probe_why 恒为 None。"""
+    probe=False 时 probe / probe_why 恒为 None。extra_env（dict）在 os.environ 之上追加给命令的环境变量。"""
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
-        env = dict(os.environ)
+        env = dict(os.environ, **(extra_env or {}))
+        _drop_inherited(env)
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
-        if probe:
+        deps_out = None
+        guard_ok = os.path.join(tmp, "guard.ok")
+        if not _plain:
+            deps_out = _flight_plugins(tmp, env, root, deps)
+            env["FLIGHT_GUARD_OK"] = guard_ok
+            env["FLIGHT_GUARD_JUNIT"] = junit
+            env["PYTEST_ADDOPTS"] += " -p flight_guard" + (" -p flight_deps" if deps else "")
+        if probe and not _plain:
             with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
                 f.write(TIER_PROBE_PLUGIN)
-            env["PYTHONPATH"] = tmp + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
             env["PYTEST_ADDOPTS"] += " -p flight_tier_probe"
             env["FLIGHT_TIER_OUT"] = tier_out
         p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
-        if probe and TIER_PLUGIN_FAIL in out:
-            res = run_test_gate(cmd, root)
-            res["probe_why"] = "探针插件加载失败（包装命令覆写了 PYTHONPATH？）；G10/G11 未判"
+        if not _plain and not os.path.exists(guard_ok) and FLIGHT_PLUGIN_FAIL.search(out):
+            res = run_test_gate(cmd, root, _plain=True, extra_env=extra_env)
+            why = "防护插件加载失败（包装命令覆写了 PYTHONPATH？），%s"
+            if probe:
+                res["probe_why"] = why % "探针未测；G10/G11 未判"
+            if deps:
+                res["deps_why"] = why % "依赖图未测"
             return res
-        res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None, "probe": None, "probe_why": None}
-        if probe:
+        res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None, "probe": None, "probe_why": None,
+               "deps": None, "deps_why": None}
+        if probe and not _plain:
             res["probe"], res["probe_why"] = _read_probe(tier_out)
+        if deps_out:
+            res["deps"], res["deps_why"] = _read_deps(deps_out)
         if rc == 0:
             try:
                 res["cases"] = {tc.get("classname") or "" for tc in ET.parse(junit).getroot().iter("testcase")}
@@ -406,6 +1023,8 @@ def plan_sha(data):
     checks = gate.get("checks")
     if isinstance(checks, list) and checks:  # 检查的 baseline 命令也归基线负责（design D7）；final 不在此列
         key.append([[c.get("name"), c.get("baseline")] for c in checks if isinstance(c, dict)])
+    if gate.get("impacted") is not None:  # gate 命令之一（incremental-final design D8）；未配置时与旧算法相同
+        key.append(["impacted", gate.get("impacted")])
     integration = gate.get("integration")
     if isinstance(integration, list) and integration:  # 已选区域归基线负责（design D9）；未选时与旧算法相同
         key.append(["integration", list(integration)])
@@ -447,11 +1066,6 @@ def gate_cmd_verdict(kind, cmd, root, baseline):
     return "G2 %s: exit %d（新增 %d 行）\n%s" % (kind, rc, len(new), "\n".join(new[:6])), None
 
 
-def full_suite_verdict(cmd, root, baseline):
-    """跑 gate.test，返回 (failed_item, warning_item)。可度量的 exit 1 按基线 test.failed 逐条差分（缺失视为空集）。"""
-    return _diff_verdict("test", run_test_gate(cmd, root), ((baseline or {}).get("test") or {}).get("failed"))
-
-
 def _diff_verdict(label, tg, known_failed):
     """run_test_gate 结果对基线已知失败差分，返回 (failed_item, warning_item)；label 为 test 或 region <NAME>。"""
     rc = tg["rc"]
@@ -464,6 +1078,15 @@ def _diff_verdict(label, tg, known_failed):
     if not new:
         return None, "G2 %s: exit 1，失败均为基线预存红（%d 条已按基线排除）" % (label, len(tg["failed"]))
     return "G2 %s: exit 1（新增 %d 条失败）\n%s" % (label, len(new), "\n".join(new[:6])), None
+
+
+def _tg_measurable(tg):
+    """run_test_gate 结果能否给锚点：绿，或可度量的 exit 1。收集错误 / 超时 / 其他退出码时
+    出错的测试文件没有用例结论，依赖图的 failed 漏掉它们，锚点不可用。"""
+    # ceiling: 带 --continue-on-collection-errors 的 exit 1 仍判可度量，收集失败的文件不进锚点 failed -> 遇到该用法时让依赖图插件把收集失败记为 ERROR 结论
+    if any(m in tg["out"] for m in EARLY_STOP_MARKS):  # -x / --maxfail 提前停止：没跑到的测试文件只有静态闭包
+        return False
+    return tg["rc"] == 0 or tg["failed"] is not None
 
 
 def _selected_regions(gate):
@@ -820,6 +1443,9 @@ def lint_plan(data, change_dir=None):
                     for pb in by_id[b].get("owns") or []:
                         if globs_intersect(pa, pb):
                             errors.append("overlap: 同一 wave 的 %s 与 %s 都覆盖 %s / %s" % (a, b, pa, pb))
+    imp = (data.get("gate") or {}).get("impacted")
+    if imp is not None and not _nonblank(imp):
+        errors.append("gate: gate.impacted 必须是非空字符串")
     check_errors, check_names, skip_keys = _lint_checks(data.get("gate") or {})
     errors.extend(check_errors)
     if change_dir is not None:
@@ -1178,6 +1804,20 @@ def _derive_paths(rest):
     return paths
 
 
+def _uncovered_opts(root, rest, runner):
+    """rest 里白名单外、又不是仓库内现存路径的词（选项及其取值，如 -W error），不在 runner 词里的那些（保序）。"""
+    miss, i = [], 0
+    while i < len(rest):
+        t = rest[i]
+        if t == "-p" and i + 1 < len(rest) and rest[i + 1] == "no:cacheprovider":
+            i += 1
+        elif not (t in DERIVE_WHITELIST or t.startswith("--tb=") or t in runner
+                  or (t and not t.startswith("-") and os.path.exists(os.path.join(root, t)))):
+            miss.append(t)
+        i += 1
+    return miss
+
+
 def _derive_verify(root, full_head, vcmd, cases, failed):
     """全量 junit 能否替这片 verify 判绿：前缀与全量逐词相同、rest 只含白名单与至少一个测试文件路径（不含 ::），
     且每个文件对应的模块在全量里有用例、没有失败。任何不确定 → False（照跑）。"""
@@ -1225,9 +1865,11 @@ def _g7_timeout(gate):
     return 600
 
 
-def _pytest_outcomes(root, targets, gate=None, durations=None):
+def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, probe_out=None):
     """实跑 targets，返回 (outcomes, rc, out_text, timed_out)；outcomes = [(nodeid, PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)]，nodeid 以 root 为 rootdir。
-    durations 是 dict 时把逐用例耗时（setup + call + teardown）按 nodeid 累加进去。"""
+    durations 是 dict 时把逐用例耗时（setup + call + teardown）按 nodeid 累加进去。
+    deps_out 是 dict 时另加载防护与依赖图插件，结束后把依赖图（形状同 run_test_gate 的 deps）写进去；没测到则不写。
+    probe_out 是 dict 时另加载单元层探针，结束后写入 {"probe", "probe_why"}（形状同 run_test_gate）。"""
     gate = gate or {}
     prefix, _ = _g7_runner(gate)
     timeout = _g7_timeout(gate)
@@ -1235,14 +1877,26 @@ def _pytest_outcomes(root, targets, gate=None, durations=None):
         with open(os.path.join(tmp, "flight_g7_outcomes.py"), "w", encoding="utf-8") as f:
             f.write(G7_PLUGIN)
         out = os.path.join(tmp, "outcomes.jsonl")
-        # 不写字节码：__pycache__ 落进被测 worktree 会被当成改动（G5 起点测量、source 判定）
+        # 不写字节码：__pycache__ 落进被测 worktree 会被当成改动（G5 起点测量、source 判定）；
+        # 字节码前缀指向临时目录：不读树内旧 .pyc（源文件同秒同长度改动时 mtime+size 校验认不出，会测到旧代码）
         env = dict(os.environ, FLIGHT_G7_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+                   PYTHONPYCACHEPREFIX=os.path.join(tmp, "pycache"),
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        _drop_inherited(env)
         sec_out = os.path.join(tmp, "seconds.jsonl")
         env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
         if isinstance(durations, dict):
             env["FLIGHT_G7_SEC"] = sec_out
-        argv = prefix + ["-p", "flight_g7_outcomes", "-p", "no:cacheprovider", "--rootdir", root, *targets]
+        dout = _flight_plugins(tmp, env, root, True) if isinstance(deps_out, dict) else None
+        flight = ["-p", "flight_guard", "-p", "flight_deps"] if dout else []
+        tier_out = os.path.join(tmp, "tier-probe.jsonl")
+        env.pop("FLIGHT_TIER_OUT", None)
+        if isinstance(probe_out, dict):
+            with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
+                f.write(TIER_PROBE_PLUGIN)
+            env["FLIGHT_TIER_OUT"] = tier_out
+            flight += ["-p", "flight_tier_probe"]
+        argv = prefix + ["-p", "flight_g7_outcomes", *flight, "-p", "no:cacheprovider", "--rootdir", root, *targets]
         timed_out, rc, text = False, None, ""
         try:
             # 独立进程组：超时整组杀掉，免得包装脚本的孙进程占住输出管道
@@ -1271,6 +1925,12 @@ def _pytest_outcomes(root, targets, gate=None, durations=None):
                     if line.strip():
                         nid, sec = json.loads(line)
                         durations[nid] = durations.get(nid, 0.0) + sec
+        if dout:
+            parsed, _ = _read_deps(dout)
+            if parsed is not None:
+                deps_out.update(parsed)
+        if isinstance(probe_out, dict):
+            probe_out["probe"], probe_out["probe_why"] = _read_probe(tier_out)
         return outcomes, rc, text or "", timed_out
 
 
@@ -1281,8 +1941,10 @@ def _tier_rerun(root, gate, nodeids):
         with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
             f.write(TIER_PROBE_PLUGIN)
         out = os.path.join(tmp, "tier-probe.jsonl")
-        env = dict(os.environ, FLIGHT_TIER_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        _drop_inherited(env)
+        env["FLIGHT_TIER_OUT"] = out
         argv = prefix + ["-p", "flight_tier_probe", "-p", "no:cacheprovider", "--rootdir", root, *nodeids]
         try:
             subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=_g7_timeout(gate))
@@ -1782,6 +2444,28 @@ def cmd_final(args):
     if dirty:
         warnings.append("工作树有未提交改动，结论不对应 commit：%s" % ", ".join(dirty[:8]))
     tiers, terrs = _load_tiers(args.change_dir)
+    name = os.path.basename(os.path.realpath(args.change_dir))
+    change_rel = _change_rel(root, args.change_dir)
+    head = git(root, "rev-parse", "HEAD")
+    snap_why = None
+    try:
+        cur_snap = _snapshot(root, change_rel)
+    except RuntimeError as e:
+        cur_snap, snap_why = None, "内容快照失败：%s" % e
+    fps = _final_fps(root, change_rel, data, tiers)
+    # 同树沿用（design D6）：不运行 G7 及其后的任何东西
+    rec = _final_rec_read(root, name)
+    if not args.full and _final_reusable(root, rec, cur_snap, head, change_rel, fps):
+        prev, short = rec["result"], str(rec["commit"])[:10]
+        result = {"slice": "final", "ok": True, "commit": head, "failed": [], "warnings": warnings,
+                  "scenarios": prev.get("scenarios"), "summary": "%s；同树沿用 %s" % (prev.get("summary"), short),
+                  "incremental": {"mode": "reused", "from": rec["commit"]}}
+        if dirty:
+            result["dirty"] = True
+        append_report(args.change_dir, result)
+        timeline_record(args.change_dir, "final", "同树沿用 %s ok" % short)
+        print(json.dumps(result, ensure_ascii=False))
+        sys.exit(0)
     durations = {} if tiers is not None else None
     unit_wall, region_wall = 0.0, {}
     v7, total, passed, w7 = scenario_status(root, data, durations=durations)
@@ -1796,6 +2480,8 @@ def cmd_final(args):
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
+    inc = None
+    final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
     if v7:
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
     else:
@@ -1805,35 +2491,153 @@ def cmd_final(args):
             tiers = None
         if not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
-        elif tiers is None:
-            f2, w2 = full_suite_verdict(test_cmd, root, baseline)
-            if f2:
-                failed.append(f2)
-            if w2:
-                warnings.append(w2)
         else:
+            bt = (baseline or {}).get("test") or {}
+            key = cmd_key(root, change_rel, test_cmd)
+            akey = _anchor_key(root, change_rel, test_cmd, gate)
+            tkey = _tiers_key(root, args.change_dir, tiers)
+            imp = gate.get("impacted")
+            pick = None
+            if not args.full and cur_snap is not None:
+                pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
+                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
+            rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
+            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate)
+            warnings.extend(wpy)
+            if pick is not None:
+                final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
+                             "anchor": pick[0].get("commit") or ""}
+            anchor_part, byproducts = None, []
+            run_regions = None  # 本次运行的已选区域；None = 全部
             t0 = time.time()
-            tg = run_test_gate(test_cmd, root, probe=True)
-            f2, w2 = _diff_verdict("test", tg, ((baseline or {}).get("test") or {}).get("failed"))
-            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
-            unit_wall = time.time() - t0
-            failed.extend([f2] if f2 else [])
-            warnings.extend([w2] if w2 else [])
-            failed.extend(f10)
-            warnings.extend(w10)
-            bregions = (baseline or {}).get("regions")
-            for rname in _selected_regions(gate):
-                rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
-                rec = bregions.get(rname) if isinstance(bregions, dict) else None
-                if not isinstance(rec, dict) or not rcmd or rec.get("cmd") != rcmd:
-                    failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
-                    continue
-                t0 = time.time()
-                rg = run_test_gate(rcmd, root)
-                region_wall[rname] = time.time() - t0
-                f2, w2 = _diff_verdict("region " + rname, rg, rec.get("failed"))
+            if why is None and imp:  # gate.impacted 代替内建选测（design D8）
+                anchor, delta = pick
+                with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
+                    tg = run_test_gate(imp, root, extra_env=_final_env(final_ctx, tmp))
+                unit_wall = time.time() - t0
+                f2, w2 = _diff_verdict("test", tg, bt.get("failed"))
                 failed.extend([f2] if f2 else [])
                 warnings.extend([w2] if w2 else [])
+                if tiers is not None:
+                    warnings.append("G10/G11 未判：gate.impacted 增量不挂单元层探针")
+                # 选测命令选了哪些用例门禁无从得知：重跑 / 沿用三项如实给 null（spec「输出」）
+                inc = {"mode": "incremental", "source": "impacted",
+                       "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta),
+                       "rerun": None, "rerun_tests": None, "inherited_tests": None}
+            elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
+                anchor, delta = pick
+                sel = _final_select(root, anchor, delta)
+                run_sel, unit_files, hit = sel, set(), {}
+                if tiers is not None:
+                    regs = tiers.get("regions") or {}
+                    hit = {r: [f for f in sel if any(glob_match(f, g) for g in regs[r]["paths"])] for r in regs}
+                    # 锚点没测过的区域（锚点来自未选它的计划 / 本 change 后选的）依赖不在锚点里，必须跑；Δ 命中 covers 也跑
+                    tested = set(anchor.get("regions") or [])
+                    run_regions = [r for r in _selected_regions(gate)
+                                   if hit.get(r) or r not in tested
+                                   or any(glob_match(p, g) for p in delta for g in (regs.get(r) or {}).get("covers") or [])]
+                    run_sel = [f for f in sel if not any(f in v for v in hit.values())]
+                    unit_files = {f for f in run_sel if any(glob_match(f, g) for g in tiers["unit"]["paths"])}
+                d, pr, outcomes, rc, text, timed_out = {}, {}, [], 0, "", False
+                if run_sel:
+                    outcomes, rc, text, timed_out = _pytest_outcomes(root, run_sel, rgate, deps_out=d,
+                                                                     probe_out=pr if unit_files else None)
+                unit_wall = time.time() - t0
+                known = set(bt.get("failed_nodes") or [])
+                fails = sorted({n for n, o in outcomes if o in ("FAILED", "ERROR")})
+                new = [n for n in fails if n not in known]
+                if timed_out:
+                    failed.append("G2 test：增量重跑超时")
+                elif new:
+                    failed.append("G2 test：新增失败 %d 条：%s" % (len(new), ", ".join(new)))
+                elif sel and (rc not in (0, 1, 5) or (rc == 1 and not fails)):
+                    failed.append("G2 test：增量重跑 exit %s\n%s" % (rc, _tail(text)))
+                elif fails:
+                    warnings.append("G2 test：增量重跑的失败均为基线预存红（%d 条已按基线排除）" % len(fails))
+                if unit_files:  # 只对选中的单元层用例判 G10 / G11（与全量同一套判定）
+                    probe = pr.get("probe")
+                    if probe is not None:
+                        probe = {n: r for n, r in probe.items() if n.split("::", 1)[0] in unit_files}
+                    f10, w10 = _unit_tier_verdict(root, gate, {"probe": probe, "probe_why": pr.get("probe_why")},
+                                                  tiers.get("slow_allow") or {})
+                    failed.extend(f10)
+                    warnings.extend(w10)
+                rerun = sorted(set(run_sel).union(*[hit.get(r) or [] for r in run_regions or []]))
+                inherited = sum(n for f, n in (anchor.get("tests") or {}).items()
+                                if f not in rerun and os.path.isfile(os.path.join(root, f)))
+                inc = {"mode": "incremental", "source": "builtin",
+                       "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")},
+                       "delta": len(delta), "rerun": rerun, "rerun_tests": len({n for n, _ in outcomes}),
+                       "inherited_tests": inherited}
+                if tiers is not None:
+                    inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
+                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
+                # 超时 / 收集错误 / 异常退出：本次结论不全（收集失败的文件没有用例结论），锚点不可用，下次退回更早的锚点或全量
+                ran_ok = (not timed_out and (rc in (0, 5) or (rc == 1 and bool(fails)))
+                          and not any(m in text for m in EARLY_STOP_MARKS))
+                anchor_part["measured"] = (bool(d) and ran_ok) or not run_sel
+                anchor_part["source"] = "final-incremental"
+                byproducts = anchor.get("byproducts") or []
+            else:  # 全量：按基线差分，并记录依赖图（design D4）
+                tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True)
+                f2, w2 = _diff_verdict("test", tg, bt.get("failed"))
+                failed.extend([f2] if f2 else [])
+                warnings.extend([w2] if w2 else [])
+                if tiers is not None:
+                    f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+                    unit_wall = time.time() - t0
+                    failed.extend(f10)
+                    warnings.extend(w10)
+                ad = tg["deps"]
+                anchor_part = {"files": ad["files"] if ad else [], "deps": ad["deps"] if ad else {},
+                               "blind": ad["blind"] if ad else [],
+                               "failed": sorted(n for n, o in (ad or {}).get("nodes", {}).items()
+                                                if o in ("FAILED", "ERROR")),
+                               "tests": _node_counts((ad or {}).get("nodes") or {}),
+                               "measured": ad is not None and _tg_measurable(tg), "source": "final-full",
+                               "regions": []}
+                if ad is None:
+                    warnings.append("依赖图未测：%s" % tg["deps_why"])
+                elif not anchor_part["measured"]:
+                    warnings.append("锚点不可用：全量 exit %d 不可度量（%s）" % (tg["rc"], tg["why"]))
+                inc = {"mode": "full", "full_why": why}
+            if tiers is not None:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
+                bregions = (baseline or {}).get("regions")
+                for rname in _selected_regions(gate):  # 跳过的区域也先校验基线记录
+                    rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
+                    rrec = bregions.get(rname) if isinstance(bregions, dict) else None
+                    if not isinstance(rrec, dict) or not rcmd or rrec.get("cmd") != rcmd:
+                        failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
+                        continue
+                    if run_regions is not None and rname not in run_regions:
+                        continue
+                    full_run = inc["mode"] == "full"
+                    t0 = time.time()
+                    rg = run_test_gate(rcmd, root, deps=anchor_part is not None)
+                    region_wall[rname] = time.time() - t0
+                    f2, w2 = _diff_verdict("region " + rname, rg, rrec.get("failed"))
+                    failed.extend([f2] if f2 else [])
+                    warnings.extend([w2] if w2 else [])
+                    if anchor_part is not None and anchor_part["measured"]:
+                        if rg["deps"] is None:
+                            anchor_part["measured"] = False
+                            warnings.append("依赖图未测：区域 %s：%s" % (rname, rg["deps_why"]))
+                        elif not _tg_measurable(rg):
+                            anchor_part["measured"] = False
+                            warnings.append("锚点不可用：区域 %s exit %d 不可度量（%s）" % (rname, rg["rc"], rg["why"]))
+                        else:
+                            m = _deps_merge(dict(anchor_part, nodes={}), rg["deps"])
+                            anchor_part.update({k: m[k] for k in ("deps", "blind", "files")})
+                            rfail = [n for n, o in rg["deps"]["nodes"].items() if o in ("FAILED", "ERROR")]
+                            anchor_part["failed"] = sorted(set(anchor_part["failed"]) | set(rfail))
+                            anchor_part["regions"] = sorted(set(anchor_part.get("regions") or []) | {rname})
+                            for f, n in _node_counts(rg["deps"]["nodes"]).items():  # 增量：区域文件换成本次计数
+                                anchor_part["tests"][f] = (anchor_part["tests"].get(f, 0) if full_run else 0) + n
+            if cur_snap is not None and anchor_part is not None:
+                w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
+                                             byproducts=byproducts, cmd_key=akey, tiers_key=tkey))
+                if w:
+                    warnings.append(w)
     checks = gate.get("checks") or []
     cerrs = _lint_checks(gate)[0]
     if cerrs:  # /opsx-verify 可不经 preflight 直接跑 final（design D8）：形状非法时不运行任何检查
@@ -1841,13 +2645,28 @@ def cmd_final(args):
     elif checks and v7:
         warnings.append("G9 检查未跑：G7 已红，scenario 全绿后重跑 final")
     elif checks:
-        failed.extend(_final_checks(root, args.change_dir, checks, baseline))
-    result = {"slice": "final", "ok": not failed, "commit": git(root, "rev-parse", "HEAD"),
+        failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx))
+    result = {"slice": "final", "ok": not failed, "commit": head,
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
     if dirty:
         result["dirty"] = True
+    inc_note = None
+    if inc is not None:
+        result["incremental"] = inc
+        if inc.get("source") == "impacted":
+            a10 = str(inc["anchor"]["commit"])[:10]
+            result["summary"] += "；增量：gate.impacted，Δ %d 个文件，锚点 %s" % (inc["delta"], a10)
+            inc_note = "增量（gate.impacted，锚点 %s，Δ %d 个文件）" % (a10, inc["delta"])
+        elif inc["mode"] == "incremental":
+            a10 = str(inc["anchor"]["commit"])[:10]
+            result["summary"] += "；增量：重跑 %d 个文件（%d 个用例）/ 沿用 %d 个，锚点 %s" % (
+                len(inc["rerun"]), inc["rerun_tests"], inc["inherited_tests"], a10)
+            inc_note = "增量（锚点 %s，重跑 %d 个文件 / 沿用 %d 个用例）" % (a10, len(inc["rerun"]), inc["inherited_tests"])
+        else:
+            result["summary"] += "；全量（%s）" % inc["full_why"]
+            inc_note = "全量（%s）" % inc["full_why"]
     final_note = "ok" if result["ok"] else "red"
     if durations is not None:
         ts = tier_seconds(durations, tiers)
@@ -1856,6 +2675,16 @@ def cmd_final(args):
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
         final_note = "%s %s" % (_tier_note(ts), final_note)
+    if inc_note:  # 结论词恒在末尾（timeline.py 按末尾取结论）
+        final_note = "%s %s" % (inc_note, final_note)
+    if cur_snap is not None:  # 每次实跑结束（绿或红）都写记录，供下次同树沿用（design D6）
+        entry = {"commit": head, "snapshot": cur_snap, "fps": fps, "result": result}
+        green = None if result["ok"] else _last_green(rec)
+        if green:  # 红记录带上最近一次绿的树，供 gate.impacted 取锚点（design D8）
+            entry["green"] = green
+        w = _final_rec_write(root, name, entry)  # 先写记录（其 result 不含本条警告），警告再并进报告留痕
+        if w:
+            result["warnings"].append(w)
     append_report(args.change_dir, result)
     timeline_record(args.change_dir, "final", final_note)
     print(json.dumps(result, ensure_ascii=False))
@@ -1912,6 +2741,7 @@ def cmd_baseline(args):
             break
     reasons, warnings, out = [], [], ""
     unit_wall = 0.0
+    adeps, deps_whys = None, []  # 锚点的依赖图（全量与区域运行并起来）与没测到的原因（design D3）
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons}
     if hit is not None:
@@ -1921,10 +2751,17 @@ def cmd_baseline(args):
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     else:
         t0 = time.time()
-        tg = run_test_gate(test_cmd, root, probe=tiers is not None)
+        tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True)
         rc, out = tg["rc"], tg["out"]
         gate["full_suite_sec"] = round(time.time() - t0, 1)
         bl["test"] = {"exit": rc, "sec": gate["full_suite_sec"]}
+        adeps = tg["deps"]
+        if adeps is None:
+            deps_whys.append(tg["deps_why"])
+        elif rc != 0:
+            bl["test"]["failed_nodes"] = sorted(n for n, o in adeps["nodes"].items() if o in ("FAILED", "ERROR"))
+        if adeps is not None and not _tg_measurable(tg):  # 锚点不可用（同 final 全量）
+            deps_whys.append("全量 exit %d 不可度量（%s）" % (rc, tg["why"]))
         if rc != 0 and tg["failed"] is not None:
             bl["test"]["failed"] = tg["failed"]
             warnings.append("预存红 %d 条已记录，final 按基线差分" % len(tg["failed"]))
@@ -1984,8 +2821,14 @@ def cmd_baseline(args):
     for rname in regions:
         rcmd = tiers["regions"][rname]["cmd"]
         t0 = time.time()
-        rg = run_test_gate(rcmd, root)
+        rg = run_test_gate(rcmd, root, deps=True)
         rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+        if rg["deps"] is None:
+            deps_whys.append("区域 %s：%s" % (rname, rg["deps_why"]))
+        elif adeps is not None:
+            adeps = _deps_merge(adeps, rg["deps"])
+        if rg["deps"] is not None and not _tg_measurable(rg):
+            deps_whys.append("区域 %s exit %d 不可度量（%s）" % (rname, rg["rc"], rg["why"]))
         if rg["rc"] != 0 and rg["failed"] is not None:
             rec["failed"] = rg["failed"]
             warnings.append("区域 %s 预存红 %d 条已记录，final 按基线差分" % (rname, len(rg["failed"])))
@@ -2056,6 +2899,24 @@ def cmd_baseline(args):
     bl["plan_sha"] = sha0
     if plan_sha(cur) != sha0:
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
+    # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
+    # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）
+    if hit is None:
+        measured = adeps is not None and not deps_whys and not reasons
+        if adeps is None or deps_whys:
+            warnings.append("依赖图未测：%s" % "；".join(w for w in deps_whys if w) if deps_whys else "依赖图未测")
+        elif reasons:
+            warnings.append("锚点不可用：基线无效（%s）" % reasons[0])
+        tkey = _tiers_key(root, args.change_dir, tiers)
+        ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
+        w = _anchor_write(root, {
+            "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
+            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
+            "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
+            "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
+            "measured": measured, "source": "baseline"})
+        if w:
+            warnings.append(w)
     if warnings:
         bl["warnings"] = warnings
     bl.update({"change": name, "mode": "incremental" if hit is not None else "full", "snapshot": s1,
@@ -2353,10 +3214,15 @@ POOL_KEEP = 30
 POOL_TMP_TTL = 3600  # .tmp- 残留超过这么久（秒）视为崩溃遗留，清掉
 
 
-def _pool_dir(root):
-    """git common dir 下的基线池目录（同仓各 worktree 共享）；相对路径按 root 解析成绝对路径。"""
+def _pool_dir(root, sub=POOL_DIR):
+    """git common dir 下的池目录（默认基线池；同仓各 worktree 共享）；相对路径按 root 解析成绝对路径。"""
     common = git(root, "rev-parse", "--git-common-dir")
-    return os.path.join(common if os.path.isabs(common) else os.path.join(root, common), POOL_DIR)
+    return os.path.join(common if os.path.isabs(common) else os.path.join(root, common), sub)
+
+
+# 锚点池（design D3）：<git common dir>/flight-anchors/，条目带依赖图，只留最新 ANCHOR_KEEP 条
+ANCHOR_DIR = "flight-anchors"
+ANCHOR_KEEP = 20
 
 
 CHECKS_DIR = "flight-gate-checks"
@@ -2374,10 +3240,26 @@ def _check_dir(root, change, name):
     return path
 
 
-def _check_env(phase, change, base_commit, cdir):
-    """检查命令的环境（运行契约）：os.environ 副本 + GATE_PHASE / GATE_CHANGE / GATE_BASE_COMMIT / GATE_CHECK_DIR。"""
-    return dict(os.environ, GATE_PHASE=phase, GATE_CHANGE=change, GATE_BASE_COMMIT=base_commit or "",
-                GATE_CHECK_DIR=cdir)
+def _final_env(final_ctx, ddir):
+    """final 注入的三个变量（incremental-final design D7）：Δ 每行一个写进 <ddir>/.gate-delta.txt；
+    final_ctx = {"mode", "delta": [...] | None, "anchor": commit | ""}；没有 Δ 时 GATE_DELTA_FILE 为空串。写失败抛 OSError。"""
+    path = ""
+    if final_ctx.get("delta") is not None:
+        path = os.path.join(ddir, ".gate-delta.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("".join(p + "\n" for p in final_ctx["delta"]))
+    return {"GATE_FINAL_MODE": final_ctx.get("mode") or "", "GATE_DELTA_FILE": path,
+            "GATE_ANCHOR_COMMIT": final_ctx.get("anchor") or ""}
+
+
+def _check_env(phase, change, base_commit, cdir, final_ctx=None):
+    """检查命令的环境（运行契约）：os.environ 副本 + GATE_PHASE / GATE_CHANGE / GATE_BASE_COMMIT / GATE_CHECK_DIR；
+    final_ctx 非 None（只在 final）时另加 _final_env 的三个变量。"""
+    env = dict(os.environ, GATE_PHASE=phase, GATE_CHANGE=change, GATE_BASE_COMMIT=base_commit or "",
+               GATE_CHECK_DIR=cdir)
+    if final_ctx is not None:
+        env.update(_final_env(final_ctx, cdir))
+    return env
 
 
 def _run_check(cmd, root, env, timeout):
@@ -2421,7 +3303,7 @@ def _check_msg(head, log, out):
     return msg + ("\n" + tail if tail else "")
 
 
-def _final_checks(root, change_dir, checks, baseline):
+def _final_checks(root, change_dir, checks, baseline, final_ctx=None):
     """成对检查的 final 半（G9，design D8）：按 gate.checks 顺序运行，先核对基线记录；返回 failed 项列表。"""
     change = os.path.basename(os.path.realpath(change_dir))
     base = (baseline or {}).get("commit")
@@ -2437,11 +3319,11 @@ def _final_checks(root, change_dir, checks, baseline):
         try:
             cdir = _check_dir(root, change, cname)
             os.makedirs(cdir, exist_ok=True)
+            env = _check_env("final", change, base, cdir, final_ctx)
         except (RuntimeError, OSError) as e:
             failed.append("G9 check %s：共用目录不可用：%s" % (cname, e))
             continue
-        rc, out, _, timed_out = _run_check(c["final"], root, _check_env("final", change, base, cdir),
-                                           c.get("timeout_sec"))
+        rc, out, _, timed_out = _run_check(c["final"], root, env, c.get("timeout_sec"))
         log = _check_log(cdir, "final", out)
         if timed_out:
             failed.append(_check_msg("G9 check %s：超时 %s 秒" % (cname, c.get("timeout_sec")), log, out))
@@ -2465,11 +3347,11 @@ def _pool_read(pdir, name):
     return e if isinstance(e, dict) else None
 
 
-def _pool_write(root, entry):
-    """原子写一条池记录（临时文件 + os.replace），再按 at 只留最新 POOL_KEEP 条、清掉过期 .tmp- 残留；
+def _pool_write(root, entry, sub=POOL_DIR, keep=POOL_KEEP, label="基线池"):
+    """原子写一条池记录（临时文件 + os.replace），再按 at 只留最新 keep 条、清掉过期 .tmp- 残留；
     失败返回警告文本，成功返回 None。"""
     try:
-        pdir = _pool_dir(root)
+        pdir = _pool_dir(root, sub)
         os.makedirs(pdir, exist_ok=True)
         stamp = re.sub(r"[^0-9A-Za-z]", "", str(entry.get("at") or ""))
         name = "%s-%s-%s.json" % (stamp, entry.get("change"), str(entry.get("commit") or "")[:12])
@@ -2486,7 +3368,7 @@ def _pool_write(root, entry):
         all_names = os.listdir(pdir)
         names = [n for n in all_names if n.endswith(".json") and not n.startswith(".tmp-")]
         names.sort(key=lambda n: _pool_order(n, _pool_read(pdir, n)), reverse=True)
-        drop = names[POOL_KEEP:]
+        drop = names[keep:]
         cutoff = time.time() - POOL_TMP_TTL
         for n in all_names:
             if n.startswith(".tmp-"):
@@ -2501,23 +3383,247 @@ def _pool_write(root, entry):
             except FileNotFoundError:  # 别的 worktree 同时在清理
                 pass
     except (OSError, RuntimeError) as e:
-        return "基线池写入失败（不影响本次基线）：%s" % e
+        return "%s写入失败（不影响本次基线）：%s" % (label, e)
     return None
 
 
-def _pool_candidates(root, key, limit=10):
-    """池里 cmd_key == key 的条目，按 at 由新到旧取前 limit 个；坏 JSON 跳过，池不可读返回 []。"""
+def _anchor_key(root, change_rel, test_cmd, gate):
+    """锚点指纹：gate.test 的 cmd_key，配了 gate.pytest 时再并入它（增量重跑用它，改了它旧锚点即不可用）。"""
+    key = cmd_key(root, change_rel, test_cmd)
+    if key is None or not gate.get("pytest"):
+        return key
+    pk = cmd_key(root, change_rel, gate["pytest"])
+    return None if pk is None else hashlib.sha1(("%s|%s" % (key, pk)).encode("utf-8")).hexdigest()
+
+
+def _anchor_write(root, entry):
+    """写一条锚点（design D3）；失败返回警告文本。"""
+    return _pool_write(root, entry, ANCHOR_DIR, ANCHOR_KEEP, "锚点池")
+
+
+def _anchor_candidates(root, cmd_key, tiers_key, limit=10):
+    """锚点池里 cmd_key 与 tiers_key 都匹配、measured 为真的条目，按 at 由新到旧取前 limit 个。"""
+    return _pool_candidates(root, cmd_key, limit, ANCHOR_DIR,
+                            lambda e: e.get("tiers_key") == tiers_key and e.get("measured") is True)
+
+
+# ---------------------------------------------------------------- 增量 final 与同树沿用（incremental-final design D3–D6、D10）
+
+FINAL_DIR = "flight-final"
+# Δ 含这些文件名（任何目录下）→ final 自动全量（spec「命中触发条件时 final 自动跑全量」）
+GLOBAL_FILES = {"conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", "setup.py", "Pipfile",
+                "Pipfile.lock", "poetry.lock", "uv.lock", ".python-version", TIER_FILE}
+GLOBAL_GLOBS = ("requirements*.txt",)
+
+
+def _tiers_key(root, change_dir, tiers):
+    """分层文件的 blob（锚点与 final 指纹用）；无分层或取不到 → None。"""
+    if tiers is None:
+        return None
+    try:
+        return _hash_paths(root, [_tiers_path(change_dir)])[0]
+    except (RuntimeError, IndexError):
+        return None
+
+
+def _node_counts(nodeids):
+    """{测试文件: 用例数}（nodeid 的 :: 之前部分）。"""
+    out = {}
+    for n in set(nodeids):
+        f = str(n).split("::", 1)[0]
+        out[f] = out.get(f, 0) + 1
+    return dict(sorted(out.items()))
+
+
+def _py_test_file(rel):
+    return rel.endswith(".py") and bool(TEST_FILE_RE.search(rel))
+
+
+def _global_file(rel):
+    base = rel.rsplit("/", 1)[-1]
+    return base in GLOBAL_FILES or any(fnmatch.fnmatchcase(base, g) for g in GLOBAL_GLOBS)
+
+
+def _final_fps(root, change_rel, data, tiers):
+    """同树沿用的指纹集合（design D6）。"""
+    gate = data.get("gate") or {}
+    checks = gate.get("checks") if isinstance(gate.get("checks"), list) else []
+    return {
+        "plan_sha": plan_sha(data),
+        "scenario_tests": hashlib.sha1(json.dumps(data.get("scenario_tests") or {}, ensure_ascii=False, sort_keys=True)
+                                       .encode("utf-8")).hexdigest(),
+        # G7 查哪些 scenario 由每片 scenarios 决定（plan_sha 只含 id + verify）
+        "scenarios": hashlib.sha1(json.dumps([[s.get("id"), s.get("scenarios")] for s in data.get("slices") or []],
+                                             ensure_ascii=False).encode("utf-8")).hexdigest(),
+        "cmd": {k: cmd_key(root, change_rel, gate[k]) if gate.get(k) else None
+                for k in ("test", "pytest", "lint", "typecheck", "impacted")},
+        "checks": [[c.get("name"), cmd_key(root, change_rel, c.get("final"))] for c in checks if isinstance(c, dict)],
+        "tiers": _tiers_key(root, os.path.join(root, change_rel), tiers),
+    }
+
+
+def _final_rec_read(root, name):
+    try:
+        return _pool_read(_pool_dir(root, FINAL_DIR), name + ".json")
+    except RuntimeError:
+        return None
+
+
+def _final_rec_write(root, name, rec):
+    """原子写 <git common dir>/flight-final/<change>.json；失败返回警告文本。"""
+    try:
+        pdir = _pool_dir(root, FINAL_DIR)
+        os.makedirs(pdir, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=pdir, prefix=".tmp-", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(rec, f, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp, os.path.join(pdir, name + ".json"))
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+    except (OSError, RuntimeError) as e:
+        return "final 记录写入失败（下次 final 不能同树沿用）：%s" % e
+    return None
+
+
+def _final_reusable(root, rec, cur_snap, head, change_rel, fps):
+    """记录绿、指纹全等、记录树与当前树（strict Δ 去掉记账文件）相同 → True。"""
+    if cur_snap is None or not isinstance(rec, dict) or (rec.get("result") or {}).get("ok") is not True:
+        return False
+    if rec.get("fps") != fps:
+        return False
+    d = _delta(root, rec, cur_snap, head, change_rel, True, strict=True)
+    changes_rel = change_rel.rsplit("/", 1)[0] if "/" in change_rel else ""
+    return d is not None and not [p for p in d if not _is_bookkeeping(p, changes_rel)]
+
+
+def _last_green(rec):
+    """final 记录里最近一次绿的 {commit, snapshot, fps}：记录本身绿取它，红取它带的 green；没有 → None。"""
+    if not isinstance(rec, dict):
+        return None
+    if (rec.get("result") or {}).get("ok") is True:
+        return {"commit": rec.get("commit"), "snapshot": rec.get("snapshot"), "fps": rec.get("fps")}
+    g = rec.get("green")
+    return g if isinstance(g, dict) else None
+
+
+def _impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps):
+    """gate.impacted 的锚点（design D8）：本 change 最近一次绿的 final；它不是 HEAD 的祖先（或没有）、
+    或其 gate.test / gate.impacted / 分层指纹与当前不同时取基线 commit 与快照（基线 plan_sha 也须与当前相同）
+    → (anchor, Δ) | None。不要求依赖图。"""
+    green = _last_green(rec)
+    if isinstance(green, dict):
+        gf = green.get("fps") if isinstance(green.get("fps"), dict) else {}
+        if ([(gf.get("cmd") or {}).get(k) for k in ("test", "impacted")] + [gf.get("tiers")]
+                != [fps["cmd"].get(k) for k in ("test", "impacted")] + [fps.get("tiers")]):
+            green = None
+    if not isinstance(baseline, dict) or baseline.get("plan_sha") != fps["plan_sha"]:
+        baseline = None
+    for cand in (green, baseline):
+        if isinstance(cand, dict) and isinstance(cand.get("snapshot"), dict):
+            d = _delta(root, cand, cur_snap, head, change_rel, True)
+            if d is not None:
+                return dict(cand, change=name), d
+    return None
+
+
+def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
+    """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None。"""
+    best = None
+    for cand in _anchor_candidates(root, key, tkey):  # 由新到旧：严格更小才替换
+        d = _delta(root, cand, cur_snap, head, change_rel, cand.get("change") == name)
+        if d is not None and (best is None or len(d) < len(best[1])):
+            best = (cand, d)
+    return best
+
+
+def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None):
+    """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。
+    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。"""
+    if full:
+        return "手动要求 --full", []
+    if pick is None:
+        return "没有可用锚点" + ("（%s）" % snap_why if snap_why else ""), []
+    bt = (baseline or {}).get("test") or {}
+    if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
+        return "基线缺 failed_nodes（有预存红），重跑 baseline", []
+    anchor, delta = pick
+    glob = [p for p in delta if _global_file(p)]
+    if glob:
+        return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
+    if impacted:
+        return None, []
+    gate = gate or {}
+    h = _pytest_head(gate.get("test") or "")
+    if not gate.get("pytest"):  # 增量重跑用从 gate.test 截出的 pytest 前缀，其后的选项会丢
+        if h is None or _derive_paths(h[1]) is None:
+            return "gate.test 带 pytest 之后的选项（或认不出 pytest 前缀），增量无法等价复现；配置 gate.pytest 可走增量", []
+    elif h is not None:  # 增量重跑用 gate.pytest：gate.test 的白名单外选项词（不是现存路径的词）都得在 gate.pytest 里
+        miss = _uncovered_opts(root, h[1], shlex.split(gate["pytest"]))
+        if miss:
+            return "gate.test 的选项 %s 不在 gate.pytest 里，增量无法等价复现" % " ".join(miss), []
+    seen = set()
+    for v in (anchor.get("deps") or {}).values():
+        seen.update(v)
+    cand = [p for p in delta if p not in seen and not _py_test_file(p)]
+    snap = anchor.get("snapshot") or {}
+    try:
+        blobs = _blobs_at(root, anchor["commit"], [p for p in cand if p not in snap])
+    except RuntimeError as e:
+        return "锚点内容比对失败：%s" % e, []
+    existed = [p for p in cand if (snap[p] if p in snap else blobs.get(p)) is not None]
+    other = [p for p in existed if not p.endswith(".py") and os.path.splitext(p)[1].lower() not in DOC_EXT]
+    if other:
+        return "Δ 含未被任何用例触及的非 Python 文件：%s" % ", ".join(other[:8]), []
+    py = [p for p in existed if p.endswith(".py")]
+    return None, (["Δ 中 %d 个 .py 文件未被任何用例加载：%s" % (len(py), ", ".join(py[:8]))] if py else [])
+
+
+def _final_select(root, anchor, delta):
+    """选中集合（design D5）：依赖与 Δ 相交 ∪ Δ 里的测试文件 ∪ 锚点失败所在 ∪ 盲；只留现存文件，排序。"""
+    ds = set(delta)
+    sel = {f for f, v in (anchor.get("deps") or {}).items() if ds.intersection(v)}
+    sel.update(p for p in delta if _py_test_file(p))
+    sel.update(str(n).split("::", 1)[0] for n in anchor.get("failed") or [])
+    sel.update(anchor.get("blind") or [])
+    return sorted(f for f in sel if os.path.isfile(os.path.join(root, f)))
+
+
+def _anchor_forward(root, old, sel, d, fails, outcomes):
+    """增量后的新锚点依赖部分：重跑文件（与已删除的文件）换成本次结果，其余照抄旧锚点。"""
+    known = set(old.get("files") or []) | set(old.get("deps") or {}) | set(old.get("tests") or {})
+    drop = set(sel) | {f for f in known if not os.path.isfile(os.path.join(root, f))}
+    deps = {f: v for f, v in (old.get("deps") or {}).items() if f not in drop}
+    deps.update(d.get("deps") or {})
+    tests = {f: n for f, n in (old.get("tests") or {}).items() if f not in drop}
+    tests.update(_node_counts(n for n, _ in outcomes))
+    return {
+        "files": sorted({f for f in old.get("files") or [] if f not in drop} | set(d.get("files") or [])),
+        "failed": sorted({n for n in old.get("failed") or [] if str(n).split("::", 1)[0] not in drop} | set(fails)),
+        "deps": dict(sorted(deps.items())),
+        "blind": sorted({f for f in old.get("blind") or [] if f not in drop} | set(d.get("blind") or [])),
+        "tests": tests,
+        "regions": sorted(old.get("regions") or []),  # 沿用旧锚点测过的区域；本次跑并入的区域由调用方追加
+        "measured": bool(d) or not sel,
+    }
+
+
+def _pool_candidates(root, key, limit=10, sub=POOL_DIR, pred=None):
+    """池里 cmd_key == key（且满足 pred）的条目，按 at 由新到旧取前 limit 个；坏 JSON 跳过，池不可读返回 []。"""
     if not key:
         return []
     try:
-        pdir = _pool_dir(root)
+        pdir = _pool_dir(root, sub)
         names = [n for n in os.listdir(pdir) if n.endswith(".json") and not n.startswith(".tmp-")]
     except (OSError, RuntimeError):
         return []
     hits = []
     for n in names:
         e = _pool_read(pdir, n)
-        if e is not None and e.get("cmd_key") == key:
+        if e is not None and e.get("cmd_key") == key and (pred is None or pred(e)):
             hits.append((_pool_order(n, e), e))
     hits.sort(key=lambda x: x[0], reverse=True)
     return [e for _, e in hits[:limit]]
@@ -2618,24 +3724,24 @@ def _verify_rerun(root, cmd, prev, delta):
     return any(p == "." or f == p or f.startswith(p + "/") for p in paths for f in delta)
 
 
-def _final_fresh(root, change_dir, final_commit):
-    """final 之后的 commit 只改了 changes 根下任一 change 的记账文件 → 仍算新鲜；任一 git 调用失败 → 不新鲜。"""
-    if not _is_ancestor(root, final_commit, "HEAD"):
+def _is_bookkeeping(rel, changes_rel):
+    """路径是 changes 根下任一 change 的记账文件。"""
+    prefix = changes_rel + "/"
+    if not rel.startswith(prefix):
         return False
+    parts = rel[len(prefix):].split("/", 1)
+    return len(parts) == 2 and parts[1] in BOOKKEEPING
+
+
+def _final_fresh(root, change_dir, final_commit):
+    """final 行的 commit 与 HEAD 的树之差只含 changes 根下任一 change 的记账文件（或为空）→ 新鲜（design D6）；
+    不要求祖先关系；任一 git 调用失败（commit 不存在等）→ 不新鲜。"""
     try:
         names = git(root, "diff", "--name-only", final_commit, "HEAD").splitlines()
     except RuntimeError:
         return False
     changes_rel = os.path.relpath(os.path.dirname(os.path.abspath(change_dir)), root).replace(os.sep, "/")
-    prefix = changes_rel + "/"
-
-    def bookkeeping(n):
-        if not n.startswith(prefix):
-            return False
-        parts = n[len(prefix):].split("/", 1)
-        return len(parts) == 2 and parts[1] in BOOKKEEPING
-
-    return all(bookkeeping(n) for n in names if n)
+    return all(_is_bookkeeping(n, changes_rel) for n in names if n)
 
 
 def cmd_ship(args):
@@ -2693,6 +3799,8 @@ def main():
         p.add_argument("--change-dir", required=True)
         if name == "baseline":
             p.add_argument("--full", action="store_true", help="不复用旧基线，强制跑全量 gate.test")
+        if name == "final":
+            p.add_argument("--full", action="store_true", help="不走增量与同树沿用，强制跑全量 gate.test")
     p = sub.add_parser("start")
     p.add_argument("slice")
     p.add_argument("--change-dir", required=True)

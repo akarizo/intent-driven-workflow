@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "change": "incremental-final",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 149.5
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定器：嵌套会话防护插件、依赖图插件与 sitecustomize、run_test_gate / _pytest_outcomes 可选记录依赖图、baseline 全量写锚点与 failed_nodes",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/final_helpers.py",
+        "tests/test_final_guard.py",
+        "tests/test_final_deps.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_final_guard.py tests/test_final_deps.py tests/test_tiers_probe.py tests/test_tiers_gate.py tests/test_slice_gate.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py",
+      "scenarios": [
+        "incremental-final#nested-pytest-does-not-overwrite-junit",
+        "incremental-final#nested-pytest-not-recorded-in-probe-or-deps",
+        "incremental-final#guard-plugin-load-failure-falls-back",
+        "incremental-final#full-run-records-dependency-map",
+        "incremental-final#blind-subprocess-marks-test-file",
+        "incremental-final#baseline-records-failed-nodes"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "判定器：增量 final（取锚点、Δ、自动全量的触发条件、选测、判红、锚点前移、输出）、同树沿用、ship 按树判新鲜",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_final_incremental.py",
+        "tests/test_final_reuse.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_final_incremental.py tests/test_final_reuse.py tests/test_ship_verdict.py tests/test_slice_gate_final.py tests/test_tiers_gate.py tests/test_tiers_timing.py tests/test_gate_checks_final.py tests/test_evidence_timeline.py",
+      "scenarios": [
+        "incremental-final#final-reruns-only-affected-tests",
+        "incremental-final#final-incremental-red-on-new-failure",
+        "incremental-final#final-reruns-anchor-failures-and-changed-tests",
+        "incremental-final#final-moves-anchor-forward",
+        "incremental-final#final-full-when-global-file-changes",
+        "incremental-final#final-full-when-no-anchor",
+        "incremental-final#final-full-when-unseen-non-python-file-changes",
+        "incremental-final#final-full-when-gate-test-options-not-covered",
+        "incremental-final#final-full-flag-forces-full",
+        "incremental-final#same-tree-final-reuses-result",
+        "incremental-final#red-final-is-not-reused",
+        "incremental-final#ship-fresh-when-tree-unchanged"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "判定器：checks 注入 Δ 与锚点、gate.impacted（运行与 lint）、增量与测试分层叠加",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_final_checks_env.py",
+        "tests/test_final_impacted.py",
+        "tests/test_final_tiers.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_final_checks_env.py tests/test_final_impacted.py tests/test_final_tiers.py tests/test_final_incremental.py tests/test_gate_checks_final.py tests/test_gate_checks_lint.py tests/test_tiers_gate.py tests/test_tiers_plan.py tests/test_tiers_timing.py",
+      "scenarios": [
+        "incremental-final#final-checks-receive-delta-and-anchor",
+        "incremental-final#impacted-command-replaces-builtin-selection",
+        "incremental-final#lint-rejects-bad-impacted",
+        "incremental-final#tiers-incremental-probes-selected-unit-files",
+        "incremental-final#tiers-region-runs-only-when-selected"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "文档：/pr-ship 评审自动修复不询问；/opsx-verify、/opsx-apply 与同名 skill 写增量 final；schema tasks instruction 写 gate.impacted；README",
+      "owns": [
+        "template/.claude/commands/pr-ship.md",
+        "template/.claude/commands/opsx-verify.md",
+        "template/.claude/skills/openspec-verify-change/SKILL.md",
+        "template/.claude/commands/opsx-apply.md",
+        "template/.claude/skills/openspec-apply-change/SKILL.md",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "README.md",
+        "tests/test_incremental_final_docs.py",
+        "tests/test_template_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_incremental_final_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py",
+      "scenarios": [
+        "incremental-final#docs-describe-incremental-final",
+        "pr-ship-review-autofix#pr-ship-autofixes-without-asking"
+      ],
+      "packet": "slices/S4.md"
+    }
+  ],
+  "scenario_tests": {
+    "incremental-final#nested-pytest-does-not-overwrite-junit": "tests/test_final_guard.py::test_nested_pytest_does_not_overwrite_junit",
+    "incremental-final#nested-pytest-not-recorded-in-probe-or-deps": "tests/test_final_guard.py::test_nested_pytest_not_recorded_in_probe_or_deps",
+    "incremental-final#guard-plugin-load-failure-falls-back": "tests/test_final_guard.py::test_guard_plugin_load_failure_falls_back",
+    "incremental-final#full-run-records-dependency-map": "tests/test_final_deps.py::test_full_run_records_dependency_map",
+    "incremental-final#blind-subprocess-marks-test-file": "tests/test_final_deps.py::test_blind_subprocess_marks_test_file",
+    "incremental-final#baseline-records-failed-nodes": "tests/test_final_deps.py::test_baseline_records_failed_nodes",
+    "incremental-final#final-reruns-only-affected-tests": "tests/test_final_incremental.py::test_final_reruns_only_affected_tests",
+    "incremental-final#final-incremental-red-on-new-failure": "tests/test_final_incremental.py::test_final_incremental_red_on_new_failure",
+    "incremental-final#final-reruns-anchor-failures-and-changed-tests": "tests/test_final_incremental.py::test_final_reruns_anchor_failures_and_changed_tests",
+    "incremental-final#final-moves-anchor-forward": "tests/test_final_incremental.py::test_final_moves_anchor_forward",
+    "incremental-final#final-full-when-global-file-changes": "tests/test_final_incremental.py::test_final_full_when_global_file_changes",
+    "incremental-final#final-full-when-no-anchor": "tests/test_final_incremental.py::test_final_full_when_no_anchor",
+    "incremental-final#final-full-when-unseen-non-python-file-changes": "tests/test_final_incremental.py::test_final_full_when_unseen_non_python_file_changes",
+    "incremental-final#final-full-when-gate-test-options-not-covered": "tests/test_final_incremental.py::test_final_full_when_gate_test_has_options_beyond_runner",
+    "incremental-final#final-full-flag-forces-full": "tests/test_final_incremental.py::test_final_full_flag_forces_full",
+    "incremental-final#same-tree-final-reuses-result": "tests/test_final_reuse.py::test_same_tree_final_reuses_result",
+    "incremental-final#red-final-is-not-reused": "tests/test_final_reuse.py::test_red_final_is_not_reused",
+    "incremental-final#ship-fresh-when-tree-unchanged": "tests/test_final_reuse.py::test_ship_fresh_when_tree_unchanged",
+    "incremental-final#final-checks-receive-delta-and-anchor": "tests/test_final_checks_env.py::test_final_checks_receive_delta_and_anchor",
+    "incremental-final#impacted-command-replaces-builtin-selection": "tests/test_final_impacted.py::test_impacted_command_replaces_builtin_selection",
+    "incremental-final#lint-rejects-bad-impacted": "tests/test_final_impacted.py::test_lint_rejects_bad_impacted",
+    "incremental-final#tiers-incremental-probes-selected-unit-files": "tests/test_final_tiers.py::test_tiers_incremental_probes_selected_unit_files",
+    "incremental-final#tiers-region-runs-only-when-selected": "tests/test_final_tiers.py::test_tiers_region_runs_only_when_selected",
+    "incremental-final#docs-describe-incremental-final": "tests/test_incremental_final_docs.py::test_docs_describe_incremental_final",
+    "pr-ship-review-autofix#pr-ship-autofixes-without-asking": "tests/test_incremental_final_docs.py::test_pr_ship_autofixes_without_asking"
+  }
+}

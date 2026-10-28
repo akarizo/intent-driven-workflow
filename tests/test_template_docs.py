@@ -165,6 +165,7 @@ def test_apply_checks_approval_gate():
 
 
 def test_pr_ship_asks_before_autofix():
+    """函数名沿用 flight-preflight-and-retry 的映射；语义已被 incremental-final 的 pr-ship-review-autofix 取代：修前不再问询。"""
     # Given: template/.claude/commands/pr-ship.md
     text = read(CMD / "pr-ship.md")
 
@@ -173,12 +174,11 @@ def test_pr_ship_asks_before_autofix():
     step11 = text[text.index("11. **"):text.index("**Output Summary")]
     guard = text[text.index("**Guardrails**"):]
 
-    # Then: step 10 有 AskUserQuestion 且写明默认只贴评论；step 11 不再问询；Guardrails 不再把唯一问询指向 step 11；全文 AskUserQuestion ≤ 1
-    assert "AskUserQuestion" in step10
-    assert "默认" in step10 and "只贴评论" in step10
+    # Then: step 10 写明不询问、没有「只贴评论」分支；step 11 不问询；Guardrails 写全程不问询；全文没有 AskUserQuestion
+    assert "不询问" in step10 and "只贴评论" not in step10
     assert "AskUserQuestion" not in step11
-    assert "仅 step 11" not in guard
-    assert text.count("AskUserQuestion") <= 1
+    assert "全程不问询" in guard
+    assert "AskUserQuestion" not in text
 
 
 def test_propose_baseline_red_stops():

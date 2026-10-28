@@ -1,0 +1,109 @@
+{
+  "blocked": [
+    {
+      "slice": "S4",
+      "kind": "gate",
+      "reason": "G1 verify: exit 1\nE       AssertionError: assert 'AskUserQuestion' in '10. **CRITICAL/HIGH 自动修复（至多 2 轮，不询问）**\\n\\n    - 有 CRITICAL/HIGH（首审或复核）→ 直接修复并 push，不询问，走下面的流程（至多 2 轮）。\\n    - 自动修：主会话...ip --markdown` 的段落追加为一条 PR 评论。\\n    - 其余情况不动 PR 状态。裁决完再 `git push` 飞行记录（timeline / gate-report / review-findings）。\\n\\n'\n\ntests/test_template_docs.py:177: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_template_docs.py::test_pr_ship_asks_before_autofix - Assert...\n1 failed, 27 passed in 0.04s; spec 自相矛盾 / G6 ownership: tests/test_template_docs.py — test_pr_ship_asks_before_autofix 断言 step 10 必须含 AskUserQuestion 和「默认只贴评论」，但 specs/pr-ship-review-autofix 要求全文禁用 AskUserQuestion、禁用「只贴评论交人」，两者直接冲突。该文件在 S4 verify 范围内，却不在任何切片的 owns 内，执行体无权修改。G1 已连续 2 次红：需主会话把该用例改成新语义（step10 不含 AskUserQuestion），或删掉该用例后再重跑门禁"
+    },
+    {
+      "slice": "fix",
+      "kind": "infra",
+      "reason": "fix agent 未返回（已重派一次）"
+    }
+  ],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 795,
+      "summary": "_read_deps 只要看到 start 记录就判为测到，没有会话结束标记。外层 pytest 因为 os._exit、段错误、被杀而没跑到 sessionfinish 时，或者 FLIGHT_GUARD_NESTED 被泄漏成 1 时（见下一条），sessionfinish 不写任何 file 记录，返回的却是空 deps/files 加 measured=true 的锚点。下游会认为没有测试文件依赖 Δ，选中集合为空，可能整体误判为绿。",
+      "fix": "DEPS_PLUGIN 在外层 controller 的 pytest_sessionfinish 末尾另写 {\"flight_deps\": \"end\"}。_read_deps 要求 start 和 end 都在才返回 dict，否则返回 (None, \"依赖图记录不完整（会话未正常结束）\")。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 158,
+      "summary": "嵌套判定会把 FLIGHT_GUARD_NESTED=1 写进 os.environ，而且永不恢复。用例里在同一进程直接调 pytest.main() 时，它会继承 PYTEST_ADDOPTS 里的 -p flight_guard/-p flight_deps（pytester 会删 PYTEST_ADDOPTS，不受影响），被判为嵌套。返回后外层进程的环境里一直留着 NESTED=1：依赖图插件之后的 logreport 和 sessionfinish 全部跳过，探针插件也不再写。再叠加上一条 start 即测到的判定，结果是一个空的「已测到」依赖图。另外 flight_deps 是同一个模块对象，_cfg[0] 也会被内层 config 覆盖。",
+      "fix": "嵌套分支先保存原先的 FLIGHT_GUARD_NESTED 和 xmlpath，再加一个 pytest_unconfigure（trylast）恢复环境变量（原来没有就 pop）。DEPS_PLUGIN 的 pytest_configure 只在 _cfg[0] 为 None 时赋值。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2580,
+      "summary": "基线结束时快照失败的话，s1 是 None，这时仍会写一条 snapshot=None、measured 可能为真的锚点。按 D3，下游会拿锚点 snapshot 参与 _delta 计算，None 可能被当成「没有未提交改动」，算出错误的 Δ。",
+      "fix": "s1 为 None 时不写锚点，或者强制 measured=false 并在 warnings 里写明「基线结束时快照失败，锚点不可用」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2581,
+      "summary": "锚点的 failed 只取全量运行的 failed_nodes。区域运行的依赖已经并进 adeps，但区域里 FAILED/ERROR 的 nodeid 没进 failed，这违背 D3「锚点的失败用例总会被重跑」的不变量。另外，收集错误不经过 pytest_runtest_logreport，rc=2 只有收集错误时 failed_nodes 是 []，收集失败的测试文件不会因为在 failed 里而被强制重跑。",
+      "fix": "failed 改为从合并后的 adeps[\"nodes\"] 里取 FAILED/ERROR，排序后写入。DEPS_PLUGIN 再加 pytest_collectreport：report.failed 且是 Module 时，记 [测试文件键, \"ERROR\"]，让收集失败的文件也进 failed_nodes 和锚点 failed。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 421,
+      "summary": "_resolve 碰到最后一段只是一个没有 __init__.py 的目录时（命名空间或同名的数据目录），会因为 parts 非空直接返回 []，不再尝试后面的搜索根。例如仓库根有 foo/ 目录，又经 sys.path 引入 src/foo.py，静态闭包就会漏掉 src/foo.py。",
+      "fix": "只在最后一段解析到文件（.py 或 __init__.py）时才返回，否则 continue 到下一个搜索根。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 546,
+      "summary": "FLIGHT_PLUGIN_FAIL 现在对每次 run_test_gate 都在完整输出里做子串匹配。被测套件的输出里只要出现同样文字（例如本仓库测降级的用例失败时打印的捕获输出），就会触发一次不带插件的全量重跑：耗时翻倍，依赖图也判为没测到。",
+      "fix": "把匹配收紧到 pytest 插件导入失败时的固定格式：行首的 ImportError，或 rc=4 并伴随 'Error importing plugin \"flight_'。也可以只在 rc 不是 0/1 时才检测。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3203,
+      "summary": "同树沿用的指纹漏掉了 slices[].scenarios。G7 要检查哪些 scenario 由 slices[].scenarios 决定，而 plan_sha 只覆盖 id+verify，scenario_tests 只覆盖映射，slices.json 又属于计划工件、不进 Δ。如果给某片加了 scenario id 却还没配映射，G7 本应判「无测试映射」红，结果仍会沿用上次的绿。spec 的指纹清单字面上没有这一项，但沿用的前提是「同样的输入得到同样的结论」，这里不成立。",
+      "fix": "在 _final_fps 里加上 sorted([s.id, s.scenarios] for s in slices) 的 sha。或者直接对 scenario_status 实际要用的输入（wanted scenario 列表加映射）取指纹。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2472,
+      "summary": "final 记录写入失败的警告在 append_report 和 timeline_record 之后才追加到 result['warnings']，所以只出现在 stdout 的 JSON 里，gate-report 里没有，跟报告留痕不一致。",
+      "fix": "先调 _final_rec_write，把警告并进 warnings，再 append_report。注意记录里存的 result 应是加警告之前的版本，或者从记录里去掉这条警告。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_final_tiers.py",
+      "line": 66,
+      "summary": "守护测试只覆盖『区域不该跑』这一侧，没有任何测试断言『选中文件落进区域 paths 时区域会运行』。把实现改成区域永不运行（run_regions 恒为空）后，S3 的全部测试仍然是绿的。区域漏跑是会静默的失败，现在没有测试能发现。",
+      "fix": "在 test_final_tiers.py 增加一条正向用例：baseline 之后改 src/hooks/h.py，断言 'hooks' 在 out['tier_sec']['regions'] 中、不在 incremental.regions_skipped 中，并且 rerun 含 tests/integration/hooks/test_h.py。再用『区域永不运行』这个 mutation 自证该用例会变红。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2384,
+      "summary": "source=impacted 时 incremental 段缺少 spec『输出』Requirement（specs/incremental-final/spec.md:89）要求的 rerun 清单、重跑用例数和沿用用例数。summary 和 timeline 备注也换成了另一种格式（『增量：gate.impacted，Δ N 个文件』），与 spec 规定的『；增量：重跑 a 个文件（b 个用例）/ 沿用 c 个，锚点 …』不一致。下游如果统一按 inc['rerun'] 读取，碰到 impacted 会出 KeyError。",
+      "fix": "可以用 tg['cases'] 或 junit 补出 rerun（测试文件清单）和 rerun_tests，inherited_tests 不可度量时填 null 并在 summary 注明；也可以在 spec / design D10 里显式写明 impacted 的输出形状，并补测试固定下来。二选一，不要让实现悄悄偏离 spec。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2379,
+      "summary": "（需进一步确认）gate.impacted 走 run_test_gate + _diff_verdict 判定，rc 5（pytest no tests collected）会判红，提示『exit 5』。而内建增量路径明确把 rc 5 当作通过（第 2406 行 rc not in (0, 1, 5)）。选测工具算出『Δ 不影响任何测试』时，常见做法正是不跑用例、返回 5，这样 impacted 仓库会在合法情况下被误判红。",
+      "fix": "在 impacted 分支对 tg['rc'] == 5 单独处理：判绿并加一条警告『gate.impacted 未选中任何用例』，与内建路径一致；或者在 design D8 里写明 impacted 命令必须自己处理空选集并返回 0，同时补一条测试固定这个语义。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2478,
+      "summary": "增量路径运行区域时，区域命令会跑整个区域，但 _anchor_forward 只丢掉了 rerun 里（命中）的文件。未命中但这次也跑过的区域文件，在新锚点里保留了旧的 failed 条目，_deps_merge 又对旧 deps 取并集。结果是旧的失败和失效的依赖会一直留着，以后容易让区域反复被选中。这只会偏保守（多跑），不会漏判。",
+      "fix": "区域在增量路径运行并测到依赖图后，先从 anchor_part 的 deps / failed / tests 里去掉 rg['deps']['nodes'] 涉及的测试文件，再合并本次结果，做法与 _anchor_forward 处理 drop 集合一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2420,
+      "summary": "rerun 包含了命中区域的文件，但 rerun_tests 只统计 run_sel 的 outcomes，没算区域运行的用例。inherited_tests 又把区域命令实际重跑过、但没命中的区域文件算成『沿用』。飞行记录里的『重跑 a 个文件（b 个用例）/ 沿用 c 个』因此前后对不上，度量失真。",
+      "fix": "rerun_tests 加上区域运行的节点数（可以取 rg['deps']['nodes']，或从 junit 的 cases 计数）；计算 inherited 时，排除本次所有区域运行实际覆盖到的测试文件。"
+    }
+  ],
+  "fix": null
+}
