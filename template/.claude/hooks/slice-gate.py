@@ -806,6 +806,30 @@ def _read_probe(path):
     return probe, None
 
 
+def _drop_inherited(env):
+    """本次运行是新的外层：清掉外层门禁漏下来的 flight 环境变量，并从 PYTEST_ADDOPTS 去掉外层注入的
+    -p flight_* 与 --junitxml（门禁里的用例再起门禁时，回退重跑与 G7 / 探针重跑都不能继承外层插件）。"""
+    mine = env.get("FLIGHT_GUARD_JUNIT")
+    for k in FLIGHT_ENV + ("FLIGHT_TIER_OUT",):
+        env.pop(k, None)
+    try:
+        toks = shlex.split(env.get("PYTEST_ADDOPTS", ""))
+    except ValueError:
+        return
+    keep, i = [], 0
+    while i < len(toks):
+        if toks[i] == "-p" and i + 1 < len(toks) and toks[i + 1] in ("flight_guard", "flight_deps", "flight_tier_probe"):
+            i += 2
+            continue
+        if not (mine and toks[i] == "--junitxml=" + mine):
+            keep.append(toks[i])
+        i += 1
+    if keep:
+        env["PYTEST_ADDOPTS"] = " ".join(shlex.quote(x) for x in keep)
+    else:
+        env.pop("PYTEST_ADDOPTS", None)
+
+
 def _flight_plugins(tmp, env, root, deps):
     """把防护插件（deps=True 时另加依赖图插件与 sitecustomize）写进 tmp，tmp 放到 env 的 PYTHONPATH 最前；
     先清掉外层门禁漏下来的 flight 环境变量（本次运行是新的外层）。返回依赖图输出路径（deps=False 时 None）。"""
@@ -908,6 +932,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
         env = dict(os.environ, **(extra_env or {}))
+        _drop_inherited(env)
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
         deps_out = None
@@ -1857,6 +1882,7 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, pr
         env = dict(os.environ, FLIGHT_G7_OUT=out, PYTHONDONTWRITEBYTECODE="1",
                    PYTHONPYCACHEPREFIX=os.path.join(tmp, "pycache"),
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        _drop_inherited(env)
         sec_out = os.path.join(tmp, "seconds.jsonl")
         env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
         if isinstance(durations, dict):
@@ -1915,8 +1941,10 @@ def _tier_rerun(root, gate, nodeids):
         with open(os.path.join(tmp, "flight_tier_probe.py"), "w", encoding="utf-8") as f:
             f.write(TIER_PROBE_PLUGIN)
         out = os.path.join(tmp, "tier-probe.jsonl")
-        env = dict(os.environ, FLIGHT_TIER_OUT=out, PYTHONDONTWRITEBYTECODE="1",
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
                    PYTHONPATH=os.pathsep.join(p for p in (tmp, os.environ.get("PYTHONPATH")) if p))
+        _drop_inherited(env)
+        env["FLIGHT_TIER_OUT"] = out
         argv = prefix + ["-p", "flight_tier_probe", "-p", "no:cacheprovider", "--rootdir", root, *nodeids]
         try:
             subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=_g7_timeout(gate))

@@ -195,3 +195,22 @@ def test_inprocess_pytest_main_keeps_outer_deps(tmp_path):
     assert "data/after.json" in deps["deps"].get("tests/test_inproc.py", []), deps
     assert "data/z.json" in deps["deps"].get("tests/test_z.py", []), deps
     assert "tests/test_z.py::test_z" in deps["nodes"], deps
+
+
+def test_gate_inside_gate_drops_inherited_flight_flags(tmp_path, monkeypatch):
+    # Given: 本进程处在外层门禁里：PYTEST_ADDOPTS 已带外层注入的 --junitxml 与 -p flight_guard / -p flight_deps，
+    #        FLIGHT_GUARD_JUNIT 指向外层 junit；被测的 gate.test 把 PYTHONPATH 覆写成固定值，套件一过一败
+    outer = str(tmp_path / "outer" / "junit.xml")
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--junitxml=%s -p flight_guard -p flight_deps" % outer)
+    monkeypatch.setenv("FLIGHT_GUARD_JUNIT", outer)
+    repo = tmp_path / "repo"
+    write(repo / "pytest.ini", "[pytest]\n")
+    write(repo / "tests" / "test_x.py", "def test_ok():\n    pass\n\n\ndef test_bad():\n    assert False\n")
+    sg = load_hook("slice-gate")
+
+    # When: 门禁带依赖图运行它
+    res = sg.run_test_gate("env PYTHONPATH=/nonexistent-flight %s" % CMD, str(repo), deps=True)
+
+    # Then: 回退重跑不再带外层的 flight 插件与 junit，失败清单照常判出；外层 junit 没被写
+    assert res["failed"] == ["tests.test_x::test_bad"], (res["why"], res["out"][-800:])
+    assert not (tmp_path / "outer" / "junit.xml").exists()
