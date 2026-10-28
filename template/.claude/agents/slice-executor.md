@@ -27,6 +27,7 @@ color: blue
 - **修在汇流处**：改函数体前先 grep 它的**全部 caller**；只修工单点名的那条路径会留下兄弟 caller 仍坏着——一个共享函数里的 guard 比每个 caller 一个 guard 的 diff 更小。
 - **切角要标天花板**：故意切了真角的简化（全局锁 · O(n²) 扫描 · 朴素启发式）留一行 `ceiling: <限制> -> <升级条件/路径>`；G8 只校验标了的格式完整性，不逼你标。
 - **TDD**：先解锁本切片的 scenario 骨架（去掉 `xfail` / `skip` 标记、把断言写实），运行 `verify` **亲眼看它红**；再写最小实现让它绿；再重构。所有新增单测函数体首行是 `# Given:`（JS 用 `// Given:`）三段中文注释——细则见预加载的 test-driven-development skill。测试运行由 hook 自动留痕，**不要**在输出里贴 RED / GREEN 日志。
+- **新测试先定层**：仓库有 `openspec/test-tiers.json` 时，新写的测试文件放在单元层或本 change 已选区域（`gate.integration`）的 `paths` 里，否则 G12 红；单元层用例不碰真实文件 / 子进程 / 网络且 <3 秒（G10 / G11）。
 - 改了骨架的断言 → 必须在最终 JSON 的 `summary` 里申报改了哪条、为什么。
 - **每切片一个 commit**：`git add <owns 内的文件>`（不用 `-A`），`git commit -m "<type>(<scope>): <S> <切片标题>"`。不 push、不 merge、不切分支、不改 `openspec/` 下的工件（tasks.md 勾选由主会话做）。
 - **预算**：`maxTurns: 40`。接近上限时停止扩展范围，直接收尾跑门禁，如实返回。撞上限时 hook 已快照 owns 内改动、重派会接续，但仍应在上限前收尾。

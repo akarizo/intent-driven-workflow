@@ -295,6 +295,17 @@ artifacts:
       `gate.checks_skip`（可选）：`{<name>: <理由>}`。openspec 根目录下有
       `gate-checks.json`（仓库默认检查）时，把其中每个检查抄进 `gate.checks`，
       或在 `gate.checks_skip` 写明理由；由 `slice-gate.py lint` 校验。
+      测试分层：openspec 根目录下有 `test-tiers.json`（单元层 `unit` +
+      集成区域 `regions`，由 `/test-tiers` 生成）时，`gate.test` 必须等于
+      `unit.cmd`（基线就是单元层）；`gate.integration`（可选）是本 change
+      要在 baseline / final 运行的区域名数组，`gate.integration_skip`（可选）
+      是 `{<区域名>: <理由>}`；区域的 `covers` 与任一切片 `owns` 相交时，
+      该区域必须选进 `gate.integration` 或在 `gate.integration_skip` 写明理由。
+      写 scenario 骨架前先定层：默认单元层（纯函数、不碰真实文件 / 子进程 /
+      网络、每个用例 <3 秒）；确需真实文件 / 子进程 / 网络才进集成区域，
+      并选上该区域；骨架文件必须放在 `unit.paths` 或已选区域的 `paths` 里。
+      以上都由 `slice-gate.py lint` 校验；没有 `test-tiers.json` 时不得写
+      `gate.integration` / `gate.integration_skip`。
 
 
       2. `slices/<S>.md` — one packet per slice: what it does, the exact
