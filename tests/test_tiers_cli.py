@@ -1,14 +1,11 @@
 """/test-tiers 的重划分脚本 test-tiers.py：probe / check / allow-slow / render
 （scenario: test-tiers#probe-cli-reports-file-tiers、#check-flags-unclassified-and-ambiguous-files、
 #allow-slow-requires-latest-human-message、#render-writes-approval-page）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 新增 test-tiers.py 后去掉标记即解锁。"""
+每个 scenario 一个用例，断言是真实的。"""
 import json
-
-import pytest
 
 from conftest import commit_all, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S3 尚未实现")
 BIG = "tests/unit/test_a.py::test_big"
 
 
@@ -28,7 +25,6 @@ def file_line(stdout, path):
     return next(l for l in stdout.splitlines() if path in l)
 
 
-@XF
 def test_probe_cli_reports_file_tiers(git_repo):
     # Given: 仓库有 tests/test_pure.py（只有纯函数用例）、tests/test_io.py（用例都写临时文件）、
     #        tests/test_mixed.py（一个纯函数 test_pure、一个起子进程 test_spawns）
@@ -64,7 +60,6 @@ def test_probe_cli_reports_file_tiers(git_repo):
     assert tests["tests/test_mixed.py::test_pure"]["hits"] == {}, tests
 
 
-@XF
 def test_check_flags_unclassified_and_ambiguous_files(git_repo):
     # Given: unit.paths 是 tests/unit/**，区域 hooks 的 paths 是 tests/integration/** 与 tests/unit/test_both.py；
     #        仓库里有 tests/unit/test_a.py、tests/unit/test_both.py、tests/test_loose.py
@@ -85,7 +80,6 @@ def test_check_flags_unclassified_and_ambiguous_files(git_repo):
     assert "tests/unit/test_a.py" not in text, text
 
 
-@XF
 def test_allow_slow_requires_latest_human_message(git_repo):
     # Given: 分层文件 slow_allow 为空；转录里较早一条人类消息是「放行 test_big，fixture 要读大样本」，最新一条是「继续」
     path = git_repo / "openspec" / "test-tiers.json"
@@ -111,7 +105,6 @@ def test_allow_slow_requires_latest_human_message(git_repo):
     assert "2026-10-28T08:10:00Z" in entry["approved"] and "放行 test_big" in entry["approved"], entry
 
 
-@XF
 def test_render_writes_approval_page(tmp_path):
     # Given: 探针结果含 tests/test_mixed.py 的纯函数用例与子进程用例；划分稿把前者移到 tests/unit/test_mixed.py、
     #        后者移到 tests/integration/hooks/test_mixed.py；tiers 里 unit 与区域 hooks 的 paths 分别覆盖这两个目录
