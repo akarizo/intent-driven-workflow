@@ -18,7 +18,7 @@ description: 跑门禁 final、打印 scenario 映射状态、做一次简短 co
    ```
    拿到 JSON：test/lint/typecheck 结果 + `scenarios{total, passed}` + `incremental`。
    **final 默认增量**：以锚点池（`<git common dir>/flight-anchors/`）里可用的锚点为基准，只重跑受影响的测试文件（依赖与改动相交的、改动里的测试文件、锚点里有失败用例的、盲文件），其余用例沿用锚点结论；重跑出的新失败（不在基线 `failed_nodes` 里）记 `G2 test`；跑完把锚点前移到本次。
-   - **自动全量**：没有可用锚点（池空 / `gate.test` 或分层指纹变了 / 锚点不是 HEAD 的祖先 / 依赖图没测到）、基线有预存红但缺 `failed_nodes`、改动含全局文件（任何 `conftest.py`、`pytest.ini` / `pyproject.toml` / `setup.cfg` / `tox.ini` / `setup.py` / `requirements*.txt` / 各类锁文件 / `.python-version` / `test-tiers.json`），或改动含从未被任何用例触及的非 `.py`、非文档文件 → 改跑全量，`incremental.full_why` 写明原因。
+   - **自动全量**：没有可用锚点（池空 / `gate.test`、`gate.pytest` 或分层指纹变了 / 锚点不是 HEAD 的祖先 / 依赖图没测到）、基线有预存红但缺 `failed_nodes`、`gate.test` 在 pytest 之后带白名单外的选项而 `gate.pytest` 没配或没覆盖它们（增量重跑无法等价复现）、改动含全局文件（任何 `conftest.py`、`pytest.ini` / `pyproject.toml` / `setup.cfg` / `tox.ini` / `setup.py` / `requirements*.txt` / 各类锁文件 / `.python-version` / `test-tiers.json`），或改动含从未被任何用例触及的非 `.py`、非文档文件 → 改跑全量，`incremental.full_why` 写明原因。
    - **`--full`**：`slice-gate.py final --full` 强制全量。
    - **同树沿用**：代码树、计划（`plan_sha` / `scenario_tests`）、各门禁命令（含 `gate.impacted`）都没变且上次 final 绿 → 直接沿用上次结论秒回，不跑任何测试或检查，`incremental.mode` 为 `reused`；上次红照常运行。
    - 配置了 `gate.impacted` 时，增量改由它运行，经 `GATE_DELTA_FILE` / `GATE_ANCHOR_COMMIT` 拿到改动清单与锚点（`incremental.source` 为 `impacted`）。

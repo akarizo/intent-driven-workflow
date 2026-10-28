@@ -118,8 +118,9 @@ final 在 G7 绿、且没有命中任何自动全量条件时，SHALL 增量运�
 final 在下列任一条件成立时，SHALL 改为全量运行 `gate.test`（与今天的全量判定相同，按基线差分）：
 
 - 带了 `--full`；
-- 没有可用锚点：池空、命令或分层指纹不同、锚点不是 HEAD 的祖先、依赖图没测到；
+- 没有可用锚点：池空、命令或分层指纹不同（锚点的命令指纹含 `gate.pytest`，改了它即没有可用锚点）、锚点不是 HEAD 的祖先、依赖图没测到；
 - 基线有预存红，但缺 `failed_nodes`；
+- `gate.test` 在 pytest 之后带白名单外的选项，增量重跑无法等价复现：没配 `gate.pytest` 时（含认不出 pytest 前缀），或配了 `gate.pytest`、但 `gate.test` 里某个白名单外且不是仓库内现存路径的词不在 `gate.pytest` 的词里时；`full_why` 点名 `gate.pytest` 或缺的选项；
 - Δ 含全局文件：任何目录下的 `conftest.py`，或文件名是 `pytest.ini`、`pyproject.toml`、`setup.cfg`、`tox.ini`、`setup.py`、`requirements*.txt`、`Pipfile`、`Pipfile.lock`、`poetry.lock`、`uv.lock`、`.python-version`，或分层文件 `test-tiers.json`；
 - Δ 含这样的文件：锚点时已存在、不在任何测试文件的依赖里、不是测试文件、扩展名不是 `.py`、也不是文档（`.md` / `.mdx` / `.markdown` / `.txt` / `.rst` / `.html`）。
 
@@ -143,6 +144,12 @@ final 在下列任一条件成立时，SHALL 改为全量运行 `gate.test`（�
 - **GIVEN** 依赖图已记录的仓库里有一个从未被任何用例触及的 `scripts/helper.sh`，随后改了它
 - **WHEN** 运行 final
 - **THEN** final 全量运行，`full_why` 含 `scripts/helper.sh`
+
+#### Scenario: final-full-when-gate-test-options-not-covered
+- **GIVEN** 没配 `gate.pytest`，`gate.test` 在 pytest 之后带了白名单外的选项 `-W error`
+- **AND** baseline 绿，之后只改了 `src/a.py`
+- **WHEN** 运行 final
+- **THEN** final 全量运行，`full_why` 点名 `gate.pytest`
 
 #### Scenario: final-full-flag-forces-full
 - **GIVEN** 依赖图已记录的仓库，只改了 `src/a.py`

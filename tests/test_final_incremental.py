@@ -1,7 +1,8 @@
 """final 默认增量运行，命中触发条件时自动全量
 （scenario: incremental-final#final-reruns-only-affected-tests、#final-incremental-red-on-new-failure、
 #final-reruns-anchor-failures-and-changed-tests、#final-moves-anchor-forward、#final-full-when-global-file-changes、
-#final-full-when-no-anchor、#final-full-when-unseen-non-python-file-changes、#final-full-flag-forces-full）。"""
+#final-full-when-no-anchor、#final-full-when-unseen-non-python-file-changes、#final-full-flag-forces-full、
+#final-full-when-gate-test-options-not-covered）。"""
 import json
 import shutil
 
