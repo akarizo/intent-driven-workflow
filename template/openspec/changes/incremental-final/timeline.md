@@ -10,3 +10,5 @@
 2026-10-28T09:47:48Z	review	findings=18 blocking=5 deferred=13
 2026-10-28T09:48:23Z	final	red
 2026-10-28T09:48:23Z	apply-done	blocked=2 blocking=5
+2026-10-28T09:49:10Z	apply-done	
+2026-10-28T09:49:28Z	ship	draft: 切片 S4 无门禁记录; final 红：G7 scenario: incremental-final#docs-describe-incremental-final → tests/test_incremental_final_docs.py::test_docs_describe_incremental_final 实际结果 XFAIL（未真正通过）; G7 scenario: pr-ship-review-autofix#pr-ship-autofixes-without-asking → tests/test_incremental_final_docs.py::test_pr_ship_autofixes_without_asking 实际结果 XFAIL（未真正通过）; 5 条 CRITICAL/HIGH 评审未闭环
