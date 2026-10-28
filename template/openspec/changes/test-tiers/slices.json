@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "change": "test-tiers",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 130.2
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定器：分层文件读取与 lint 的 tiers: 规则、plan_sha 追加区域、切片门禁 G12、探针插件与 run_test_gate(probe=True)",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_tiers_plan.py",
+        "tests/test_tiers_probe.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_tiers_plan.py tests/test_tiers_probe.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate_coverage.py",
+      "scenarios": [
+        "test-tiers#lint-rejects-unreadable-tiers-file",
+        "test-tiers#lint-rejects-malformed-tiers-file",
+        "test-tiers#lint-requires-gate-test-to-be-unit-cmd",
+        "test-tiers#lint-rejects-bad-region-selection",
+        "test-tiers#lint-rejects-integration-without-tiers-file",
+        "test-tiers#lint-requires-decision-for-covered-region",
+        "test-tiers#lint-requires-scenario-test-in-tier",
+        "test-tiers#lint-accepts-valid-tiers-plan",
+        "test-tiers#no-tiers-file-lint-unchanged",
+        "test-tiers#gate-flags-test-file-outside-tiers",
+        "test-tiers#probe-classifies-each-test",
+        "test-tiers#probe-counts-setup-and-teardown",
+        "test-tiers#probe-falls-back-when-plugin-cannot-load",
+        "test-tiers#probe-unmeasurable-for-non-pytest"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "判定器：G10 / G11 纯函数判定与候选重跑，baseline / final / preflight 按分层运行（单元层探针、已选区域差分、不走增量）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_tiers_verdict.py",
+        "tests/test_tiers_gate.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_tiers_verdict.py tests/test_tiers_gate.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py",
+      "scenarios": [
+        "test-tiers#slow-unit-test-confirmed-is-red",
+        "test-tiers#slow-unit-test-not-confirmed-on-rerun-passes",
+        "test-tiers#allowed-slow-unit-test-is-warning",
+        "test-tiers#impure-unit-test-is-red",
+        "test-tiers#unmeasurable-unit-run-only-warns",
+        "test-tiers#baseline-red-when-unit-test-impure",
+        "test-tiers#baseline-red-when-unit-test-slow",
+        "test-tiers#baseline-records-selected-regions-only",
+        "test-tiers#final-diffs-regions-against-baseline",
+        "test-tiers#final-red-on-new-impure-unit-test",
+        "test-tiers#final-red-when-region-record-stale",
+        "test-tiers#preflight-stale-when-region-cmd-changed",
+        "test-tiers#no-tiers-file-gate-unchanged"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "脚本：test-tiers.py 的 probe / check / allow-slow / render（复用 slice-gate 与 takeoff-gate 的函数）",
+      "owns": [
+        "template/.claude/hooks/test-tiers.py",
+        "tests/test_tiers_cli.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_tiers_cli.py tests/test_approval_gate.py",
+      "scenarios": [
+        "test-tiers#probe-cli-reports-file-tiers",
+        "test-tiers#check-flags-unclassified-and-ambiguous-files",
+        "test-tiers#allow-slow-requires-latest-human-message",
+        "test-tiers#render-writes-approval-page"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "文档：/test-tiers 命令、schema tasks instruction、propose / verify 命令与同名 skill、TDD skill 先定层、slice-executor、README、install.sh、CLAUDE.md.snippet",
+      "owns": [
+        "template/.claude/commands/test-tiers.md",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/.claude/commands/opsx-verify.md",
+        "template/.claude/skills/openspec-verify-change/SKILL.md",
+        "template/.claude/skills/test-driven-development/SKILL.md",
+        "template/.claude/agents/slice-executor.md",
+        "README.md",
+        "install.sh",
+        "template/CLAUDE.md.snippet",
+        "tests/test_tiers_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_tiers_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_baseline_incremental_docs.py tests/test_agents_workflow.py tests/test_install.py",
+      "scenarios": [
+        "test-tiers#docs-describe-test-tiers"
+      ],
+      "packet": "slices/S4.md"
+    },
+    {
+      "id": "S5",
+      "title": "判定器：每次门禁分层报告耗时（G7 逐用例耗时归层、单元层与区域墙钟，gate / baseline / final 输出 tier_sec 并写进 summary 与 timeline）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_tiers_timing.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_tiers_timing.py tests/test_tiers_gate.py tests/test_tiers_verdict.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_timeline.py tests/test_baseline_incremental.py",
+      "scenarios": [
+        "test-tiers#tier-seconds-split-by-file",
+        "test-tiers#slice-gate-reports-tier-seconds",
+        "test-tiers#baseline-and-final-report-tier-seconds",
+        "test-tiers#no-tiers-file-no-tier-seconds"
+      ],
+      "packet": "slices/S5.md"
+    }
+  ],
+  "scenario_tests": {
+    "test-tiers#lint-rejects-unreadable-tiers-file": "tests/test_tiers_plan.py::test_lint_rejects_unreadable_tiers_file",
+    "test-tiers#lint-rejects-malformed-tiers-file": "tests/test_tiers_plan.py::test_lint_rejects_malformed_tiers_file",
+    "test-tiers#lint-requires-gate-test-to-be-unit-cmd": "tests/test_tiers_plan.py::test_lint_requires_gate_test_to_be_unit_cmd",
+    "test-tiers#lint-rejects-bad-region-selection": "tests/test_tiers_plan.py::test_lint_rejects_bad_region_selection",
+    "test-tiers#lint-rejects-integration-without-tiers-file": "tests/test_tiers_plan.py::test_lint_rejects_integration_without_tiers_file",
+    "test-tiers#lint-requires-decision-for-covered-region": "tests/test_tiers_plan.py::test_lint_requires_decision_for_covered_region",
+    "test-tiers#lint-requires-scenario-test-in-tier": "tests/test_tiers_plan.py::test_lint_requires_scenario_test_in_tier",
+    "test-tiers#lint-accepts-valid-tiers-plan": "tests/test_tiers_plan.py::test_lint_accepts_valid_tiers_plan",
+    "test-tiers#no-tiers-file-lint-unchanged": "tests/test_tiers_plan.py::test_no_tiers_file_lint_unchanged",
+    "test-tiers#gate-flags-test-file-outside-tiers": "tests/test_tiers_plan.py::test_gate_flags_test_file_outside_tiers",
+    "test-tiers#probe-classifies-each-test": "tests/test_tiers_probe.py::test_probe_classifies_each_test",
+    "test-tiers#probe-counts-setup-and-teardown": "tests/test_tiers_probe.py::test_probe_counts_setup_and_teardown",
+    "test-tiers#probe-falls-back-when-plugin-cannot-load": "tests/test_tiers_probe.py::test_probe_falls_back_when_plugin_cannot_load",
+    "test-tiers#probe-unmeasurable-for-non-pytest": "tests/test_tiers_probe.py::test_probe_unmeasurable_for_non_pytest",
+    "test-tiers#slow-unit-test-confirmed-is-red": "tests/test_tiers_verdict.py::test_slow_unit_test_confirmed_is_red",
+    "test-tiers#slow-unit-test-not-confirmed-on-rerun-passes": "tests/test_tiers_verdict.py::test_slow_unit_test_not_confirmed_on_rerun_passes",
+    "test-tiers#allowed-slow-unit-test-is-warning": "tests/test_tiers_verdict.py::test_allowed_slow_unit_test_is_warning",
+    "test-tiers#impure-unit-test-is-red": "tests/test_tiers_verdict.py::test_impure_unit_test_is_red",
+    "test-tiers#unmeasurable-unit-run-only-warns": "tests/test_tiers_verdict.py::test_unmeasurable_unit_run_only_warns",
+    "test-tiers#baseline-red-when-unit-test-impure": "tests/test_tiers_gate.py::test_baseline_red_when_unit_test_impure",
+    "test-tiers#baseline-red-when-unit-test-slow": "tests/test_tiers_gate.py::test_baseline_red_when_unit_test_slow",
+    "test-tiers#baseline-records-selected-regions-only": "tests/test_tiers_gate.py::test_baseline_records_selected_regions_only",
+    "test-tiers#final-diffs-regions-against-baseline": "tests/test_tiers_gate.py::test_final_diffs_regions_against_baseline",
+    "test-tiers#final-red-on-new-impure-unit-test": "tests/test_tiers_gate.py::test_final_red_on_new_impure_unit_test",
+    "test-tiers#final-red-when-region-record-stale": "tests/test_tiers_gate.py::test_final_red_when_region_record_stale",
+    "test-tiers#preflight-stale-when-region-cmd-changed": "tests/test_tiers_gate.py::test_preflight_stale_when_region_cmd_changed",
+    "test-tiers#no-tiers-file-gate-unchanged": "tests/test_tiers_gate.py::test_no_tiers_file_gate_unchanged",
+    "test-tiers#probe-cli-reports-file-tiers": "tests/test_tiers_cli.py::test_probe_cli_reports_file_tiers",
+    "test-tiers#check-flags-unclassified-and-ambiguous-files": "tests/test_tiers_cli.py::test_check_flags_unclassified_and_ambiguous_files",
+    "test-tiers#allow-slow-requires-latest-human-message": "tests/test_tiers_cli.py::test_allow_slow_requires_latest_human_message",
+    "test-tiers#render-writes-approval-page": "tests/test_tiers_cli.py::test_render_writes_approval_page",
+    "test-tiers#docs-describe-test-tiers": "tests/test_tiers_docs.py::test_docs_describe_test_tiers",
+    "test-tiers#tier-seconds-split-by-file": "tests/test_tiers_timing.py::test_tier_seconds_split_by_file",
+    "test-tiers#slice-gate-reports-tier-seconds": "tests/test_tiers_timing.py::test_slice_gate_reports_tier_seconds",
+    "test-tiers#baseline-and-final-report-tier-seconds": "tests/test_tiers_timing.py::test_baseline_and_final_report_tier_seconds",
+    "test-tiers#no-tiers-file-no-tier-seconds": "tests/test_tiers_timing.py::test_no_tiers_file_no_tier_seconds"
+  }
+}
