@@ -266,6 +266,7 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **计划**：`gate.test` 必须等于 `unit.cmd`；`gate.integration` 选本 change 要跑的区域、`gate.integration_skip` 写不跑的理由；`covers` 与切片 `owns` 相交的区域必须表态；scenario 骨架放在单元层或已选区域的 `paths` 里，由 `slice-gate.py lint` 校验
 - **门禁**：baseline 只跑单元层（带探针、不走增量）与已选区域；final 对区域逐个差分（`G2 region <NAME>`）；`G10` 慢单测（单元层用例 ≥3 秒，经人类放行 `test-tiers.py allow-slow` 才降为警告）· `G11` 单测不纯（触碰真实文件 / 子进程 / 网络）· `G12` 切片改动的测试文件未归层
 - **耗时**：`gate` / `baseline` / `final` 输出 `tier_sec`（单元 / 集成 / 各区域秒数），写进 `summary` 与飞行记录；没有分层文件时以上都不触发，行为不变
+- **部件（monorepo / 多语言）**：顶层写 `parts` 即部件形态，每个子项目 × runner 一个部件（`root` · `test_files` · 单元层 · 区域，选择器 `paths` 或 `list`），门禁逐部件运行、逐部件判 G10 / G11，final 恒全量；`gate.test` 写驱动命令 `python3 .claude/hooks/test-tiers.py run unit`。非 pytest 部件经 JUnit（`FLIGHT_JUNIT`）判 G10、经仓库内探针适配器判 G11，适配器须先过 `test-tiers.py canary` 金丝雀自检（库随机出题、亲自核验落盘），自检后按 sha 锁定，改动即 lint 红。简写形态（顶层 `unit` / `regions`）不变
 
 **基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
 

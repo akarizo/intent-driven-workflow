@@ -1,0 +1,80 @@
+{
+  "commit": "7a38afcb0fafc47b4889c5b780498c071f5640f6",
+  "at": "2026-10-29T12:27:21Z",
+  "plan_sha": "22893b5527811a1f0420b3067826cc38dd6e03fd",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 180.2
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tiers_parts_plan.py tests/test_tiers_plan.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_final_impacted.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tiers_parts_runner.py tests/test_tiers_probe.py tests/test_tiers_verdict.py tests/test_tiers_gate.py tests/test_final_guard.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tiers_parts_gate.py tests/test_tiers_gate.py tests/test_tiers_timing.py tests/test_final_tiers.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tiers_parts_cli.py tests/test_tiers_cli.py tests/test_approval_gate.py",
+      "derived": "full"
+    },
+    "S5": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tiers_parts_docs.py tests/test_tiers_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_incremental_final_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "test-tiers-polyglot",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-test-tiers-parts-and-runner-contracts.md": "e5c7212fe4bbbfed8395beff7274bfac51daec1c",
+    "template/openspec/superpower/2026-10-29-test-tiers-polyglot-decisions.html": "74c72c50d7aeac26125c203c27741e8ab2044748",
+    "tests/test_tiers_parts_cli.py": "d5f3495588cf781f1fabd05e7361851827dc8826",
+    "tests/test_tiers_parts_docs.py": "94878d0b7c7051da27005b93451f104631f7f117",
+    "tests/test_tiers_parts_gate.py": "4737dfd9ea2c837fbfb4115e1e7c20fcaae5ab00",
+    "tests/test_tiers_parts_plan.py": "b903e8cda9018c539f9e8c9253c6f0e1f3b2c9e7",
+    "tests/test_tiers_parts_runner.py": "344e2e38022787181ef5b73f6a5af4a48576fe8c"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "incremental-final",
+      "commit": "7a222e474fc2",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/hooks/slice-gate.py, template/.claude/skills/openspec-apply-change/SKILL.md, template/.claude/skills/openspec-verify-change/SKILL.md, template/openspec/adr/DRAFT-test-tiers-parts-and-runner-contracts.md"
+    },
+    {
+      "change": "test-tiers",
+      "commit": "a20e532c9d49",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    },
+    {
+      "change": "slice-gate-paired-checks",
+      "commit": "766d3fa9a435",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    },
+    {
+      "change": "decompose-role-by-label",
+      "commit": "20ba98478b05",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    }
+  ]
+}
