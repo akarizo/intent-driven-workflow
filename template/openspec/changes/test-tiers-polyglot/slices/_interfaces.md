@@ -26,3 +26,16 @@
 ## S5
 
 仅文档/命令/schema 改动，无公开代码接口。
+
+## S2
+
+文件：template/.claude/hooks/slice-gate.py（新增或签名变更，行号为合回后近似值）
+```
+797:  def _read_probe(path, by_top=False)
+942:  def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None, cwd=None)
+1155: def _root_id(root, nid)
+1161: def _junit_secs(paths, root, name)
+1182: def run_part(top, name, part, probe=True)
+1224: def part_tier_verdicts(name, res, rerun, allow)
+1257: def part_tier_verdict(top, name, part, res, allow)
+```
