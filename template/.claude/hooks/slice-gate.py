@@ -62,9 +62,11 @@
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import fnmatch
+import glob
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -624,7 +626,8 @@ TIER_TEST_NAME_RE = re.compile(TEST_FILE_RE.pattern + r"|(^|/)([^/]*_test\.go|[^
                                r"|[^/]*_spec\.rb|test_[^/]*\.rb|[^/]*_test\.rb)$")
 # 单元层探针插件：写进临时目录为 flight_tier_probe.py，经 PYTEST_ADDOPTS -p 加载；
 # 只在 setup / call / teardown 窗口内用审计钩子记文件 / 子进程 / 网络触碰（import 机制与断言重写读源文件不计），
-# 每个用例 teardown 后向 FLIGHT_TIER_OUT 追加一行 {nodeid, sec, hits}；会话开始先写一行 {"probe": "start"}
+# 每个用例 teardown 后向 FLIGHT_TIER_OUT 追加一行 {nodeid, sec, hits}；会话开始先写一行 {"probe": "start"}；
+# 设了 FLIGHT_TIER_TOP（部件运行器）时每行另带 top = 相对该目录的用例 id（pytest rootdir 可能不是部件 root，D6）
 TIER_PROBE_PLUGIN = '''import json, os, sys
 
 import pytest
@@ -639,6 +642,7 @@ SKIP = ("importlib._bootstrap", "zipimport", "_pytest.assertion.rewrite", "linec
 _cur = [None]
 _hits = {}
 _sec = {}
+_top = {}
 
 
 def _hook(event, args):
@@ -675,6 +679,11 @@ def _write(rec):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_setup(item):
+    top = os.environ.get("FLIGHT_TIER_TOP")
+    if top:  # logreport 拿不到 item：在这里按 nodeid 记下顶层 id，teardown 写记录时取用
+        path = os.path.realpath(str(getattr(item, "path", None) or item.fspath))
+        _, sep, rest = item.nodeid.partition("::")
+        _top[item.nodeid] = os.path.relpath(path, os.path.realpath(top)).replace(os.sep, "/") + sep + rest
     _cur[0] = item.nodeid
     yield
     _cur[0] = None
@@ -702,7 +711,11 @@ def pytest_runtest_logreport(report):
     nid = report.nodeid
     _sec[nid] = _sec.get(nid, 0.0) + (report.duration or 0.0)
     if report.when == "teardown":
-        _write({"nodeid": nid, "sec": _sec.pop(nid, 0.0), "hits": _hits.pop(nid, {})})
+        rec = {"nodeid": nid, "sec": _sec.pop(nid, 0.0), "hits": _hits.pop(nid, {})}
+        top = _top.pop(nid, None)
+        if top is not None:
+            rec["top"] = top
+        _write(rec)
 '''
 # G8 天花板标记：行首注释紧跟标记，两段用 -> 或 → 分隔（形如 `限制 -> 升级条件/路径`）
 CEILING_RE = re.compile(r"^\s*(?:#|//|--|\*)+\s*ceiling\s*:\s*(.*)$", re.I)
@@ -781,10 +794,11 @@ def _summary_failed(line):
     return n
 
 
-def _read_probe(path):
+def _read_probe(path, by_top=False):
     """读探针 jsonl → (probe | None, probe_why | None)。没有开跑记录 → 不可度量；
-    同一 nodeid 多行（xdist 主进程与 worker）合并：sec 取最大、hits 按类别保留先出现的样例。"""
-    started, probe = False, {}
+    同一 nodeid 多行（xdist 主进程与 worker）合并：sec 取最大、hits 按类别保留先出现的样例。
+    by_top=True 时按 top（顶层 id）合并；缺 top 的行（xdist 主进程）沿用同 nodeid 别行的 top，都没有才用 nodeid。"""
+    started, probe, recs = False, {}, []
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -800,9 +814,11 @@ def _read_probe(path):
         if rec.get("probe") == "start":
             started = True
             continue
-        nid = rec.get("nodeid")
-        if not isinstance(nid, str):
-            continue
+        if isinstance(rec.get("nodeid"), str):
+            recs.append(rec)
+    tops = {r["nodeid"]: r["top"] for r in recs if by_top and isinstance(r.get("top"), str)}
+    for rec in recs:
+        nid = rec.get("top") if by_top and isinstance(rec.get("top"), str) else tops.get(rec["nodeid"], rec["nodeid"])
         cur = probe.setdefault(nid, {"sec": 0.0, "hits": {}})
         cur["sec"] = max(cur["sec"], float(rec.get("sec") or 0.0))
         for kind, sample in (rec.get("hits") or {}).items():
@@ -816,7 +832,7 @@ def _drop_inherited(env):
     """本次运行是新的外层：清掉外层门禁漏下来的 flight 环境变量，并从 PYTEST_ADDOPTS 去掉外层注入的
     -p flight_* 与 --junitxml（门禁里的用例再起门禁时，回退重跑与 G7 / 探针重跑都不能继承外层插件）。"""
     mine = env.get("FLIGHT_GUARD_JUNIT")
-    for k in FLIGHT_ENV + ("FLIGHT_TIER_OUT",):
+    for k in FLIGHT_ENV + ("FLIGHT_TIER_OUT", "FLIGHT_TIER_TOP"):
         env.pop(k, None)
     try:
         toks = shlex.split(env.get("PYTEST_ADDOPTS", ""))
@@ -923,7 +939,7 @@ def _deps_merge(a, b):
             "files": sorted(set(a["files"]) | set(b["files"])), "nodes": nodes}
 
 
-def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None):
+def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None, cwd=None):
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml 并恒加载防护插件 flight_guard（design D1）。
     返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
           "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
@@ -934,11 +950,14 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
     且输出不含 pytest-cov 覆盖率失败标记），why 是不可度量的理由。
     cases = junit 全部 testcase 的 classname 集合：只在 rc 0（junit 可解析）与可度量的 rc 1 时给出，否则 None（design D11）。
     probe=True 时另加载探针插件（design D4）：插件加载失败 → 不带探针重跑一次并返回其结果，probe 判不可度量；
-    probe=False 时 probe / probe_why 恒为 None。extra_env（dict）在 os.environ 之上追加给命令的环境变量。"""
+    probe=False 时 probe / probe_why 恒为 None。extra_env（dict）在 os.environ 之上追加给命令的环境变量
+    （在清掉外层 flight 变量之后追加；其中有 FLIGHT_TIER_TOP 时探针结果按顶层 id 合并）。
+    cwd：命令的运行目录（部件 root），缺省为 root。"""
     with tempfile.TemporaryDirectory() as tmp:
         junit = os.path.join(tmp, "junit.xml")
-        env = dict(os.environ, **(extra_env or {}))
+        env = dict(os.environ)
         _drop_inherited(env)
+        env.update(extra_env or {})
         env["PYTEST_ADDOPTS"] = (env.get("PYTEST_ADDOPTS", "") + " --junitxml=" + shlex.quote(junit)).strip()
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
         deps_out = None
@@ -953,10 +972,10 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
                 f.write(TIER_PROBE_PLUGIN)
             env["PYTEST_ADDOPTS"] += " -p flight_tier_probe"
             env["FLIGHT_TIER_OUT"] = tier_out
-        p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env)
+        p = subprocess.run(cmd, cwd=cwd or root, shell=True, capture_output=True, text=True, env=env)
         rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
         if not _plain and not os.path.exists(guard_ok) and FLIGHT_PLUGIN_FAIL.search(out):
-            res = run_test_gate(cmd, root, _plain=True, extra_env=extra_env)
+            res = run_test_gate(cmd, root, _plain=True, extra_env=extra_env, cwd=cwd)
             why = "防护插件加载失败（包装命令覆写了 PYTHONPATH？），%s"
             if probe:
                 res["probe_why"] = why % "探针未测；G10/G11 未判"
@@ -966,7 +985,7 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
         res = {"rc": rc, "out": out, "failed": None, "why": None, "cases": None, "probe": None, "probe_why": None,
                "deps": None, "deps_why": None}
         if probe and not _plain:
-            res["probe"], res["probe_why"] = _read_probe(tier_out)
+            res["probe"], res["probe_why"] = _read_probe(tier_out, by_top="FLIGHT_TIER_TOP" in env)
         if deps_out:
             res["deps"], res["deps_why"] = _read_deps(deps_out)
         if rc == 0:
@@ -1129,6 +1148,122 @@ def tier_verdicts(probe, probe_why, rerun, allow):
             failed.append("G11 impure unit test: %s 碰了%s（%s）：改成纯函数或移入集成区域"
                           % (nid, "、".join(hits), "；".join(str(v) for v in hits.values())))
     return failed, warnings
+
+
+# ---------------------------------------------------------------- 部件运行器与逐部件 G10 / G11（test-tiers-polyglot D5、D6、D8）
+
+def _root_id(root, nid):
+    """相对部件 root 的用例 id（<文件>::<用例>）→ 相对顶层；root 为 . 时不变。"""
+    path, sep, rest = nid.partition("::")
+    return posixpath.normpath(posixpath.join(root, path)) + sep + rest
+
+
+def _junit_secs(paths, root, name):
+    """解析 junit 报告 → {顶层 id: 秒} | None（一份都解析不了）。testcase 带 file → <root>/<file>::<name>，
+    否则 <部件名>::<classname>::<name>；同 id 多次出现取最大值。"""
+    secs, parsed = {}, False
+    for p in paths:
+        try:
+            tree = ET.parse(p).getroot()
+        except (ET.ParseError, OSError):
+            continue
+        parsed = True
+        for tc in tree.iter("testcase"):
+            f, n = tc.get("file"), tc.get("name") or ""
+            tid = _root_id(root, "%s::%s" % (f, n)) if f else "%s::%s::%s" % (name, tc.get("classname") or "", n)
+            try:
+                sec = float(tc.get("time") or 0.0)
+            except ValueError:
+                sec = 0.0
+            secs[tid] = max(secs.get(tid, 0.0), sec)
+    return secs if parsed else None
+
+
+def run_part(top, name, part, probe=True):
+    """在 <top>/<root> 下运行部件单元层 → {"rc", "out", "failed", "why", "sec", "probe", "probe_why", "secs", "secs_why"}，
+    id 均相对顶层；不记依赖图。部件写了 unit.probe（且 probe=True）→ 运行适配器 probe.cmd 包住 unit.cmd，按退出码判；
+    否则经 run_test_gate 注入内置探针，保留其 failed / why / 回退语义。secs 依次取自探针 sec、$FLIGHT_JUNIT、unit.junit 的新报告。"""
+    root, unit = part["root"], part["unit"]
+    cwd = os.path.join(top, root)
+    with tempfile.TemporaryDirectory(prefix="flight-part-") as tmp:
+        junit = os.path.join(tmp, "junit-part.xml")
+        t0 = time.time()
+        adapter = unit.get("probe") if probe else None
+        if adapter:
+            tier_out = os.path.join(tmp, "tier-probe.jsonl")
+            env = dict(os.environ)
+            _drop_inherited(env)  # 适配器不是 pytest：不注入 PYTEST_ADDOPTS
+            env.update({"FLIGHT_UNIT_CMD": unit["cmd"], "FLIGHT_TIER_OUT": tier_out, "FLIGHT_JUNIT": junit})
+            p = subprocess.run(adapter["cmd"], cwd=cwd, shell=True, capture_output=True, text=True, env=env)
+            res = {"rc": p.returncode, "out": (p.stdout or "") + (p.stderr or ""), "failed": None,
+                   "why": "非 pytest 部件按退出码判" if p.returncode != 0 else None}
+            raw, res["probe_why"] = _read_probe(tier_out)
+            res["probe"] = None if raw is None else {_root_id(root, n): r for n, r in raw.items()}
+        else:
+            tg = run_test_gate(unit["cmd"], top, probe=probe, cwd=cwd,
+                               extra_env={"FLIGHT_JUNIT": junit, "FLIGHT_TIER_TOP": top})
+            res = {k: tg[k] for k in ("rc", "out", "failed", "why", "probe", "probe_why")}
+        res["sec"] = round(time.time() - t0, 1)
+        res["secs"], res["secs_why"] = None, None
+        if res["probe"] is not None:
+            res["secs"] = {n: float(r.get("sec") or 0.0) for n, r in res["probe"].items()}
+            return res
+        res["secs"] = _junit_secs([junit], root, name) if os.path.isfile(junit) else None
+        pattern = unit.get("junit")
+        if res["secs"] is None and pattern:
+            # 不早于开跑：mtime 精度按整秒放宽（部分文件系统只到秒）
+            fresh = sorted(p for p in glob.glob(os.path.join(glob.escape(cwd), pattern), recursive=True)
+                           if os.path.isfile(p) and os.path.getmtime(p) >= int(t0))
+            res["secs"] = _junit_secs(fresh, root, name)
+        if res["secs"] is None:
+            res["secs_why"] = "没有逐用例耗时（探针无记录、$FLIGHT_JUNIT 未写%s）" % (
+                "、unit.junit 无本次运行的报告" if pattern else "、未配 unit.junit")
+    return res
+
+
+def part_tier_verdicts(name, res, rerun, allow):
+    """部件单元层 G10 / G11 判定（纯函数）→ (failed, warnings)，文本都带「部件 <name>」。
+    G10 候选 = secs 中 ≥ UNIT_MAX_SEC 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认。"""
+    failed, warnings, gaps = [], [], {}
+    secs, probe = res.get("secs"), res.get("probe")
+    if secs is None:
+        gaps["G10"] = res.get("secs_why")
+    else:
+        for nid in sorted(n for n, s in secs.items() if float(s or 0.0) >= UNIT_MAX_SEC):
+            again = (rerun or {}).get(nid)
+            if again is not None and again < UNIT_MAX_SEC:
+                continue
+            if nid in allow:
+                warnings.append("G10 slow unit test 已人工放行：部件 %s：%s %.1fs（%s）" % (name, nid, secs[nid], allow[nid]["approved"]))
+            else:
+                failed.append("G10 slow unit test: 部件 %s：%s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
+                              % (name, nid, secs[nid], "未取得" if again is None else "%.1fs" % again))
+    if probe is None:
+        gaps["G11"] = res.get("probe_why")
+    else:
+        for nid in sorted(probe):
+            hits = probe[nid].get("hits") or {}
+            if hits:
+                failed.append("G11 impure unit test: 部件 %s：%s 碰了%s（%s）：改成纯函数或移入集成区域"
+                              % (name, nid, "、".join(hits), "；".join(str(v) for v in hits.values())))
+    if len(gaps) == 2:
+        warnings.append("G10/G11 不可度量：部件 %s：%s" % (name, "；".join(dict.fromkeys(str(v) for v in gaps.values()))))
+    elif gaps:
+        (k, why), = gaps.items()
+        warnings.append("%s 不可度量：部件 %s：%s" % (k, name, why))
+    return failed, warnings
+
+
+def part_tier_verdict(top, name, part, res, allow):
+    """有 G10 候选时整部件再 run_part 一次取 secs 作 rerun（拿不到 → None，按确认处理），再交给 part_tier_verdicts。
+    → (failed, warnings, extra_sec)；extra_sec = 重跑墙钟（没重跑为 0）。"""
+    cands = [n for n, s in (res.get("secs") or {}).items() if float(s or 0.0) >= UNIT_MAX_SEC]
+    rerun, extra = {}, 0.0
+    if cands:
+        again = run_part(top, name, part)
+        rerun, extra = again["secs"], again["sec"]
+    failed, warnings = part_tier_verdicts(name, res, rerun, allow)
+    return failed, warnings, extra
 
 
 def glob_match(path, pattern):

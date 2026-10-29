@@ -1,17 +1,13 @@
 """部件运行器（root 下运行、JUnit 契约、探针适配器契约、内置探针顶层 id）与逐部件 G10 / G11 判定
-（scenario: test-tiers-polyglot#part-runs-in-root-with-junit … #part-g11-and-unmeasurable-warnings）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S2 实现 run_part / part_tier_verdicts 后去掉标记即解锁。"""
+（scenario: test-tiers-polyglot#part-runs-in-root-with-junit … #part-g11-and-unmeasurable-warnings）。"""
 import os
 import shlex
 import sys
 import time
 
-import pytest
-
 from conftest import load_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S2 尚未实现")
-PY = shlex.quote(sys.executable)
+PY =shlex.quote(sys.executable)
 
 # 在当前目录写 cwd.txt，再往 $FLIGHT_JUNIT 写两个 testcase（一个无 file 属性、一个有）
 RUN_JUNIT = '''import os
@@ -54,7 +50,6 @@ def sh_part(**unit):
 # ---------------------------------------------------------------- 运行器
 
 
-@XF
 def test_part_runs_in_root_with_junit(git_repo):
     # Given: 部件 sh 的单元命令把当前目录写进 cwd.txt，并往 $FLIGHT_JUNIT 写 TestA（无 file）与 TestB（file=a_test.go）
     write(git_repo / "svc" / "sh" / "run.py", RUN_JUNIT)
@@ -70,7 +65,6 @@ def test_part_runs_in_root_with_junit(git_repo):
     assert res["secs"] == {"sh::pkg::TestA": 0.5, "svc/sh/a_test.go::TestB": 0.25}, res["secs"]
 
 
-@XF
 def test_part_reads_fresh_junit_glob_only(git_repo):
     # Given: unit.junit 是 reports/*.xml；reports/old.xml 是一天前的旧报告（含 TestOld）；单元命令只写 reports/new.xml
     old = write(git_repo / "svc" / "sh" / "reports" / "old.xml",
@@ -89,7 +83,6 @@ def test_part_reads_fresh_junit_glob_only(git_repo):
     assert not any("TestOld" in k for k in secs), secs
 
 
-@XF
 def test_adapter_wraps_unit_cmd(git_repo):
     # Given: 部件 sh 写了 probe.cmd；适配器执行 $FLIGHT_UNIT_CMD（以 3 退出）并写 TestA（无触碰）、TestB（文件触碰）
     write(git_repo / "svc" / "sh" / "adapter.py", ADAPTER)
@@ -108,7 +101,6 @@ def test_adapter_wraps_unit_cmd(git_repo):
     assert res["secs"] == {a: 0.1, b: 0.2}, res["secs"]
 
 
-@XF
 def test_builtin_probe_ids_from_toplevel(git_repo):
     # Given: 部件 py（root svc/py，pytest.ini 在 svc/py，没写 probe）；tests/unit/test_p.py 有纯函数 test_pure 与读文件的 test_touch
     write(git_repo / "svc" / "py" / "pytest.ini", "[pytest]\n")
@@ -137,7 +129,6 @@ def test_builtin_probe_ids_from_toplevel(git_repo):
 # ---------------------------------------------------------------- 逐部件 G10 / G11（纯函数）
 
 
-@XF
 def test_part_g10_confirmed_by_rerun():
     # Given: 部件 go 没有探针结果；junit 耗时 TestSlow 3.4、TestFast 0.1、TestFlaky 3.1、TestOk 3.2；
     #        整部件重跑 TestSlow 3.5、TestFlaky 0.4、TestOk 3.3；slow_allow 含 TestOk
@@ -159,7 +150,6 @@ def test_part_g10_confirmed_by_rerun():
     assert not any(flaky in x for x in failed + warnings), (failed, warnings)
 
 
-@XF
 def test_part_g11_and_unmeasurable_warnings():
     # Given: 部件 py 的探针结果里 test_net 有网络触碰；部件 go 既没有探针结果也没有逐用例耗时
     net = "svc/py/x_test.py::test_net"
