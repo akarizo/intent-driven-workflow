@@ -1,17 +1,12 @@
 """文档写明分层文件的部件形态与两种契约（scenario: test-tiers-polyglot#docs-describe-parts）。
-骨架：strict xfail，断言是真实的；切片 S5 写完文档后去掉标记即解锁。"""
-import pytest
-
+切片 S5 已解锁。"""
 from conftest import ROOT
-
-XF = pytest.mark.xfail(strict=True, reason="S5 尚未实现")
 
 
 def read(rel):
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-@XF
 def test_docs_describe_parts():
     # Given: 本 change 的文档改动已完成
     cmd = read("template/.claude/commands/test-tiers.md")
