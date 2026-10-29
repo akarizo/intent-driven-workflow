@@ -39,3 +39,24 @@
 1224: def part_tier_verdicts(name, res, rerun, allow)
 1257: def part_tier_verdict(top, name, part, res, allow)
 ```
+
+## S3
+
+文件：template/.claude/hooks/slice-gate.py（本片新增或变更的函数）
+```
+def _baseline_parts(top, tiers, reasons, warnings)
+def _final_parts(top, tiers, gate, baseline, failed, warnings)
+def _tier_parts_sec(top, tiers, durations=None, unit=None, regions=None)
+```
+
+## S4
+
+文件：template/.claude/hooks/test-tiers.py（本片新增或变更的函数）
+```
+def check_parts(top, tiers, listed)
+def cmd_run(args)
+def canary_problems(probe, why, token, d)
+def probe_files(top, root, cmd)
+def cmd_canary(args)
+def dest_layers(top, tiers, path)
+```
