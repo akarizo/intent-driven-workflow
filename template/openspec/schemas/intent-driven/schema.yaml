@@ -310,6 +310,10 @@ artifacts:
       并选上该区域；骨架文件必须放在 `unit.paths` 或已选区域的 `paths` 里。
       以上都由 `slice-gate.py lint` 校验；没有 `test-tiers.json` 时不得写
       `gate.integration` / `gate.integration_skip`。
+      部件形态（`test-tiers.json` 顶层是 `parts`，多语言 monorepo）下，
+      `gate.test` 必须等于 `python3 .claude/hooks/test-tiers.py run unit`
+      （驱动命令，逐部件跑单元层），不得写 `gate.impacted`；骨架文件须落在
+      某部件的单元层或已选区域。
 
 
       2. `slices/<S>.md` — one packet per slice: what it does, the exact

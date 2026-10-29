@@ -58,7 +58,7 @@ metadata:
 
    - 一次性写出全部该建的工件。
    - tasks 阶段额外产出：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 生成的 `tasks.md`。
-   - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。
+   - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。部件形态（`test-tiers.json` 顶层是 `parts`）下 `gate.test` 改为等于 `python3 .claude/hooks/test-tiers.py run unit`、不得写 `gate.impacted`，骨架落在某部件的单元层或已选区域。
    - 随后：
      ```bash
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>
