@@ -27,7 +27,6 @@
 #
 # 复用 slice-gate.py 与 takeoff-gate.py 的判定（按路径加载），只读不改它们。兼容 Python 3.8+，只用标准库。
 import argparse
-import hashlib
 import html
 import importlib.util
 import json
@@ -238,20 +237,6 @@ def canary_problems(probe, why, token, d):
     return problems
 
 
-def probe_files(top, root, cmd):
-    """probe.cmd 里每个能解析为仓库内文件的词（先按 root 再按顶层）→ {顶层相对路径: sha256}。"""
-    real_top = os.path.realpath(top)
-    out = {}
-    for word in shlex.split(cmd):
-        for base in (os.path.join(top, root), top):
-            path = os.path.realpath(os.path.join(base, word))
-            if os.path.isfile(path) and path.startswith(real_top + os.sep):
-                with open(path, "rb") as f:
-                    out[os.path.relpath(path, real_top).replace(os.sep, "/")] = hashlib.sha256(f.read()).hexdigest()
-                break
-    return out
-
-
 def cmd_canary(args):
     top = sg.toplevel()
     if args.part:
@@ -265,7 +250,7 @@ def cmd_canary(args):
             fail("部件 %s 没有 unit.probe（内置 pytest 探针无需自检）" % args.part)
         adapter, canary = probe["cmd"], probe["canary"]
         try:
-            sha = probe_files(top, root, adapter)
+            sha = sg.probe_files(top, root, adapter)
         except ValueError as e:
             fail("部件 %s 的 probe.cmd 无法按 shell 词法拆分：%s" % (args.part, e))
         if not sha:

@@ -1710,18 +1710,38 @@ def parts_of(top, tiers, path):
     return sorted(n for n, p in tier_parts(tiers).items() if part_test_files(top, p, path))
 
 
+def probe_files(top, root, cmd):
+    """probe.cmd 里每个能解析为仓库内文件的词（先按 root 再按顶层）→ {顶层相对路径: sha256}。"""
+    real_top = os.path.realpath(top)
+    out = {}
+    for word in shlex.split(cmd):
+        for base in (os.path.join(top, root), top):
+            path = os.path.realpath(os.path.join(base, word))
+            if os.path.isfile(path) and path.startswith(real_top + os.sep):
+                with open(path, "rb") as f:
+                    out[os.path.relpath(path, real_top).replace(os.sep, "/")] = hashlib.sha256(f.read()).hexdigest()
+                break
+    return out
+
+
 def tier_adapter_errors(top, tiers):
-    """部件形态下各探针适配器的自检记录：缺 sha / checked → 未自检；sha 里的文件缺失或哈希不符 → 点名该路径。"""
+    """部件形态下各探针适配器的自检记录：缺 sha / checked → 未自检；probe.cmd 引用的文件集合与 sha 不一致 →
+    自检后改过命令；sha 里的文件缺失或哈希不符 → 点名该路径。"""
     if not tiers_is_parts(tiers):
         return []
     errors = []
     for name in sorted(tiers["parts"]):
-        probe = tiers["parts"][name]["unit"].get("probe")
+        part = tiers["parts"][name]
+        probe = part["unit"].get("probe")
         if not probe:
             continue
         sha = probe.get("sha")
         if not (sha and probe.get("checked")):
             errors.append("tiers: 部件 %s 的探针适配器未自检（运行 test-tiers.py canary --part %s）" % (name, name))
+            continue
+        if set(probe_files(top, part["root"], probe["cmd"])) != set(sha):
+            errors.append("tiers: 部件 %s 的 probe.cmd 自检后已改，引用的文件与自检记录不符（重跑 test-tiers.py canary --part %s）"
+                          % (name, name))
             continue
         for rel in sorted(sha):
             try:

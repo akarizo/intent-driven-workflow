@@ -203,6 +203,25 @@ def test_parts_lint_requires_self_checked_adapter(git_repo):
     assert any("svc/py/probe.py" in l and "canary" in l for l in tier_lines(p)), p.stderr
 
 
+def test_parts_lint_rejects_adapter_cmd_swapped_after_canary(git_repo):
+    # Given: 部件 py 的适配器 probe.py 已自检并锁定 sha；之后 probe.cmd 改成运行另一个仓库内脚本 probe2.py
+    t = parts_tiers()
+    probe = {"cmd": "python3 probe.py", "canary": "python3 -m pytest -q canary", "canary_files": ["svc/py/canary/**"],
+             "checked": "2026-10-29T00:00:00+00:00"}
+    t["parts"]["py"]["unit"]["probe"] = probe
+    d = make(git_repo, plan(), t)
+    write(git_repo / "svc" / "py" / "probe2.py", "print('never canaried')\n")
+    probe["sha"] = {"svc/py/probe.py": sha256(git_repo / "svc" / "py" / "probe.py")}
+    probe["cmd"] = "python3 probe2.py"
+    set_tiers(git_repo, t)
+
+    # When: 运行 slice-gate.py lint
+    p = lint(git_repo, d)
+
+    # Then: 有一行 tiers: 含 py 与 canary（probe.cmd 引用的文件与自检记录不一致）
+    assert any("py" in l and "probe.cmd" in l and "canary" in l for l in tier_lines(p)), p.stderr
+
+
 def test_parts_lint_accepts_valid_parts_plan(git_repo):
     # Given: 合法的部件形态；gate.test 是驱动命令；选了区域 go-db；scenario_tests 指向两个部件的单元层与区域 go-db
     st = {"c#a": "svc/go/a_test.go::TestA", "c#p": "svc/py/tests/unit/test_p.py::test_p",
