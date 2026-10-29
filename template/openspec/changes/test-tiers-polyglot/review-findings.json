@@ -1,0 +1,133 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1467,
+      "summary": "tier_list 不规整 list 输出。常见写法如 `find . -name '*_test.go'` 会输出 `./a_test.go`，补前缀后得到 `svc/go/./a_test.go`，与 scenario_tests 或 G12 里的 `svc/go/a_test.go` 永远对不上。结果是 lint 报「不在单元层」、G12 报「不在部件单元层」这类假红，原因不好查。已抽查确认：返回值为 {'svc/go/./a_test.go'}。",
+      "fix": "每行先去掉开头的 `./`（必要时用 posixpath.normpath），再补 root 前缀。在 tests/test_tiers_parts_plan.py 加一条 list 输出带 `./` 前缀的用例。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1458,
+      "summary": "tier_list 以 text=True 解码子进程输出，只接住 TimeoutExpired 和 OSError。list 命令输出非 UTF-8 字节时会抛 UnicodeDecodeError（属于 ValueError），lint 直接带 traceback 崩溃。_layer_hit、_g12_parts 只接 RuntimeError，所以 G7 的 tier_seconds 和 G12 也会跟着崩。已抽查确认：printf '\\377' 抛出 UnicodeDecodeError，没有被接住。",
+      "fix": "subprocess.run 加 errors=\"replace\"，或在 except 里补上 (UnicodeDecodeError, ValueError) 并转成 RuntimeError(\"输出无法解码\")。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1546,
+      "summary": "_g12_parts 在 owners 多于一个时不报错，只要任一所属部件的单元层命中就放行。design D4 与 G12 标题都写的是「恰属一个部件」：多个部件共用 root 又没各写 test_files 时，文件会同时属于多个部件，G12 却静默通过；「恰落一层」（同时命中单元层与某个区域）也没有判定。按 design，这两项至少由 check 管；如果有意只交给 check（S4），请在 docstring 写明。",
+      "fix": "在 G12 里对 len(owners) > 1 报 `G12 tiers: <文件> 属于多个部件 P1、P2（各写 test_files）`；如果有意只放在 check，在 _g12_parts 的 docstring 标明，并在 S4 补测试。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1276,
+      "summary": "_tier_root_ok 接受 `./`、`./svc`、`svc//go` 这类非规范 root。tier_list 用 `root == \".\"` 判顶层（没有 rstrip），root 为 `./` 时生成 `./a_test.go`；part_test_files 则用 rstrip 后的值判，两处语义不一致。已抽查确认：root './' 返回 {'./a_test.go'}。",
+      "fix": "形状校验要求 root 为 `.`，或不含 `.` / 空段的规范相对路径（例如 posixpath.normpath(root) == root）；也可以在各处统一先 normpath 再用。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1529,
+      "summary": "probe.sha 的键没有校验是不是仓库相对路径。写成 `/etc/passwd` 或 `../x` 时，os.path.join(top, rel) 会读仓库外的文件去算哈希，与 spec 里「仓库相对路径 → sha256」的约定不符。只做哈希比对，泄漏面很小。",
+      "fix": "_probe_shape 里对 sha 的每个键复用 _tier_root_ok 一类的检查（不以 / 开头、不含 .. 段），不合法就报形状错误。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1627,
+      "summary": "部件形态下只要有任一 root 不存在，_lint_tiers 就提前 return。gate.test 不是驱动命令、带了 gate.impacted、integration 表态这些与 root 无关的违规也一并不报，用户得修好 root 再跑一轮才能看到。",
+      "fix": "只跳过依赖 root 的 list 解析与适配器 sha 核对，gate.test、impacted、integration 等检查照常执行。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/test-tiers.md",
+      "line": 100,
+      "summary": "部件形态下第 4 步按部件各产出一份 /tmp/test-tiers-probe-<部件>.json（第 89 行），但第 5 步的 render 仍只传一份 --probe /tmp/test-tiers-probe.json。render 只接受单个 --probe（test-tiers.py:267，S4 也没改成接受多份）。文档没写多份证据怎么合进审批页，agent 很可能只传其中一份。其余部件的文件在审批页上就没有探针证据，render 的单元层问题判定（有触碰或 ≥3 秒）对这些部件也会静默放过。",
+      "fix": "在第 5 步补一句：部件形态下，先把各部件 probe JSON 的 `tests` 与 `files` 合并成一份再传 --probe（这两处的键都已相对顶层，合并不会冲突），`total` 取各份之和。或者改为逐部件各渲染一次，并写明审批页如何汇总。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/test-tiers.md",
+      "line": 181,
+      "summary": "「都没有才降级」容易被读成只有 junit 和适配器都缺时才给警告。按 design D8，G10、G11 是各自独立降级的：有 junit 但没有适配器时，G11 照样单独给警告。另外文档列出的条件「sha 未变」容易让人以为改过适配器只会降级为警告，实际上 sha 不符时 lint 直接判红（D9 fail-closed）。",
+      "fix": "改写为：缺 junit 且没有探针耗时时 G10 降级为警告，没有自检过的适配器（也不是 pytest 部件）时 G11 降级为警告，两者都不可度量时合成一行。另补一句：适配器 sha 不符不会降级，lint 直接红，须重跑 `canary --part P`。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1216,
+      "summary": "unit.junit 的新鲜度判定把 mtime 放宽到整秒（>= int(t0)）。part_tier_verdict 的整部件重跑紧接首跑启动，首跑在同一秒内写下的报告会被当成重跑的新报告。若报告文件名按时间戳或进程唯一，重跑 secs 会混入首跑耗时（同 id 取最大值），偶发慢的用例永远无法靠重跑撤销确认，G10 会误报失败并阻断切片。",
+      "fix": "t0 改记为运行前一刻，再把 glob 命中文件的 (path, mtime) 快照下来；运行后只认快照里不存在或 mtime 有变化的文件，不再靠整秒放宽。如果保留放宽，至少在 run_part 里排除上一次运行已解析过的路径，例如通过可选参数传入要排除的路径集合。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1211,
+      "summary": "pytest 部件（无 unit.probe）探针不可度量时，比如防护插件加载失败走了 _plain 回退，secs 只能回退到 $FLIGHT_JUNIT。但 pytest 写的是 run_test_gate 自己 tmp 下的 junit.xml，不会写 FLIGHT_JUNIT，这份有效的逐用例耗时随 tmp 一起丢了，G10 从可度量退化成不可度量。",
+      "fix": "让 run_test_gate 在 extra_env 带 FLIGHT_JUNIT 时把 --junitxml 指向这个路径，或者在返回值里带出 junit 的解析结果，供 run_part 回退时使用。这样 pytest 部件不配 unit.junit 也能拿到耗时。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1204,
+      "summary": "FLIGHT_TIER_TOP 原样传入 top，探针插件在子进程里执行 os.path.realpath(top)，这时 cwd 已经是部件 root。top 是相对路径（例如 '.'）时，顶层 id 会算成相对部件 root，缺少 root 前缀。现有调用方 toplevel() 给的是绝对路径，暂时不会触发，需进一步确认 S3 的调用。",
+      "fix": "传 \"FLIGHT_TIER_TOP\": os.path.abspath(top)，或者在 run_part 入口统一把 top 规范成绝对路径。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_tiers_parts_runner.py",
+      "line": 10,
+      "summary": "去掉 XF 时顺手改坏了格式：`PY =shlex.quote(sys.executable)` 等号后少了空格。",
+      "fix": "改回 `PY = shlex.quote(sys.executable)`。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_tiers_parts_gate.py",
+      "line": 180,
+      "summary": "切片新增的几条行为都没有测试覆盖：(1) 部件形态下已选区域在所属部件 root 下运行（spec 第五条 Requirement 用 SHALL 写明，对应 slice-gate.py:3344 与 :1326 的 cwd 分支）；(2) tier_adapter_errors 非空时 baseline 直接 die，final 记 G2 tiers 并跳过单元层与区域；(3) preflight 发现部件集合不一致时报基线过期；(4) final / gate 输出的 tier_sec.parts。目前 6 个用例只覆盖 baseline 的 tier_sec.parts。以后若有人把区域的 cwd 改回 None，或删掉适配器自检分支，测试仍然全绿。",
+      "fix": "在 setup_parts 的某个部件下加一个区域（命令把 os.getcwd() 写到仓库外的标记文件），选进 gate.integration，然后断言 baseline 与 final 都在该部件 root 下运行。另补三条用例：给部件写 probe 但不写 sha/checked，断言 baseline 非 0 退出、final 出现 G2 tiers 且没有 G2 part；在基线建立后新增部件 x，断言 preflight 的 stderr 含「部件 x」；断言 final 输出的 tier_sec.parts 含 py 与 sh。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1820,
+      "summary": "_tier_parts_sec 按 tiers_matching 判定用例属于单元层后，再用 parts_of（依据 test_files 或内置命名）决定归到哪个部件。这两套判据互相独立：文件命中某部件的 unit.paths 但 parts_of 为空时，这段耗时会被静默丢掉；parts_of 返回多个部件时，同一段耗时会被重复计入。结果是 sum(parts.*.unit) 与 tier_sec.unit 对不上，读者却得不到任何提示。",
+      "fix": "parts_of 为空时，改为归到 unit 层命中的那个部件（用 _layer_hit(top, p, p['unit'], path) 反查），或者计入一个 unclassified 键；parts_of 返回多个部件时只记第一个（已排序），避免重复计入。也可以在 docstring 里写明「部件耗时之和不保证等于 unit」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 278,
+      "summary": "canary 和 run unit 运行子进程前都没检查 root 目录是否存在。canary 独立模式的 --root 完全不校验；--part 模式只做了形状校验，目录存不存在由 lint 另判。目录不存在时，subprocess 的 cwd 不存在会抛 FileNotFoundError/NotADirectoryError，Python 打出回溯后以 1 退出。按文件头约定，1 表示「canary 未通过 / run unit 有部件非 0」，2 才是「输入不可用」，这里两者混淆。run unit 还会在中途中断，后面的部件既没跑也没打印「部件 P：exit N」行。cmd_probe 已经对 root 做了 isdir 校验，这两处没有对齐。",
+      "fix": "canary 两种模式都在出题前检查 os.path.isdir(os.path.join(top, root))，不存在就 fail(...) 退出 2。cmd_run 在循环开始前先检查所有被选部件的 root，有缺失就 fail 退出 2；或者在循环内捕获 OSError，把该部件记成非 0 并打印该部件那一行，再继续跑后面的部件。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 219,
+      "summary": "canary_problems 只按 sorted(nodeid) 取第一个匹配用例的 hits（setdefault）。同一类金丝雀用例如果有多条记录（例如同一用例在 JUnit id 和探针 id 下各出现一次，或者参数化成多条），排在前面的那条没有触碰时会盖住后面有触碰的那条，导致误判不通过。只会误拒、不会误放，所以只算 LOW。",
+      "fix": "同类用例的 hits 合并后再判（例如按 kind 取并集，样例用 setdefault 保留第一个），或者只要该类任意一条记录满足条件就算满足。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 214,
+      "summary": "probe 为 None（没有开跑记录）时 canary_problems 提前 return，不再检查令牌文件 D/T 有没有落盘。spec 要求逐条列出未满足的条件，这种情况下少报了「落盘」这一条，排查适配器时线索不完整。",
+      "fix": "probe 为 None 时先记下「没有开跑记录」，跳过逐用例判定，但仍然执行令牌文件落盘检查，再一起返回。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 91,
+      "summary": "cmd_probe 只对 --root 做 normpath 和 isdir 检查，绝对路径或以 .. 开头的路径都能通过。这样会在 git 顶层以外运行，_root_id 生成的用例 id 也会以 ../ 或绝对路径开头，违背「用例 id 相对顶层」的约定。canary 独立模式的 --root 同样有这个问题。",
+      "fix": "复用 slice-gate 的 _tier_root_ok（非空相对路径、不含 .. 段），不合法就 fail 退出 2。"
+    }
+  ],
+  "fix": null
+}
