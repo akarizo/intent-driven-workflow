@@ -616,6 +616,12 @@ FLIGHT_PLUGIN_FAIL = re.compile(r'Error importing plugin "flight_(?:guard|deps|t
 TIER_FILE = "test-tiers.json"
 UNIT_MAX_SEC = 3.0
 TIER_NAME_RE = re.compile(r"[a-z0-9-]+")
+# 部件形态（test-tiers-polyglot D3、D4、D8）：gate.test 须是驱动命令；list 选择器超时；内置测试命名 = TEST_FILE_RE ∪ 其他语言
+# （Rust 的 root/tests/*.rs 按部件 root 判，见 part_test_files）
+TIER_DRIVER_CMD = "python3 .claude/hooks/test-tiers.py run unit"
+TIER_LIST_TIMEOUT = 60
+TIER_TEST_NAME_RE = re.compile(TEST_FILE_RE.pattern + r"|(^|/)([^/]*_test\.go|[^/]*(?:Tests?|IT)\.(?:java|kt)|[^/]*Tests?\.cs"
+                               r"|[^/]*_spec\.rb|test_[^/]*\.rb|[^/]*_test\.rb)$")
 # 单元层探针插件：写进临时目录为 flight_tier_probe.py，经 PYTEST_ADDOPTS -p 加载；
 # 只在 setup / call / teardown 窗口内用审计钩子记文件 / 子进程 / 网络触碰（import 机制与断言重写读源文件不计），
 # 每个用例 teardown 后向 FLIGHT_TIER_OUT 追加一行 {nodeid, sec, hits}；会话开始先写一行 {"probe": "start"}
@@ -1243,14 +1249,20 @@ def _tiers_path(change_dir):
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), TIER_FILE)
 
 
-def _tier_shape(label, obj, fields):
-    """unit / 区域对象的字段校验：只含 fields；paths 非空数组；covers（若在 fields）是数组；cmd 非空。"""
+def _tier_shape(label, obj, fields, selector=False):
+    """unit / 区域对象的字段校验：只含 fields；paths 非空数组；covers（若在 fields）是数组；cmd 非空。
+    selector=True（部件形态）：恰有 paths、list 之一，list 是非空字符串。"""
     errors = []
     extra = sorted(str(k) for k in obj if k not in fields)
     if extra:
         errors.append("tiers: %s 有未知字段 %s" % (label, ", ".join(extra)))
     paths = obj.get("paths")
-    if not (isinstance(paths, list) and paths and all(_nonblank(x) for x in paths)):
+    if selector and ("paths" in obj) == ("list" in obj):
+        errors.append("tiers: %s 须恰有 paths、list 之一" % label)
+    elif selector and "list" in obj:
+        if not _nonblank(obj["list"]):
+            errors.append("tiers: %s 的 list 须是非空字符串" % label)
+    elif not (isinstance(paths, list) and paths and all(_nonblank(x) for x in paths)):
         errors.append("tiers: %s 的 paths 须是非空数组、每项非空" % label)
     if "covers" in fields:
         covers = obj.get("covers")
@@ -1258,6 +1270,89 @@ def _tier_shape(label, obj, fields):
             errors.append("tiers: %s 的 covers 须是数组（可为空）、每项非空" % label)
     if not _nonblank(obj.get("cmd")):
         errors.append("tiers: %s 缺少 cmd（须是非空字符串）" % label)
+    return errors
+
+
+def _tier_root_ok(root):
+    return _nonblank(root) and not root.startswith("/") and ".." not in root.split("/")
+
+
+def _probe_shape(label, probe):
+    """unit.probe 的形状（不看 sha 是否正确、不论是否已自检：那归 lint 侧 tier_adapter_errors）。"""
+    if not isinstance(probe, dict):
+        return ["tiers: %s 的 probe 须是对象（cmd / canary / canary_files / sha / checked）" % label]
+    errors = []
+    extra = sorted(str(k) for k in probe if k not in ("cmd", "canary", "canary_files", "sha", "checked"))
+    if extra:
+        errors.append("tiers: %s 的 probe 有未知字段 %s" % (label, ", ".join(extra)))
+    for k in ("cmd", "canary"):
+        if not _nonblank(probe.get(k)):
+            errors.append("tiers: %s 的 probe 缺少 %s（须是非空字符串）" % (label, k))
+    files = probe.get("canary_files")
+    if not (isinstance(files, list) and files and all(_nonblank(x) for x in files)):
+        errors.append("tiers: %s 的 probe.canary_files 须是非空数组、每项非空" % label)
+    sha = probe.get("sha")
+    if sha is not None and not (isinstance(sha, dict) and all(_nonblank(k) and _nonblank(v) for k, v in sha.items())):
+        errors.append("tiers: %s 的 probe.sha 须是对象（仓库相对路径 → sha256）" % label)
+    if "checked" in probe and not _nonblank(probe["checked"]):
+        errors.append("tiers: %s 的 probe.checked 须是非空字符串" % label)
+    return errors
+
+
+def _parts_shape(tiers):
+    """部件形态的形状校验（spec 第一条 Requirement）；root 是否存在、list 能否运行、sha 是否相符归 lint。"""
+    errors = []
+    mixed = [k for k in ("unit", "regions") if k in tiers]
+    if mixed:
+        errors.append("tiers: 分层文件顶层 parts 不能与 %s 同时出现（部件形态把 unit / regions 写进各部件）" % " / ".join(mixed))
+    extra = sorted(k for k in tiers if k not in ("parts", "slow_allow", "unit", "regions"))
+    if extra:
+        errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
+    parts = tiers["parts"]
+    if not (isinstance(parts, dict) and parts):
+        errors.append("tiers: parts 须是非空对象（部件名 → {root, test_files, unit, regions}）")
+        return errors
+    owners = {}
+    for name in sorted(parts):
+        label = "部件 %s" % name
+        if not TIER_NAME_RE.fullmatch(name):
+            errors.append("tiers: 部件名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
+        part = parts[name]
+        if not isinstance(part, dict):
+            errors.append("tiers: %s 须是对象（root / test_files / unit / regions）" % label)
+            continue
+        extra = sorted(str(k) for k in part if k not in ("root", "test_files", "unit", "regions"))
+        if extra:
+            errors.append("tiers: %s 有未知字段 %s" % (label, ", ".join(extra)))
+        if not _tier_root_ok(part.get("root")):
+            errors.append("tiers: %s 的 root %s 不合法（须是非空相对路径、不含 .. 段，. 表示顶层）" % (label, part.get("root")))
+        tf = part.get("test_files")
+        if "test_files" in part and not (isinstance(tf, list) and tf and all(_nonblank(x) for x in tf)):
+            errors.append("tiers: %s 的 test_files 须是非空数组、每项非空" % label)
+        unit = part.get("unit")
+        if isinstance(unit, dict):
+            errors.extend(_tier_shape("%s 的 unit" % label, unit, ("paths", "list", "cmd", "junit", "probe"), selector=True))
+            if "junit" in unit and not _nonblank(unit["junit"]):
+                errors.append("tiers: %s 的 unit.junit 须是非空字符串" % label)
+            if "probe" in unit:
+                errors.extend(_probe_shape("%s 的 unit" % label, unit["probe"]))
+        else:
+            errors.append("tiers: %s 缺少 unit（须是含 paths 或 list、以及 cmd 的对象）" % label)
+        regions = part.get("regions", {})
+        if not isinstance(regions, dict):
+            errors.append("tiers: %s 的 regions 须是对象（区域名 → {paths | list, covers, cmd}）" % label)
+            regions = {}
+        for r in sorted(regions):
+            owners.setdefault(r, []).append(name)
+            if not TIER_NAME_RE.fullmatch(r):
+                errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % r)
+            if isinstance(regions[r], dict):
+                errors.extend(_tier_shape("%s 的区域 %s" % (label, r), regions[r], ("paths", "list", "covers", "cmd"), selector=True))
+            else:
+                errors.append("tiers: %s 的区域 %s 须是对象（paths | list / covers / cmd）" % (label, r))
+    for r in sorted(owners):
+        if len(owners[r]) > 1:
+            errors.append("tiers: 区域名 %s 在部件 %s 里重复（须全仓唯一）" % (r, "、".join(owners[r])))
     return errors
 
 
@@ -1273,25 +1368,28 @@ def _load_tiers_file(path):
     if not isinstance(tiers, dict):
         return None, ["tiers: 测试分层文件 %s 无法解析：顶层须是对象" % path]
     errors = []
-    extra = sorted(k for k in tiers if k not in ("unit", "regions", "slow_allow"))
-    if extra:
-        errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
-    unit = tiers.get("unit")
-    if isinstance(unit, dict):
-        errors.extend(_tier_shape("unit", unit, ("paths", "cmd")))
+    if "parts" in tiers:
+        errors.extend(_parts_shape(tiers))
     else:
-        errors.append("tiers: 分层文件缺少 unit（须是含 paths 与 cmd 的对象）")
-    regions = tiers.get("regions", {})
-    if not isinstance(regions, dict):
-        errors.append("tiers: regions 须是对象（区域名 → {paths, covers, cmd}）")
-        regions = {}
-    for name in sorted(regions):
-        if not TIER_NAME_RE.fullmatch(name):
-            errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
-        if isinstance(regions[name], dict):
-            errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd")))
+        extra = sorted(k for k in tiers if k not in ("unit", "regions", "slow_allow"))
+        if extra:
+            errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
+        unit = tiers.get("unit")
+        if isinstance(unit, dict):
+            errors.extend(_tier_shape("unit", unit, ("paths", "cmd")))
         else:
-            errors.append("tiers: 区域 %s 须是对象（paths / covers / cmd）" % name)
+            errors.append("tiers: 分层文件缺少 unit（须是含 paths 与 cmd 的对象）")
+        regions = tiers.get("regions", {})
+        if not isinstance(regions, dict):
+            errors.append("tiers: regions 须是对象（区域名 → {paths, covers, cmd}）")
+            regions = {}
+        for name in sorted(regions):
+            if not TIER_NAME_RE.fullmatch(name):
+                errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
+            if isinstance(regions[name], dict):
+                errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd")))
+            else:
+                errors.append("tiers: 区域 %s 须是对象（paths / covers / cmd）" % name)
     slow = tiers.get("slow_allow", {})
     if not isinstance(slow, dict):
         errors.append("tiers: slow_allow 须是对象（nodeid → {reason, approved}）")
@@ -1314,8 +1412,162 @@ def _load_tiers(change_dir):
     return _load_tiers_file(_tiers_path(change_dir))
 
 
-def tiers_matching(path, tiers):
-    """path 落在哪些层：unit 在前，区域按名字排序；用 glob_match（与 owns 同一语义）。"""
+def _tier_root_errors(top, parts):
+    """形状合法的部件 root 须是 top 下存在的目录（形状不合法的 root 已由 _parts_shape 点名）。"""
+    return ["tiers: 部件 %s 的 root %s 不是 git 顶层下存在的目录" % (n, p["root"]) for n, p in sorted(parts.items())
+            if isinstance(p, dict) and _tier_root_ok(p.get("root")) and not os.path.isdir(os.path.join(top, p["root"]))]
+
+
+def _tiers_raw(path):
+    """分层文件原样 JSON（读不了 → None）：形状有错时 lint 仍据此核对部件 root 是否存在。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def tiers_is_parts(tiers):
+    return isinstance(tiers, dict) and "parts" in tiers
+
+
+def tier_parts(tiers):
+    """{部件名: 部件}；简写形态视作 root 为 . 的单个部件 main。"""
+    if tiers_is_parts(tiers):
+        return tiers["parts"]
+    return {"main": {"root": ".", "unit": tiers["unit"], "regions": tiers.get("regions") or {}}}
+
+
+def _tier_regions(tiers):
+    """全仓区域名 → (所属部件, 区域)；区域名全仓唯一由形状校验保证。"""
+    return {r: (part, reg) for part in tier_parts(tiers).values() for r, reg in (part.get("regions") or {}).items()}
+
+
+_TIER_LIST_CACHE = {}
+
+
+def tier_list(top, part, layer):
+    """layer 的 list 在 <top>/<root> 下运行 → 顶层相对路径集合；layer 用 paths → None；失败抛 RuntimeError。"""
+    cmd = layer.get("list")
+    if cmd is None:
+        return None
+    root = part["root"]
+    key = (top, root, cmd)
+    if key not in _TIER_LIST_CACHE:
+        try:
+            p = subprocess.run(cmd, cwd=os.path.join(top, root), shell=True, capture_output=True, text=True,
+                               timeout=TIER_LIST_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("超时（%d 秒）" % TIER_LIST_TIMEOUT)
+        except OSError as e:
+            raise RuntimeError(str(e))
+        if p.returncode != 0:
+            raise RuntimeError("exit %d %s" % (p.returncode, _tail((p.stdout or "") + (p.stderr or ""), 3)))
+        lines = [ln.strip() for ln in (p.stdout or "").splitlines() if ln.strip()]
+        _TIER_LIST_CACHE[key] = {ln if root == "." else "%s/%s" % (root.rstrip("/"), ln) for ln in lines}
+    return _TIER_LIST_CACHE[key]
+
+
+def layer_matches(top, part, layer, path):
+    """path 是否落在该层：paths 用 glob_match，list 看集合成员（list 失败抛 RuntimeError）。"""
+    files = tier_list(top, part, layer)
+    if files is None:
+        return any(glob_match(path, g) for g in layer["paths"])
+    return path in files
+
+
+def _layer_hit(top, part, layer, path):
+    """layer_matches，list 跑不出时按不命中（失败由 lint / G12 另报）。"""
+    try:
+        return layer_matches(top, part, layer, path)
+    except RuntimeError:
+        return False
+
+
+def part_test_files(top, part, path):
+    """path 是否是部件的测试文件：有 test_files 按 glob；否则须在 root 下且合内置命名，或在 root/tests/ 下以 .rs 结尾。"""
+    if part.get("test_files"):
+        return any(glob_match(path, g) for g in part["test_files"])
+    root = part["root"].rstrip("/")
+    if root == ".":
+        rel = path
+    elif path.startswith(root + "/"):
+        rel = path[len(root) + 1:]
+    else:
+        return False
+    return bool(TIER_TEST_NAME_RE.search(rel)) or (rel.startswith("tests/") and rel.endswith(".rs"))
+
+
+def is_canary(tiers, path):
+    return any(glob_match(path, g) for p in tier_parts(tiers).values()
+               for g in (((p.get("unit") or {}).get("probe") or {}).get("canary_files") or []))
+
+
+def parts_of(top, tiers, path):
+    """path 属于哪些部件（排序）；金丝雀文件不属于任何部件。"""
+    if is_canary(tiers, path):
+        return []
+    return sorted(n for n, p in tier_parts(tiers).items() if part_test_files(top, p, path))
+
+
+def tier_adapter_errors(top, tiers):
+    """部件形态下各探针适配器的自检记录：缺 sha / checked → 未自检；sha 里的文件缺失或哈希不符 → 点名该路径。"""
+    if not tiers_is_parts(tiers):
+        return []
+    errors = []
+    for name in sorted(tiers["parts"]):
+        probe = tiers["parts"][name]["unit"].get("probe")
+        if not probe:
+            continue
+        sha = probe.get("sha")
+        if not (sha and probe.get("checked")):
+            errors.append("tiers: 部件 %s 的探针适配器未自检（运行 test-tiers.py canary --part %s）" % (name, name))
+            continue
+        for rel in sorted(sha):
+            try:
+                with open(os.path.join(top, rel), "rb") as f:
+                    ok = hashlib.sha256(f.read()).hexdigest() == sha[rel]
+            except OSError:
+                ok = False
+            if not ok:
+                errors.append("tiers: 部件 %s 的探针适配器 %s 哈希与自检记录不符（重跑 test-tiers.py canary --part %s）"
+                              % (name, rel, name))
+    return errors
+
+
+def _g12_parts(top, tiers, chosen, files):
+    """部件形态 G12（design D4）：改动且仍存在的全仓测试文件（内置命名或某部件 test_files，金丝雀除外）
+    须属于某部件，并落在所属部件单元层或已选区域 chosen 内。"""
+    regions = _tier_regions(tiers)
+    failed = []
+    for f in sorted(files):
+        if not os.path.isfile(os.path.join(top, f)) or is_canary(tiers, f):
+            continue
+        owners = parts_of(top, tiers, f)
+        if not owners:
+            if TIER_TEST_NAME_RE.search(f):
+                failed.append("G12 tiers: %s 不属于任何部件（补 test_files / 新增部件）" % f)
+            continue
+        try:
+            ok = any(layer_matches(top, tiers["parts"][p], tiers["parts"][p]["unit"], f) for p in owners) or \
+                any(layer_matches(top, regions[r][0], regions[r][1], f) for r in sorted(chosen) if r in regions)
+        except RuntimeError as e:
+            failed.append("G12 tiers: %s 无法判定所在层（list 失败：%s）" % (f, e))
+            continue
+        if not ok:
+            failed.append("G12 tiers: %s 不在部件 %s 的单元层或本 change 已选区域内" % (f, "、".join(owners)))
+    return failed
+
+
+def tiers_matching(path, tiers, top=None):
+    """path 落在哪些层：unit 在前，区域按名字排序；用 glob_match（与 owns 同一语义）。
+    部件形态：任一部件单元层命中 → unit，加上命中的区域名；top 缺省取 toplevel()。"""
+    if tiers_is_parts(tiers):
+        top = top or toplevel()
+        out = ["unit"] if any(_layer_hit(top, p, p["unit"], path) for p in tiers["parts"].values()) else []
+        regions = _tier_regions(tiers)
+        out.extend(n for n in sorted(regions) if _layer_hit(top, regions[n][0], regions[n][1], path))
+        return out
     out = ["unit"] if any(glob_match(path, g) for g in tiers["unit"]["paths"]) else []
     regions = tiers.get("regions") or {}
     out.extend(n for n in sorted(regions) if any(glob_match(path, g) for g in regions[n]["paths"]))
@@ -1326,8 +1578,9 @@ def tier_seconds(durations, tiers):
     """逐用例耗时 {nodeid: 秒} 按分层文件归层（design D14）：文件部分取 nodeid 的第一段，tiers_matching 取第一个；
     不在任何层 → unclassified（为 0 时不出现）；integration = 各区域之和；各项保留 1 位小数。"""
     unit, loose, regions = 0.0, 0.0, {}
+    top = toplevel() if tiers_is_parts(tiers) and durations else None
     for nodeid, sec in durations.items():
-        hit = tiers_matching(nodeid.split("::", 1)[0], tiers)
+        hit = tiers_matching(nodeid.split("::", 1)[0], tiers, top)
         if not hit:
             loose += sec
         elif hit[0] == "unit":
@@ -1361,12 +1614,36 @@ def _lint_tiers(data, change_dir):
     path = _tiers_path(change_dir)
     tiers, errors = _load_tiers_file(path)
     if tiers is None:
+        raw = _tiers_raw(path) if errors else None
+        if isinstance(raw, dict) and isinstance(raw.get("parts"), dict):
+            errors.extend(_tier_root_errors(toplevel(change_dir), raw["parts"]))
         if not errors and ("integration" in gate or "integration_skip" in gate):
             errors.append("tiers: 计划写了 gate.integration / integration_skip，但缺少测试分层文件 %s" % path)
         return errors
-    regions = tiers.get("regions") or {}
-    if (gate.get("test") or "").strip() != tiers["unit"]["cmd"].strip():
-        errors.append("tiers: gate.test（%s）须与单元层 unit.cmd（%s）相同" % (gate.get("test"), tiers["unit"]["cmd"]))
+    top = None
+    if tiers_is_parts(tiers):
+        top = toplevel(change_dir)
+        errors.extend(_tier_root_errors(top, tiers["parts"]))
+        if errors:
+            return errors
+        for name in sorted(tiers["parts"]):
+            part = tiers["parts"][name]
+            layers = [("单元层", part["unit"])] + [("区域 %s" % r, reg) for r, reg in sorted((part.get("regions") or {}).items())]
+            for label, layer in layers:
+                try:
+                    tier_list(top, part, layer)
+                except RuntimeError as e:
+                    errors.append("tiers: 部件 %s 的%s list（%s）无法解析：%s" % (name, label, layer["list"], e))
+        errors.extend(tier_adapter_errors(top, tiers))
+        if (gate.get("test") or "").strip() != TIER_DRIVER_CMD:
+            errors.append("tiers: 部件形态下 gate.test（%s）须是驱动命令 %s" % (gate.get("test"), TIER_DRIVER_CMD))
+        if gate.get("impacted") is not None:
+            errors.append("tiers: 部件形态不支持 gate.impacted（增量 final 未支持），删掉该字段")
+        regions = {r: reg for r, (_, reg) in _tier_regions(tiers).items()}
+    else:
+        regions = tiers.get("regions") or {}
+        if (gate.get("test") or "").strip() != tiers["unit"]["cmd"].strip():
+            errors.append("tiers: gate.test（%s）须与单元层 unit.cmd（%s）相同" % (gate.get("test"), tiers["unit"]["cmd"]))
     integration = gate.get("integration")
     if integration is not None and not isinstance(integration, list):
         errors.append("tiers: gate.integration 须是区域名数组")
@@ -1404,7 +1681,7 @@ def _lint_tiers(data, change_dir):
         if not isinstance(target, str):
             continue
         rel = target.split("::", 1)[0]
-        if not set(tiers_matching(rel, tiers)) & allowed:
+        if not set(tiers_matching(rel, tiers, top)) & allowed:
             errors.append("tiers: scenario %s 的测试文件 %s 不在单元层或已选区域的 paths 内" % (sid, rel))
     return errors
 
@@ -2331,9 +2608,12 @@ def cmd_gate(args):
     if tiers is not None:
         integration = gate.get("integration")
         chosen = {"unit"} | set(n for n in (integration if isinstance(integration, list) else []) if isinstance(n, str))
-        for f in sorted(tests):
-            if TEST_FILE_RE.search(f) and os.path.isfile(os.path.join(root, f)) and not set(tiers_matching(f, tiers)) & chosen:
-                failed.append("G12 tiers: %s 不在单元层或本 change 已选区域的 paths 内（挪到对应目录，或在 gate.integration 选上该区域）" % f)
+        if tiers_is_parts(tiers):
+            failed.extend(_g12_parts(root, tiers, chosen - {"unit"}, files))
+        else:
+            for f in sorted(tests):
+                if TEST_FILE_RE.search(f) and os.path.isfile(os.path.join(root, f)) and not set(tiers_matching(f, tiers)) & chosen:
+                    failed.append("G12 tiers: %s 不在单元层或本 change 已选区域的 paths 内（挪到对应目录，或在 gate.integration 选上该区域）" % f)
     ev = evidence_state(args.change_dir, args.slice)
     hooks_missing = ev == "missing_file"
     if ev == "missing_file":

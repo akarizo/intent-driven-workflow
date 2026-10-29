@@ -1,17 +1,13 @@
 """分层文件部件形态的 lint 规则与部件归属 G12
 （scenario: test-tiers-polyglot#parts-lint-rejects-mixed-shapes … #shorthand-tiers-unchanged、#gate-flags-file-outside-parts）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。
-护栏（shorthand-tiers-unchanged）在 base 上已成立，不带 xfail。"""
+切片 S1 已实现，各 scenario 的 xfail 标记已去；护栏（shorthand-tiers-unchanged）在 base 上即已成立。"""
 import hashlib
 import json
 import shlex
 import sys
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S1 尚未实现")
 PY = shlex.quote(sys.executable)
 DRIVER = "python3 .claude/hooks/test-tiers.py run unit"
 LIST_GO = "%s list.py" % PY
@@ -86,7 +82,6 @@ def sha256(path):
 # ---------------------------------------------------------------- lint：形状
 
 
-@XF
 def test_parts_lint_rejects_mixed_shapes(git_repo):
     # Given: 分层文件顶层同时有 parts 与 unit
     t = parts_tiers()
@@ -101,7 +96,6 @@ def test_parts_lint_rejects_mixed_shapes(git_repo):
     assert any("parts" in l and "unit" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_parts_lint_rejects_malformed_parts(git_repo):
     # Given: 部件名 Api 不合法；up 的 root 是 ../out；ghost 的 root 是不存在的 nope；both 的 unit 同时有 paths 与 list；
     #        区域 dup 同时出现在 both 与 odd；odd 带未知字段 extra
@@ -130,7 +124,6 @@ def test_parts_lint_rejects_malformed_parts(git_repo):
         assert any(word in l for l in lines), (word, lines)
 
 
-@XF
 def test_parts_lint_requires_driver_gate_test(git_repo):
     # Given: 合法的部件形态；gate.test 是部件 py 的 unit.cmd
     d = make(git_repo, plan(test=PY_UNIT), parts_tiers())
@@ -143,7 +136,6 @@ def test_parts_lint_requires_driver_gate_test(git_repo):
     assert any("gate.test" in l and "test-tiers.py run unit" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_parts_lint_rejects_impacted(git_repo):
     # Given: 合法的部件形态；gate.test 是驱动命令，另有 gate.impacted
     d = make(git_repo, plan(impacted="%s select.py" % PY), parts_tiers())
@@ -159,7 +151,6 @@ def test_parts_lint_rejects_impacted(git_repo):
 # ---------------------------------------------------------------- lint：选择器与适配器
 
 
-@XF
 def test_parts_lint_resolves_list_selector(git_repo):
     # Given: 部件 go（root svc/go）的单元层 list 只输出 a_test.go；scenario_tests 分别映射到 a_test.go 与 b_test.go
     st = {"c#a": "svc/go/a_test.go::TestA", "c#b": "svc/go/b_test.go::TestB"}
@@ -182,7 +173,6 @@ def test_parts_lint_resolves_list_selector(git_repo):
     assert any("go" in l and "list" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_parts_lint_requires_self_checked_adapter(git_repo):
     # Given: 部件 py 的 unit.probe 运行仓库内脚本 svc/py/probe.py，没有 sha 与 checked
     t = parts_tiers()
@@ -213,7 +203,6 @@ def test_parts_lint_requires_self_checked_adapter(git_repo):
     assert any("svc/py/probe.py" in l and "canary" in l for l in tier_lines(p)), p.stderr
 
 
-@XF
 def test_parts_lint_accepts_valid_parts_plan(git_repo):
     # Given: 合法的部件形态；gate.test 是驱动命令；选了区域 go-db；scenario_tests 指向两个部件的单元层与区域 go-db
     st = {"c#a": "svc/go/a_test.go::TestA", "c#p": "svc/py/tests/unit/test_p.py::test_p",
@@ -251,7 +240,6 @@ def test_shorthand_tiers_unchanged(git_repo):
 # ---------------------------------------------------------------- 切片门禁 G12
 
 
-@XF
 def test_gate_flags_file_outside_parts(git_repo):
     # Given: 部件 py（test_files svc/py/tests/**/test_*.py，单元层 svc/py/tests/unit/**）；计划没选区域；
     #        切片 S1 起跑后，区间里新增 svc/py/tests/unit/test_ok.py、svc/py/tests/integration/test_i.py、tools/x_test.go
