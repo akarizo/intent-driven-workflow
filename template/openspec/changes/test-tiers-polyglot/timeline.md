@@ -9,3 +9,6 @@
 2026-10-29T13:46:12Z	gate	S3 ok
 2026-10-29T13:46:12Z	gate	S4 ok
 2026-10-29T13:46:22Z	integrate	wave 3
+2026-10-29T13:48:58Z	review	findings=18 blocking=0 deferred=18
+2026-10-29T13:53:28Z	final	增量（锚点 7a38afcb0f，重跑 35 个文件 / 沿用 114 个用例） ok
+2026-10-29T13:53:33Z	apply-done	blocked=0 blocking=0
