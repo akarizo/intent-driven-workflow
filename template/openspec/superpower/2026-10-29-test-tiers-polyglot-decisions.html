@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>测试分层语言通用化 · 决策页（第二轮：monorepo / 多语言）</title>
+<style>
+  :root { --fg:#1f2328; --mute:#59636e; --line:#d1d9e0; --bg:#f6f8fa; --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color:var(--fg); background:#fff; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 120px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .meta { color: var(--mute); font-size: 13px; }
+  .lead { background: var(--bg); border-left: 4px solid var(--acc); padding: 12px 16px; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff2f5; padding: 1px 5px; border-radius: 4px; }
+  pre { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; color: #e6edf3; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+  pre .c { color: #8b949e; }
+  pre .k { color: #7ee787; }
+  .tag { display:inline-block; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background:#fff; }
+  .tag.ok { color: var(--ok); border-color: #aceebb; background:#dafbe1; }
+  .tag.bad { color: var(--bad); border-color: #ffcecb; background:#ffebe9; }
+  .tag.warn { color: var(--warn); border-color: #f5e0a0; background:#fff8c5; }
+  .flow { display: grid; grid-template-columns: 1fr 36px 1.2fr 36px 1fr; gap: 0; margin: 12px 0 8px; }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; font-size: 13px; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box.agent { border-color: #b6a6f5; background: #f5f0ff; }
+  .box.file { border-color: #9cc8f5; background: #eef6ff; }
+  .box.gate { border-color: #8fd6a2; background: #effbf2; }
+  .arrow { display:flex; align-items:center; justify-content:center; color: var(--mute); font-size: 22px; }
+  .note { color: var(--mute); font-size: 12.5px; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .q { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .q h3 { margin-top: 0; }
+  .opt { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 8px 36px; margin: 8px 0; position: relative; cursor: pointer; }
+  .opt:hover { border-color: var(--acc); }
+  .opt input { position: absolute; left: 12px; top: 12px; }
+  .opt b { display: block; }
+  .opt .d { color: var(--mute); font-size: 13px; }
+  .opt.rec { border-color: #9cc8f5; }
+  textarea { width: 100%; min-height: 54px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 24px; display:flex; gap: 10px; justify-content: center; box-shadow: 0 -2px 8px rgba(0,0,0,.05); }
+  button { font: inherit; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  button.primary { background: var(--acc); color: #fff; border-color: var(--acc); }
+  #toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); background: #1f2328; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>测试分层语言通用化 · 决策页（第二轮）</h1>
+  <div class="meta">拟建 change：<code>test-tiers-polyglot</code> · 2026-10-29 · 第一轮 Q1–Q5 已定；第二轮起因：你追加「还要支持 monorepo，且可能是多语言的仓库」</div>
+
+  <div class="lead">
+    <b>一句话</b>：一个仓库可能由多个子项目组成，每个子项目各有自己的语言和 runner。所以分层文件从「一个单元层 + 若干区域」改成「多个<b>部件</b>，每个部件有自己的单元层和区域」。一个部件 = 一个子项目目录里的一种 runner。全仓的单元层就是各部件单元层的并集，由库自带的驱动命令逐个部件运行、逐个测量、汇总判定。单项目单语言的仓库等于只有一个部件，现在的分层文件写法继续有效。
+  </div>
+
+  <h2>1. 第一轮已定（你的回执）</h2>
+  <table>
+    <tr><th style="width:8%">题</th><th style="width:28%">问题</th><th>决定</th></tr>
+    <tr><td>Q1</td><td>切割方式怎么表达</td><td>A：路径与列表两种选择器（<code>paths</code> / <code>list</code>），<code>check</code> 机械校验不重不漏 <span class="tag ok">已定</span></td></tr>
+    <tr><td>Q2</td><td>逐用例耗时从哪来</td><td>A：JUnit XML 契约（<code>$FLIGHT_JUNIT</code> 或报告路径 glob） <span class="tag ok">已定</span></td></tr>
+    <tr><td>Q3</td><td>单测纯度怎么判</td><td>A：探针适配器契约 + 库出题的金丝雀自检，适配器哈希锁定 <span class="tag ok">已定</span></td></tr>
+    <tr><td>Q4</td><td>测试文件怎么认</td><td>A：<code>test_files</code> glob（第二轮起按部件填写） <span class="tag ok">已定</span></td></tr>
+    <tr><td>Q5</td><td>范围</td><td>只做分层；G7、差分、依赖图另立后续 change <span class="tag ok">已定</span></td></tr>
+  </table>
+
+  <h2>2. monorepo / 多语言会撞上哪些现状</h2>
+  <table>
+    <tr><th style="width:22%">现状</th><th>在多语言 monorepo 里会怎样</th></tr>
+    <tr><td>分层文件只有一个 <code>unit.cmd</code>，lint 要求 <code>gate.test == unit.cmd</code></td><td>Go、Python、TS 三个子项目的单元测试没法用一条命令跑 <span class="tag bad">表达不了</span></td></tr>
+    <tr><td>失败用例差分要求输出里<b>恰好一行</b> pytest 汇总（<code>slice-gate.py:986</code>）</td><td>就算让 agent 写个聚合脚本，只要先后跑两个 Python 子项目，就会被判「调用了多次 pytest」，差分失效 <span class="tag bad">退化</span></td></tr>
+    <tr><td>命令都在 git 顶层目录运行，用例 id 也相对顶层</td><td>子项目各有自己的工具链根（<code>go.mod</code>、<code>package.json</code>、<code>pyproject.toml</code>），runner 输出的路径是相对子项目的，和 <code>owns</code>、<code>scenario_tests</code> 对不上 <span class="tag warn">坐标错位</span></td></tr>
+    <tr><td>探针、金丝雀自检按「一个仓库一种语言」设计</td><td>每种语言甚至每个子项目的 runner 配置都不同，要分别自检 <span class="tag warn">需拆分</span></td></tr>
+  </table>
+
+  <h2>3. 目标形态</h2>
+<pre>repo/
+├─ openspec/test-tiers.json        <span class="c">← 全仓只有一份，内含多个部件</span>
+├─ services/api/   go.mod          <span class="c">→ 部件 api-go     （root = services/api）</span>
+├─ services/ml/    pyproject.toml  <span class="c">→ 部件 ml-py      （root = services/ml）</span>
+├─ web/            package.json    <span class="c">→ 部件 web-ts     （root = web）</span>
+└─ libs/shared/    Cargo.toml      <span class="c">→ 部件 shared-rs  （root = libs/shared）</span></pre>
+
+  <div class="flow">
+    <div class="box agent">
+      <h4>agent · /test-tiers</h4>
+      <ul>
+        <li>扫描 manifest 和 workspace 文件（<code>go.work</code>、pnpm workspace、Cargo workspace 等），列出候选部件</li>
+        <li>逐个部件调研切法、junit、探针，并实测</li>
+        <li>逐个部件跑金丝雀自检</li>
+        <li>起草 → 审批页 → 人类批准</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box file">
+      <h4>test-tiers.json（多部件）</h4>
+      <ul>
+        <li>每个部件：<code>root</code> · <code>test_files</code> · <code>unit</code> · <code>regions</code></li>
+        <li>区域名全仓唯一（出现在 <code>gate.integration</code> 里）</li>
+        <li>文件里的路径一律相对 git 顶层（与 <code>owns</code> 同一坐标）；runner 输出由库自动补上 <code>root</code> 前缀</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box gate">
+      <h4>驱动 · <code>test-tiers.py run unit</code></h4>
+      <ul>
+        <li>逐个部件在其 <code>root</code> 下运行，各自取 junit 和探针</li>
+        <li>汇总成一份用顶层相对 id 的结果</li>
+        <li>G10 / G11 逐部件判；<code>check</code> 校验每个测试文件恰好属于一个部件的一层</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="two">
+<pre><span class="c">// 多部件（示意，命令由 agent 实测后填写）</span>
+{
+  <span class="k">"parts"</span>: {
+    "api-go": {
+      "root": "services/api",
+      "test_files": ["services/api/**/*_test.go"],
+      "unit": {
+        "list": "scripts/tiers/go-list.sh unit",
+        "cmd": "gotestsum --junitfile $FLIGHT_JUNIT ./...",
+        "probe": {"cmd": "...", "sha": "…", "canary": "…"}
+      },
+      "regions": {
+        "api-db": {"paths": ["services/api/it/**"],
+                   "covers": ["services/api/store/**"],
+                   "cmd": "..."}
+      }
+    },
+    "ml-py": {
+      "root": "services/ml",
+      "unit": {"paths": ["services/ml/tests/unit/**"],
+               "cmd": "python -m pytest -q tests/unit"}
+    }
+  },
+  "slow_allow": {}
+}</pre>
+<pre><span class="c">// 单部件简写 = 现在的写法，继续有效</span>
+{
+  "unit": {"paths": ["tests/unit/**"],
+           "cmd": "python3 -m pytest -q tests/unit"},
+  "regions": { "...": "..." },
+  "slow_allow": {}
+}
+
+<span class="c">// 等价于：一个叫 main 的部件，root = "."</span>
+<span class="c">// gate.test 仍要求 == unit.cmd（不变）</span>
+
+<span class="c">// 多部件时 gate.test 写驱动命令（见 M2）：</span>
+"gate": {
+  "test": "python3 .claude/hooks/test-tiers.py run unit"
+}</pre>
+  </div>
+
+  <h2>4. 第二轮需要你拍板的问题</h2>
+
+  <div class="q" data-q="M1" data-title="分层文件在 monorepo 里的结构">
+    <h3>M1 分层文件在 monorepo 里的结构</h3>
+    <label class="opt rec"><input type="radio" name="M1" value="A" checked><b>A（推荐）全仓一份，内含多个部件</b><span class="d">一个部件 = 一个子项目目录 × 一种 runner。同一子项目里有两种语言，就是两个部件。每个部件有自己的 <code>root</code>、<code>test_files</code>、单元层和区域。全仓单元层 = 各部件单元层之并。文件位置照旧放在 openspec 根，与「每个仓库一个 openspec 根」一致；跨子项目的 change 也只对着这一份文件。旧写法视作单部件简写。</span></label>
+    <label class="opt"><input type="radio" name="M1" value="B"><b>B 每个子项目一份，就近放置，库递归发现</b><span class="d">子项目自治，搬迁时跟着走。但跨子项目的 change 要合并多份文件；区域名唯一性、不重不漏都得跨文件校验；文件位置与 openspec 根也不再对应。</span></label>
+    <label class="opt"><input type="radio" name="M1" value="C"><b>C 仍是一个单元层，由 agent 写聚合脚本</b><span class="d">库几乎不用改，但先后跑多个 pytest 会让失败差分判为不可度量；探针输出、用例 id 坐标都要靠 agent 写的脚本自己合并，库没法逐部件判定。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="M2" data-title="多部件时 gate.test 与单元层的关系">
+    <h3>M2 多部件时 <code>gate.test</code> 与单元层的关系</h3>
+    <label class="opt rec"><input type="radio" name="M2" value="A" checked><b>A（推荐）<code>gate.test</code> 写库自带的驱动命令</b><span class="d">多部件时 lint 要求 <code>gate.test</code> 逐字等于 <code>python3 .claude/hooks/test-tiers.py run unit</code>；单部件仍要求等于 <code>unit.cmd</code>。<br>
+      驱动是一条真实可运行的命令，人和 CI 都能直接跑。baseline / final 认出它后改为直接逐部件运行，并逐部件差分：Python 部件保留现有 pytest 差分；其他部件按 Q5「只做分层」，暂时只看退出码。<br>
+      <code>plan_sha</code> 照旧哈希 <code>gate.test</code>；部件命令改动时，按现在「区域命令变了 → 基线过期」的同一办法逐部件对账。</span></label>
+    <label class="opt"><input type="radio" name="M2" value="B"><b>B 配置分层后 <code>gate.test</code> 留空，库直接读分层文件</b><span class="d">少一条命令，但 <code>gate.test</code> 被 <code>plan_sha</code>、G7 推导 pytest 运行方式、verify 推导、增量 final 多处使用，留空要逐处改，还会失去「一条命令跑全部单测」的入口。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="M3" data-title="每次门禁跑哪些部件的单元层">
+    <h3>M3 baseline / final 跑哪些部件的单元层</h3>
+    <label class="opt rec"><input type="radio" name="M3" value="A" checked><b>A（推荐）全部部件都跑</b><span class="d">单元层就是基线，按定义每个用例 &lt; 3 秒。它只在 baseline 和 final 各跑一次（每片门禁只跑 scenario 测试和 verify），编译型语言的成本由增量构建缓存吸收。跨部件的回归（例如改了共享库）不会漏。</span></label>
+    <label class="opt"><input type="radio" name="M3" value="B"><b>B 部件也带 <code>covers</code>，按计划显式选择</b><span class="d">做法同区域：<code>covers</code> 与 <code>owns</code> 相交的部件必须选上或写理由，没选的部件单元层不跑。大型 monorepo 更快，但共享库被改时，依赖它的部件要靠 <code>covers</code> 写对才会被逼着表态，漏写就漏测。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <h2>5. 第二轮里由设计直接定、不单独问的细节</h2>
+  <table>
+    <tr><th style="width:24%">细节</th><th>定法</th></tr>
+    <tr><td>坐标系</td><td>分层文件、<code>owns</code>、<code>covers</code>、<code>scenario_tests</code>、<code>slow_allow</code> 的键，全部相对 git 顶层。runner 的 junit 和 list 输出由库按部件 <code>root</code> 补前缀</td></tr>
+    <tr><td>区域命名</td><td>沿用 <code>[a-z0-9-]+</code>，全仓唯一，lint 校验</td></tr>
+    <tr><td>部件归属</td><td>每个测试文件必须恰好落在一个部件的 <code>test_files</code> 里，再在该部件内恰好落一层。<code>check</code> 和 G12 点名违规</td></tr>
+    <tr><td>金丝雀自检</td><td>逐部件进行，因为同一种语言在不同子项目里 runner 版本和配置可能不同。适配器文件可以共用，哈希按文件记录，每个用到它的部件各自记一条自检记录</td></tr>
+    <tr><td>部件失败</td><td>任一部件红，单元层就红。门禁报告按部件列出耗时与结论（<code>tier_sec</code> 增加 <code>parts</code> 分项）</td></tr>
+  </table>
+
+  <h2>6. 代价与风险（第二轮新增）</h2>
+  <ul>
+    <li><b>增量 final 退回全量</b>：现在的增量逻辑只认得 pytest 前缀，多部件时会退回到整个单元层全量运行。单部件 Python 仓库不受影响。依赖图语言通用化已在 Q5 列为后续 change。</li>
+    <li><b>非 Python 部件的预存红</b>：由于差分只看退出码，基线里某个部件已经是红的，这个部件就会让 baseline 停下，而不是记成预存红放行。这和现在非 pytest 仓库的处理一样，等「差分走 junit」那个后续 change 解决。</li>
+    <li><b>部件发现靠 agent</b>：漏识别一个子项目时，<code>check</code> 会因为它的测试文件不属于任何部件而报错（前提是该子项目的 <code>test_files</code> 被写出来了）。完全没写 <code>test_files</code> 的语言，由内置命名规则兜底，兜不住的部分写进审批页的「未覆盖」清单交人确认。</li>
+  </ul>
+
+  <h2>7. 接下来</h2>
+  <p>选完点「导出」。我把第一轮和第二轮的决定一起带进 <code>/opsx-propose test-tiers-polyglot</code> 一次成稿，渲染 spec.html 给你审批；起飞仍由你自己发 <code>/opsx-apply</code>。</p>
+</main>
+
+<div class="bar">
+  <button onclick="resetRec()">恢复推荐</button>
+  <button onclick="copyMd()">复制结果</button>
+  <button class="primary" onclick="downloadMd()">导出 Markdown</button>
+</div>
+<div id="toast"></div>
+
+<script>
+var ROUND1 = "Q1 A；Q2 A；Q3 A；Q4 A；Q5 只做分层";
+function collect() {
+  var lines = ["# 测试分层语言通用化 · 决策回执（第二轮：monorepo / 多语言）", "",
+    "- change：test-tiers-polyglot",
+    "- 决策页：template/openspec/superpower/2026-10-29-test-tiers-polyglot-decisions.html",
+    "- 第一轮（已定）：" + ROUND1, ""];
+  var short = [];
+  document.querySelectorAll(".q").forEach(function (q) {
+    var id = q.dataset.q, title = q.dataset.title;
+    var picked = Array.prototype.slice.call(q.querySelectorAll("input:checked"));
+    var labels = picked.map(function (i) { return i.parentElement.querySelector("b").textContent.trim(); });
+    var note = q.querySelector("textarea").value.trim();
+    lines.push("## " + id + " " + title);
+    lines.push("- 选择：" + (labels.length ? labels.join("；") : "（未选）"));
+    if (note) lines.push("- 补充：" + note);
+    lines.push("");
+    short.push(id + " " + (picked.length ? picked.map(function (i) { return i.value; }).join("+") : "未选"));
+  });
+  lines.push("## 一行摘要（可直接给 /opsx-propose）");
+  lines.push(ROUND1 + "；" + short.join("；"));
+  return lines.join("\n") + "\n";
+}
+function toast(t) { var e = document.getElementById("toast"); e.textContent = t; e.style.display = "block"; setTimeout(function () { e.style.display = "none"; }, 1800); }
+function copyMd() {
+  var md = collect();
+  if (navigator.clipboard) { navigator.clipboard.writeText(md).then(function () { toast("已复制到剪贴板"); }, function () { fallbackCopy(md); }); }
+  else fallbackCopy(md);
+}
+function fallbackCopy(md) { var t = document.createElement("textarea"); t.value = md; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); toast("已复制到剪贴板"); }
+function downloadMd() {
+  var blob = new Blob([collect()], {type: "text/markdown;charset=utf-8"});
+  var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "2026-10-29-test-tiers-polyglot-decisions-r2.md"; a.click(); URL.revokeObjectURL(a.href);
+  toast("已导出 Markdown");
+}
+function resetRec() {
+  document.querySelectorAll(".q").forEach(function (q) {
+    q.querySelectorAll("input").forEach(function (i) { i.checked = i.closest(".opt").classList.contains("rec"); });
+    q.querySelector("textarea").value = "";
+  });
+  toast("已恢复推荐选项");
+}
+</script>
+</body>
+</html>
