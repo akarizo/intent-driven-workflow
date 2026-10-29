@@ -279,7 +279,7 @@ def cmd_canary(args):
         sys.stderr.write("适配器 exit %d：\n%s\n" % (p.returncode, sg._tail((p.stdout or "") + (p.stderr or ""))))
         return 1
     if args.part:
-        probe["sha"], probe["checked"] = sha, sg.now_iso()
+        probe["sha"], probe["checked"], probe["checked_cmd"] = sha, sg.now_iso(), adapter
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(tiers, fh, ensure_ascii=False, indent=2)
             fh.write("\n")

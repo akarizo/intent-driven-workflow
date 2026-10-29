@@ -33,7 +33,8 @@ description: 把仓库测试重划分为单元层与集成区域（多语言 mon
           "canary": "go test ./canary/...",
           "canary_files": ["services/api/canary/**"],
           "sha": {"services/api/tools/go_probe.py": "<sha256>"},
-          "checked": "<ISO 时间>"
+          "checked": "<ISO 时间>",
+          "checked_cmd": "python3 tools/go_probe.py"
         }
       },
       "regions": {
@@ -107,7 +108,7 @@ description: 把仓库测试重划分为单元层与集成区域（多语言 mon
    ```bash
    python3 .claude/hooks/test-tiers.py canary --part <P>
    ```
-   通过才写入该部件的 `probe.sha` 与 `probe.checked`（未自检或 sha 不符时 lint 红）。
+   通过才写入该部件的 `probe.sha`、`probe.checked` 与 `probe.checked_cmd`（未自检、命令改过或 sha 不符时 lint 红）。
 
 7. **复核**（全部满足才算完成）：
    ```bash
@@ -153,8 +154,8 @@ pytest 部件不写 `probe`，走内置探针。其他语言的部件写 `unit.p
   - proc 起一个子进程；
   - net 在 127.0.0.1 上 bind 或 connect 一个套接字。
 - **库出题**：`canary` 每次生成随机令牌（`FLIGHT_CANARY_TOKEN`）与临时目录（`FLIGHT_CANARY_DIR`），以 `FLIGHT_UNIT_CMD = probe.canary` 运行适配器。通过条件全部满足：有开跑记录；四个用例都有记录；pure 无触碰；file 有「文件」触碰且样例含令牌，并且令牌文件确实落盘；proc 有「子进程」触碰；net 有「网络」触碰。不通过 → stdout 逐条点名未满足的条件，不改文件，退出 1。
-- **两种模式**：`canary --root DIR --adapter CMD --canary CMD` 只出题判定，划分前验证用；`canary --part P` 读分层文件里部件 P 的 `probe`，通过后写回 `probe.sha`（`probe.cmd` 里每个解析为仓库内文件的词 → sha256）与 `probe.checked`，其余内容原样保留。`probe.cmd` 里没有仓库内文件 → 退出 2（无从锁定）。
-- **sha 锁定**：lint 逐个重算 `probe.sha` 里的文件哈希；没有 `sha` / `checked` 报「未自检」，文件缺失或哈希不符报该路径——改了适配器就重跑 `canary --part P`。逐部件自检：同一适配器文件可被多个部件共用，sha 按部件各存一份。
+- **两种模式**：`canary --root DIR --adapter CMD --canary CMD` 只出题判定，划分前验证用；`canary --part P` 读分层文件里部件 P 的 `probe`，通过后写回 `probe.sha`（`probe.cmd` 里每个解析为仓库内文件的词 → sha256）、`probe.checked` 与 `probe.checked_cmd`（通过自检的命令串原文），其余内容原样保留。`probe.cmd` 里没有仓库内文件 → 退出 2（无从锁定）。
+- **sha 锁定**：没有 `sha` / `checked` / `checked_cmd` 报「未自检」；`probe.cmd` 不等于 `checked_cmd`（换脚本、改参数、追加命令）报「自检后已改」；`probe.cmd` 引用的仓库文件集合与 `sha` 不一致报「与自检记录不符」；再逐个重算 `probe.sha` 里的文件哈希，文件缺失或哈希不符报该路径——改了适配器或命令就重跑 `canary --part P`。只锁 `probe.cmd` 直接引用的文件，适配器宜为单文件。逐部件自检：同一适配器文件可被多个部件共用，sha 按部件各存一份。
 
 ---
 

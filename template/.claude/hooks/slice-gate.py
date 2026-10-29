@@ -1480,9 +1480,9 @@ def _tier_root_ok(root):
 def _probe_shape(label, probe):
     """unit.probe 的形状（不看 sha 是否正确、不论是否已自检：那归 lint 侧 tier_adapter_errors）。"""
     if not isinstance(probe, dict):
-        return ["tiers: %s 的 probe 须是对象（cmd / canary / canary_files / sha / checked）" % label]
+        return ["tiers: %s 的 probe 须是对象（cmd / canary / canary_files / sha / checked / checked_cmd）" % label]
     errors = []
-    extra = sorted(str(k) for k in probe if k not in ("cmd", "canary", "canary_files", "sha", "checked"))
+    extra = sorted(str(k) for k in probe if k not in ("cmd", "canary", "canary_files", "sha", "checked", "checked_cmd"))
     if extra:
         errors.append("tiers: %s 的 probe 有未知字段 %s" % (label, ", ".join(extra)))
     for k in ("cmd", "canary"):
@@ -1494,8 +1494,9 @@ def _probe_shape(label, probe):
     sha = probe.get("sha")
     if sha is not None and not (isinstance(sha, dict) and all(_nonblank(k) and _nonblank(v) for k, v in sha.items())):
         errors.append("tiers: %s 的 probe.sha 须是对象（仓库相对路径 → sha256）" % label)
-    if "checked" in probe and not _nonblank(probe["checked"]):
-        errors.append("tiers: %s 的 probe.checked 须是非空字符串" % label)
+    for k in ("checked", "checked_cmd"):
+        if k in probe and not _nonblank(probe[k]):
+            errors.append("tiers: %s 的 probe.%s 须是非空字符串" % (label, k))
     return errors
 
 
@@ -1725,8 +1726,9 @@ def probe_files(top, root, cmd):
 
 
 def tier_adapter_errors(top, tiers):
-    """部件形态下各探针适配器的自检记录：缺 sha / checked → 未自检；probe.cmd 引用的文件集合与 sha 不一致 →
-    自检后改过命令；sha 里的文件缺失或哈希不符 → 点名该路径。"""
+    """部件形态下各探针适配器的自检记录：缺 sha / checked / checked_cmd → 未自检；probe.cmd 不等于通过自检的
+    checked_cmd → 自检后改过命令；probe.cmd 无法拆分或引用的文件集合与 sha 不一致 → 点名；
+    sha 里的文件缺失或哈希不符 → 点名该路径。"""
     if not tiers_is_parts(tiers):
         return []
     errors = []
@@ -1736,11 +1738,19 @@ def tier_adapter_errors(top, tiers):
         if not probe:
             continue
         sha = probe.get("sha")
-        if not (sha and probe.get("checked")):
+        if not (sha and probe.get("checked") and probe.get("checked_cmd")):
             errors.append("tiers: 部件 %s 的探针适配器未自检（运行 test-tiers.py canary --part %s）" % (name, name))
             continue
-        if set(probe_files(top, part["root"], probe["cmd"])) != set(sha):
-            errors.append("tiers: 部件 %s 的 probe.cmd 自检后已改，引用的文件与自检记录不符（重跑 test-tiers.py canary --part %s）"
+        if probe["cmd"] != probe["checked_cmd"]:
+            errors.append("tiers: 部件 %s 的 probe.cmd 自检后已改（重跑 test-tiers.py canary --part %s）" % (name, name))
+            continue
+        try:
+            files = probe_files(top, part["root"], probe["cmd"])
+        except ValueError:
+            errors.append("tiers: 部件 %s 的 probe.cmd 无法按 shell 词法拆分" % name)
+            continue
+        if set(files) != set(sha):
+            errors.append("tiers: 部件 %s 的 probe.cmd 引用的文件与自检记录不符（重跑 test-tiers.py canary --part %s）"
                           % (name, name))
             continue
         for rel in sorted(sha):

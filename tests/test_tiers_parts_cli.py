@@ -121,13 +121,14 @@ def test_canary_accepts_adapter_and_records_sha(git_repo):
     # When: 运行 test-tiers.py canary --part go
     p = run_hook("test-tiers", "canary", "--part", "go", cwd=git_repo)
 
-    # Then: 退出 0；probe.sha 恰为 adapter.py 的 sha256，checked 非空，其余键不变
+    # Then: 退出 0；probe.sha 恰为 adapter.py 的 sha256，checked 非空，checked_cmd 等于通过自检的 probe.cmd，其余键不变
     assert p.returncode == 0, p.stdout + p.stderr
     after = json.loads(path.read_text(encoding="utf-8"))
     probe = after["parts"]["go"]["unit"]["probe"]
     want = hashlib.sha256((git_repo / "svc" / "go" / "adapter.py").read_bytes()).hexdigest()
     assert probe["sha"] == {"svc/go/adapter.py": want}, probe
     assert probe["checked"], probe
+    assert probe["checked_cmd"] == probe["cmd"], probe
     old = before["parts"]["go"]["unit"]["probe"]
     assert {k: probe[k] for k in old} == old, probe
     after["parts"]["go"]["unit"]["probe"] = old

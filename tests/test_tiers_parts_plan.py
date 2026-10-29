@@ -186,9 +186,10 @@ def test_parts_lint_requires_self_checked_adapter(git_repo):
     # Then: 有一行 tiers: 含 py 与「未自检」
     assert any("py" in l and "未自检" in l for l in tier_lines(p)), p.stderr
 
-    # When: 补上 checked 与正确的 sha 后运行 lint
+    # When: 补上 checked、checked_cmd 与正确的 sha 后运行 lint
     probe["sha"] = {"svc/py/probe.py": sha256(git_repo / "svc" / "py" / "probe.py")}
     probe["checked"] = "2026-10-29T00:00:00+00:00"
+    probe["checked_cmd"] = probe["cmd"]
     set_tiers(git_repo, t)
     p = lint(git_repo, d)
 
@@ -203,23 +204,57 @@ def test_parts_lint_requires_self_checked_adapter(git_repo):
     assert any("svc/py/probe.py" in l and "canary" in l for l in tier_lines(p)), p.stderr
 
 
-def test_parts_lint_rejects_adapter_cmd_swapped_after_canary(git_repo):
-    # Given: 部件 py 的适配器 probe.py 已自检并锁定 sha；之后 probe.cmd 改成运行另一个仓库内脚本 probe2.py
+def self_checked(git_repo):
+    """部件 py 的适配器 probe.py 已按 `python3 probe.py` 自检：sha、checked、checked_cmd 齐全。返回 (分层对象, probe, change 目录)。"""
     t = parts_tiers()
     probe = {"cmd": "python3 probe.py", "canary": "python3 -m pytest -q canary", "canary_files": ["svc/py/canary/**"],
-             "checked": "2026-10-29T00:00:00+00:00"}
+             "checked": "2026-10-29T00:00:00+00:00", "checked_cmd": "python3 probe.py"}
     t["parts"]["py"]["unit"]["probe"] = probe
     d = make(git_repo, plan(), t)
-    write(git_repo / "svc" / "py" / "probe2.py", "print('never canaried')\n")
     probe["sha"] = {"svc/py/probe.py": sha256(git_repo / "svc" / "py" / "probe.py")}
+    set_tiers(git_repo, t)
+    return t, probe, d
+
+
+def test_parts_lint_rejects_adapter_cmd_swapped_after_canary(git_repo):
+    # Given: 部件 py 的适配器 probe.py 已自检；之后 probe.cmd 改成运行另一个仓库内脚本 probe2.py
+    t, probe, d = self_checked(git_repo)
+    write(git_repo / "svc" / "py" / "probe2.py", "print('never canaried')\n")
     probe["cmd"] = "python3 probe2.py"
     set_tiers(git_repo, t)
 
     # When: 运行 slice-gate.py lint
     p = lint(git_repo, d)
 
-    # Then: 有一行 tiers: 含 py 与 canary（probe.cmd 引用的文件与自检记录不一致）
-    assert any("py" in l and "probe.cmd" in l and "canary" in l for l in tier_lines(p)), p.stderr
+    # Then: 有一行 tiers: 点名部件 py 的 probe.cmd 自检后已改，并提示重跑 canary
+    assert any("部件 py " in l and "probe.cmd" in l and "canary" in l for l in tier_lines(p)), p.stderr
+
+
+def test_parts_lint_rejects_adapter_args_changed_after_canary(git_repo):
+    # Given: 部件 py 的适配器已自检；之后 probe.cmd 只加了参数（引用的仓库文件集合不变）
+    t, probe, d = self_checked(git_repo)
+    probe["cmd"] = "python3 probe.py --x"
+    set_tiers(git_repo, t)
+
+    # When: 运行 slice-gate.py lint
+    p = lint(git_repo, d)
+
+    # Then: 有一行 tiers: 点名部件 py 的 probe.cmd 自检后已改
+    assert any("部件 py " in l and "probe.cmd" in l and "canary" in l for l in tier_lines(p)), p.stderr
+
+
+def test_parts_lint_reports_unsplittable_adapter_cmd(git_repo):
+    # Given: 部件 py 的适配器已自检；之后 probe.cmd 与 checked_cmd 都改成引号不配对的串
+    t, probe, d = self_checked(git_repo)
+    probe["cmd"] = probe["checked_cmd"] = "python3 'probe.py"
+    set_tiers(git_repo, t)
+
+    # When: 运行 slice-gate.py lint
+    p = lint(git_repo, d)
+
+    # Then: 不崩出 traceback；有一行 tiers: 点名部件 py 的 probe.cmd 无法拆分
+    assert "Traceback" not in p.stderr, p.stderr
+    assert any("部件 py " in l and "无法按 shell 词法拆分" in l for l in tier_lines(p)), p.stderr
 
 
 def test_parts_lint_accepts_valid_parts_plan(git_repo):
