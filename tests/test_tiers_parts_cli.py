@@ -1,16 +1,12 @@
 """test-tiers.py 的驱动 run unit、部件形态的 check、金丝雀自检 canary、probe --root / --adapter
-（scenario: test-tiers-polyglot#driver-runs-every-part … #probe-cli-adapter-prefixes-root）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
+（scenario: test-tiers-polyglot#driver-runs-every-part … #probe-cli-adapter-prefixes-root）。"""
 import hashlib
 import json
 import shlex
 import sys
 
-import pytest
-
 from conftest import run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S4 尚未实现")
 PY = shlex.quote(sys.executable)
 
 # 如实的适配器：执行 $FLIGHT_UNIT_CMD，按四个金丝雀用例报触碰（file 的样例含令牌文件路径）
@@ -64,7 +60,6 @@ def canary_tiers(root, adapter_src):
 # ---------------------------------------------------------------- run unit
 
 
-@XF
 def test_driver_runs_every_part(git_repo):
     # Given: 部件 a 的单元命令在当前目录写 mark 并退出 0；部件 b 的单元命令退出 1
     write(git_repo / "a" / ".keep", "")
@@ -88,7 +83,6 @@ def test_driver_runs_every_part(git_repo):
 # ---------------------------------------------------------------- check
 
 
-@XF
 def test_check_parts_membership(git_repo):
     # Given: 部件 py（test_files 与单元层）、go（金丝雀文件 svc/go/canary/**）、js 与 js2（root 都是 web、都没写 test_files）
     set_tiers(git_repo, {"parts": {
@@ -119,7 +113,6 @@ def test_check_parts_membership(git_repo):
 # ---------------------------------------------------------------- canary
 
 
-@XF
 def test_canary_accepts_adapter_and_records_sha(git_repo):
     # Given: 部件 go 的 probe.cmd 运行仓库内 svc/go/adapter.py；适配器执行金丝雀命令并如实报出四个用例的触碰
     path = canary_tiers(git_repo, HONEST)
@@ -141,7 +134,6 @@ def test_canary_accepts_adapter_and_records_sha(git_repo):
     assert after == before
 
 
-@XF
 def test_canary_rejects_incomplete_adapter(git_repo):
     # Given: 适配器不执行金丝雀命令（令牌文件不落盘），也不报 net 用例的网络触碰
     path = canary_tiers(git_repo, LAZY)
@@ -159,7 +151,6 @@ def test_canary_rejects_incomplete_adapter(git_repo):
 # ---------------------------------------------------------------- probe
 
 
-@XF
 def test_probe_cli_adapter_prefixes_root(git_repo, tmp_path):
     # Given: svc/go 下的适配器执行测试命令，并为 a_test.go::TestA 写一条无触碰记录
     write(git_repo / "svc" / "go" / "adapter.py", '''
