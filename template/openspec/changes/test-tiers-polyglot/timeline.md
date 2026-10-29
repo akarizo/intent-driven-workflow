@@ -13,3 +13,7 @@
 2026-10-29T13:53:28Z	final	增量（锚点 7a38afcb0f，重跑 35 个文件 / 沿用 114 个用例） ok
 2026-10-29T13:53:33Z	apply-done	blocked=0 blocking=0
 2026-10-29T13:54:03Z	ship	ready
+2026-10-29T13:54:39Z	ship	ready
+2026-10-29T13:55:02Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/8
+2026-10-29T14:07:56Z	final	增量（锚点 a15727dad1，重跑 29 个文件 / 沿用 152 个用例） ok
+2026-10-29T14:08:01Z	ship	ready
