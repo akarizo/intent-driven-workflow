@@ -1266,6 +1266,71 @@ def part_tier_verdict(top, name, part, res, allow):
     return failed, warnings, extra
 
 
+PARTS_FULL_WHY = "多部件分层：增量未支持（依赖图只认 pytest）"
+
+
+def _baseline_parts(top, tiers, reasons, warnings):
+    """部件形态 baseline 的单元层（design D8）：逐部件 run_part、判 G10 / G11；可度量的红记 failed 并警告，
+    不可度量的红与 G10 / G11 失败进 reasons。→ (test 记录, tiers 记录, {部件: 单元层墙钟（含重跑）}, 红部件的输出)。"""
+    allow = tiers.get("slow_allow") or {}
+    recs, measured, wall, outs = {}, {}, {}, []
+    for name in sorted(tiers["parts"]):
+        part = tiers["parts"][name]
+        res = run_part(top, name, part)
+        rec = {"exit": res["rc"], "sec": res["sec"], "cmd": part["unit"]["cmd"]}
+        if res["rc"] != 0:
+            outs.append(res["out"])
+            if res["failed"] is not None:
+                rec["failed"] = res["failed"]
+                warnings.append("部件 %s 预存红 %d 条已记录，final 按基线差分" % (name, len(res["failed"])))
+            else:
+                reasons.append("部件 %s 单元层在基线上红（exit %d；按退出码判：%s）" % (name, res["rc"], res["why"]))
+        f10, w10, extra = part_tier_verdict(top, name, part, res, allow)
+        reasons.extend(f10)
+        warnings.extend(w10)
+        recs[name], wall[name] = rec, res["sec"] + extra
+        measured[name] = {"measured": True} if res["probe"] is not None else {"measured": False, "why": res["probe_why"]}
+    test = {"exit": 0 if all(r["exit"] == 0 for r in recs.values()) else 1,
+            "sec": round(sum(r["sec"] for r in recs.values()), 1), "parts": recs}
+    return test, {"parts": measured}, wall, "\n".join(outs)
+
+
+def _final_parts(top, tiers, gate, baseline, failed, warnings):
+    """部件形态 final（design D8）：逐部件核对基线记录的 cmd 后 run_part → 按基线 failed 差分 → G10 / G11；
+    已选区域在所属部件 root 下运行并差分。失败 / 警告追加进 failed / warnings。→ ({部件: 单元层墙钟（含重跑）}, {区域: 墙钟})。"""
+    allow = tiers.get("slow_allow") or {}
+    bparts = ((baseline or {}).get("test") or {}).get("parts")
+    wall, region_wall = {}, {}
+    for name in sorted(tiers["parts"]):
+        part = tiers["parts"][name]
+        rec = bparts.get(name) if isinstance(bparts, dict) else None
+        if not isinstance(rec, dict) or rec.get("cmd") != part["unit"]["cmd"]:
+            failed.append("G2 part %s：基线缺记录或命令已变，重跑 baseline" % name)
+            continue
+        res = run_part(top, name, part)
+        f2, w2 = _diff_verdict("part " + name, res, rec.get("failed"))
+        failed.extend([f2] if f2 else [])
+        warnings.extend([w2] if w2 else [])
+        f10, w10, extra = part_tier_verdict(top, name, part, res, allow)
+        failed.extend(f10)
+        warnings.extend(w10)
+        wall[name] = res["sec"] + extra
+    bregions, regs = (baseline or {}).get("regions"), _tier_regions(tiers)
+    for rname in _selected_regions(gate):
+        rpart, rdef = regs.get(rname) or (None, {})
+        rrec = bregions.get(rname) if isinstance(bregions, dict) else None
+        if rpart is None or not isinstance(rrec, dict) or rrec.get("cmd") != rdef.get("cmd"):
+            failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
+            continue
+        t0 = time.time()
+        rg = run_test_gate(rdef["cmd"], top, cwd=os.path.join(top, rpart["root"]))
+        region_wall[rname] = time.time() - t0
+        f2, w2 = _diff_verdict("region " + rname, rg, rrec.get("failed"))
+        failed.extend([f2] if f2 else [])
+        warnings.extend([w2] if w2 else [])
+    return wall, region_wall
+
+
 def glob_match(path, pattern):
     if path == pattern or fnmatch.fnmatchcase(path, pattern):
         return True
@@ -1741,6 +1806,26 @@ def _tier_add(ts, unit=0.0, regions=None):
 
 def _tier_note(ts):
     return "单元 %.1fs · 集成 %.1fs" % (ts["unit"], ts["integration"])
+
+
+def _tier_parts_sec(top, tiers, durations=None, unit=None, regions=None):
+    """部件形态 tier_sec.parts（design D8）：G7 逐用例耗时按 tier_seconds 同一口径归层——单元层记到 parts_of 的部件，
+    区域记到所属部件的 integration；再加各部件单元层墙钟 unit 与区域墙钟 regions。各项保留 1 位小数。"""
+    owner = {r: n for n, p in tiers["parts"].items() for r in (p.get("regions") or {})}
+    out = {n: [0.0, 0.0] for n in tiers["parts"]}
+    for nodeid, sec in (durations or {}).items():
+        path = nodeid.split("::", 1)[0]
+        hit = tiers_matching(path, tiers, top)
+        if hit and hit[0] == "unit":
+            for n in parts_of(top, tiers, path):
+                out[n][0] += sec
+        elif hit:
+            out[owner[hit[0]]][1] += sec
+    for n, sec in (unit or {}).items():
+        out[n][0] += sec
+    for r, sec in (regions or {}).items():
+        out[owner[r]][1] += sec
+    return {n: {"unit": round(u, 1), "integration": round(i, 1)} for n, (u, i) in sorted(out.items())}
 
 
 def _lint_tiers(data, change_dir):
@@ -2772,6 +2857,8 @@ def cmd_gate(args):
     gate_note = args.slice
     if durations is not None:
         ts = tier_seconds(durations, tiers)
+        if tiers_is_parts(tiers):
+            ts["parts"] = _tier_parts_sec(root, tiers, durations)
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
         gate_note = "%s %s" % (args.slice, _tier_note(ts))
@@ -2882,7 +2969,7 @@ def cmd_final(args):
         print(json.dumps(result, ensure_ascii=False))
         sys.exit(0)
     durations = {} if tiers is not None else None
-    unit_wall, region_wall = 0.0, {}
+    unit_wall, region_wall, part_wall = 0.0, {}, {}
     v7, total, passed, w7 = scenario_status(root, data, durations=durations)
     failed.extend(v7)
     warnings.extend(w7)
@@ -2904,7 +2991,14 @@ def cmd_final(args):
         if terrs:  # 分层文件不合法：单元层照旧差分，不跑探针与区域
             failed.append("G2 tiers：测试分层文件不合法，先跑 lint 修好")
             tiers = None
-        if not test_cmd:
+        aerrs = tier_adapter_errors(root, tiers)
+        if aerrs:  # 部件形态：探针适配器自检记录不符 → 跳过单元层与区域（design D8）
+            failed.append("G2 tiers：%s；先跑 lint 修好" % "；".join(aerrs))
+        elif tiers_is_parts(tiers):  # 部件形态（design D8）：不跑 gate.test（驱动命令）、不取锚点、不写锚点
+            part_wall, region_wall = _final_parts(root, tiers, gate, baseline, failed, warnings)
+            unit_wall = sum(part_wall.values())
+            inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
+        elif not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
         else:
             bt = (baseline or {}).get("test") or {}
@@ -3087,6 +3181,8 @@ def cmd_final(args):
         ts = tier_seconds(durations, tiers)
         if not v7:  # G7 红时全量与区域未跑，只报 G7 部分
             ts = _tier_add(ts, unit_wall, region_wall)
+        if tiers_is_parts(tiers):
+            ts["parts"] = _tier_parts_sec(root, tiers, durations, part_wall, region_wall)
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
         final_note = "%s %s" % (_tier_note(ts), final_note)
@@ -3119,10 +3215,13 @@ def cmd_baseline(args):
     if cerrs:
         die("gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
     tiers, terrs = _load_tiers(args.change_dir)
+    if not terrs:  # 部件形态：探针适配器自检记录不符与分层文件不合法同处（design D8）
+        terrs = tier_adapter_errors(root, tiers)
     if terrs:
         die("测试分层文件不合法，先跑 lint 修好：%s" % "；".join(terrs))
+    parts = tiers_is_parts(tiers)
     regions = _selected_regions(gate)
-    unknown = [n for n in regions if n not in ((tiers or {}).get("regions") or {})]
+    unknown = [n for n in regions if n not in (_tier_regions(tiers) if tiers else {})]
     if unknown:
         die("gate.integration 的区域 %s 不在测试分层文件 regions 里，先跑 lint 修好" % ", ".join(unknown))
     sha0 = plan_sha(data)
@@ -3155,7 +3254,7 @@ def cmd_baseline(args):
         if abort:  # 补跑红 / 超时 / 异常退出码与候选无关，直接走全量（design D3）
             break
     reasons, warnings, out = [], [], ""
-    unit_wall = 0.0
+    unit_wall, part_wall = 0.0, {}
     adeps, deps_whys = None, []  # 锚点的依赖图（全量与区域运行并起来）与没测到的原因（design D3）
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons}
@@ -3164,6 +3263,10 @@ def cmd_baseline(args):
         bl["test"] = {k: ct[k] for k in ("exit", "sec", "failed") if k in ct}
         if isinstance(ct.get("failed"), list) and ct["failed"]:
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
+    elif parts:  # 部件形态（design D8）：不跑 gate.test（驱动命令），逐部件运行单元层；不写锚点
+        bl["test"], bl["tiers"], part_wall, out = _baseline_parts(root, tiers, reasons, warnings)
+        gate["full_suite_sec"] = bl["test"]["sec"]
+        unit_wall = sum(part_wall.values())
     else:
         t0 = time.time()
         tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True)
@@ -3211,7 +3314,7 @@ def cmd_baseline(args):
     prev = (old.get("verify") or {}) if hit is not None and src is own else {}
     # 本次跑了全量且 gate.test 是可推导的直接 pytest 调用 → 可推导的 verify 按全量 junit 判（design D11）
     full_head = None
-    if hit is None:
+    if hit is None and not parts:
         fh = _pytest_head(test_cmd)
         if fh is not None and _derive_paths(fh[1]) is not None:
             full_head = fh[0]
@@ -3222,7 +3325,7 @@ def cmd_baseline(args):
         if hit is not None and not _verify_rerun(root, vcmd, pv, hit["files"]):
             bl["verify"][s["id"]] = {"exit": pv.get("exit"), "cmd": vcmd, "reused": True}
             continue
-        if hit is None and _derive_verify(root, full_head, vcmd, tg.get("cases"), tg["failed"]):
+        if hit is None and full_head is not None and _derive_verify(root, full_head, vcmd, tg.get("cases"), tg["failed"]):
             bl["verify"][s["id"]] = {"exit": 0, "cmd": vcmd, "derived": "full"}
             derived += 1
             continue
@@ -3234,9 +3337,11 @@ def cmd_baseline(args):
     if tiers is not None:
         bl["regions"] = {}
     for rname in regions:
-        rcmd = tiers["regions"][rname]["cmd"]
+        rpart, rdef = _tier_regions(tiers)[rname]
+        rcmd = rdef["cmd"]
         t0 = time.time()
-        rg = run_test_gate(rcmd, root, deps=True)
+        # 部件形态：在所属部件 root 下运行；不写锚点，依赖图不测（design D8）
+        rg = run_test_gate(rcmd, root, deps=not parts, cwd=os.path.join(root, rpart["root"]) if parts else None)
         rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
         if rg["deps"] is None:
             deps_whys.append("区域 %s：%s" % (rname, rg["deps_why"]))
@@ -3253,6 +3358,9 @@ def cmd_baseline(args):
     if tiers is not None:
         bl["tier_sec"] = _tier_add({"unit": 0.0, "regions": {}}, unit_wall,
                                    {n: r["sec"] for n, r in bl["regions"].items()})
+        if parts:
+            bl["tier_sec"]["parts"] = _tier_parts_sec(root, tiers, None, part_wall,
+                                                      {n: r["sec"] for n, r in bl["regions"].items()})
     # 成对检查的 baseline 半（design D5）：沿用条件同 lint / typecheck（D10）外加共用目录仍在；否则清空目录后实跑
     checks = gate.get("checks") or []
     if checks:
@@ -3315,8 +3423,8 @@ def cmd_baseline(args):
     if plan_sha(cur) != sha0:
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
     # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
-    # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）
-    if hit is None:
+    # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）；部件形态不写锚点（design D8）
+    if hit is None and not parts:
         measured = adeps is not None and not deps_whys and not reasons
         if adeps is None or deps_whys:
             warnings.append("依赖图未测：%s" % "；".join(w for w in deps_whys if w) if deps_whys else "依赖图未测")
@@ -3410,8 +3518,18 @@ def cmd_preflight(args):
         bregions = bl.get("regions")
         for rname in _selected_regions(data.get("gate") or {}):
             rec = bregions.get(rname) if isinstance(bregions, dict) else None
-            if not isinstance(rec, dict) or rec.get("cmd") != ((tiers.get("regions") or {}).get(rname) or {}).get("cmd"):
+            if not isinstance(rec, dict) or rec.get("cmd") != (_tier_regions(tiers).get(rname) or (None, {}))[1].get("cmd"):
                 die("基线过期：区域 %s 的命令已变或没有基线记录；重跑 baseline" % rname)
+        if tiers_is_parts(tiers):  # 部件对账（design D8）：部件集合与各部件 unit.cmd
+            bparts = (bl.get("test") or {}).get("parts")
+            bparts = bparts if isinstance(bparts, dict) else {}
+            diff = sorted(set(bparts) ^ set(tiers["parts"]))
+            if diff:
+                die("基线过期：部件 %s 与基线记录的部件集合不一致；重跑 baseline" % "、".join(diff))
+            for pname in sorted(tiers["parts"]):
+                rec = bparts[pname]
+                if not isinstance(rec, dict) or rec.get("cmd") != tiers["parts"][pname]["unit"]["cmd"]:
+                    die("基线过期：部件 %s 的单元命令已变；重跑 baseline" % pname)
     # 不能用 git()：--is-ancestor 不成立时退出 1，git() 会当成异常抛
     p = subprocess.run(["git", "merge-base", "--is-ancestor", str(bl.get("commit") or ""), "HEAD"],
                        cwd=root, capture_output=True, text=True)
