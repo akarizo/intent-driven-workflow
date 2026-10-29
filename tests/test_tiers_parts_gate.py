@@ -11,7 +11,6 @@ import pytest
 
 from conftest import commit_all, run_hook, write
 
-XF = pytest.mark.xfail(strict=True, reason="S3 尚未实现")
 PY = shlex.quote(sys.executable)
 DRIVER = "python3 .claude/hooks/test-tiers.py run unit"
 PY_UNIT = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
@@ -83,7 +82,6 @@ def change_sh_cmd(repo):
 # ---------------------------------------------------------------- baseline
 
 
-@XF
 def test_baseline_runs_each_part_and_reports_part_seconds(git_repo):
     # Given: 部件 py（单元层全绿且纯）与 sh；gate.test 是驱动命令（被测仓库里没有 test-tiers.py）
     d = setup_parts(git_repo)
@@ -104,7 +102,6 @@ def test_baseline_runs_each_part_and_reports_part_seconds(git_repo):
     assert set(ts) == {"py", "sh"} and all("unit" in v for v in ts.values()), ts
 
 
-@XF
 def test_baseline_records_part_preexisting_red(git_repo):
     # Given: 部件 py 单元层有一个失败用例 test_old
     d = setup_parts(git_repo, py_tests=PURE + "\n\ndef test_old():\n    assert False\n")
@@ -128,7 +125,6 @@ def test_baseline_records_part_preexisting_red(git_repo):
     assert any("部件 sh" in r for r in bl["reasons"]), bl["reasons"]
 
 
-@XF
 def test_baseline_red_on_impure_part_unit(git_repo):
     # Given: 部件 py 单元层有一个读文件的用例
     impure = PURE + "\n\ndef test_io():\n    with open(__file__, encoding='utf-8') as f:\n        assert f.read()\n"
@@ -146,7 +142,6 @@ def test_baseline_red_on_impure_part_unit(git_repo):
 # ---------------------------------------------------------------- final
 
 
-@XF
 def test_final_diffs_each_part(git_repo):
     # Given: 基线记录了 py 的预存红 test_old；之后 py 新增失败用例 test_new 并提交
     old = PURE + "\n\ndef test_old():\n    assert False\n"
@@ -165,7 +160,6 @@ def test_final_diffs_each_part(git_repo):
     assert out["incremental"]["mode"] == "full" and "多部件" in out["incremental"]["full_why"], out["incremental"]
 
 
-@XF
 def test_final_red_when_part_record_stale(git_repo):
     # Given: 基线建立后，部件 sh 的 unit.cmd 被改动并提交
     d = setup_parts(git_repo)
@@ -183,7 +177,6 @@ def test_final_red_when_part_record_stale(git_repo):
 # ---------------------------------------------------------------- preflight
 
 
-@XF
 def test_preflight_stale_when_part_cmd_changed(git_repo):
     # Given: 基线建立后，部件 sh 的 unit.cmd 被改动并提交
     d = setup_parts(git_repo)
