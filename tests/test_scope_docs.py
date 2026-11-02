@@ -1,7 +1,6 @@
 """文档描述分层文件按条目判定与选测范围契约（scenario: tier-file-incremental#docs-describe-tier-file-narrowing、
 gate-scope-report#docs-describe-scope-contract）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
-import pytest
 
 from conftest import ROOT
 
@@ -15,7 +14,6 @@ def _line_with(text, word):
     return next((l for l in text.splitlines() if word in l), "")
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：文档写明分层文件按条目判定")
 def test_docs_describe_tier_file_narrowing():
     # Given: 本 change 的文档改动已完成
     tiers = read("template/.claude/commands/test-tiers.md")
@@ -37,7 +35,6 @@ def test_docs_describe_tier_file_narrowing():
     assert line and "test-tiers.json" not in line, line
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：文档写明选测范围契约")
 def test_docs_describe_scope_contract():
     # Given: 本 change 的文档改动已完成
     texts = {rel: read(rel) for rel in ("template/openspec/schemas/intent-driven/schema.yaml",
