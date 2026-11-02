@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "change": "scope-fallback-guard",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 227.5
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定器：分层指纹只取单元层、锚点记录区域与放行、final 按块收窄、分层文件不再是全局文件",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_tier_file_incremental.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_tier_file_incremental.py tests/test_final_tiers.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_final_reuse.py tests/test_tiers_gate.py tests/test_baseline_incremental.py",
+      "scenarios": [
+        "tier-file-incremental#slow-allow-change-keeps-incremental",
+        "tier-file-incremental#selected-region-entry-change-runs-region",
+        "tier-file-incremental#unselected-region-change-ignored",
+        "tier-file-incremental#unit-change-still-full",
+        "tier-file-incremental#impacted-not-full-on-slow-allow-change"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "判定器：lint / preflight 的选测范围契约（gate.scope 与 gate-scope.json、实跑与报告校验、全选逐项表态）",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_gate_scope_lint.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_gate_scope_lint.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_tiers_plan.py tests/test_tiers_parts_plan.py tests/test_slice_gate_baseline_preflight.py",
+      "scenarios": [
+        "gate-scope-report#scope-lint-rejects-malformed-declarations",
+        "gate-scope-report#scope-command-failure-is-red",
+        "gate-scope-report#scope-bad-report-is-red",
+        "gate-scope-report#scope-not-full-passes",
+        "gate-scope-report#repo-default-used-when-plan-silent",
+        "gate-scope-report#plan-scope-overrides-repo-default",
+        "gate-scope-report#waves-does-not-run-scope",
+        "gate-scope-report#preflight-runs-scope",
+        "gate-scope-report#scope-fields-not-in-plan-sha",
+        "gate-scope-report#full-without-reason-is-red",
+        "gate-scope-report#full-with-matching-reasons-passes",
+        "gate-scope-report#reason-keys-must-match-triggers",
+        "gate-scope-report#reason-when-not-full-is-red",
+        "gate-scope-report#reason-without-scope-command-is-red"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "审批页：spec.html 渲染选测范围小节（命令、来源、触发项 → 理由）",
+      "owns": [
+        "template/.claude/hooks/spec_html.py",
+        "tests/test_spec_html_scope.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_spec_html_scope.py tests/test_spec_html.py",
+      "scenarios": [
+        "gate-scope-report#spec-html-shows-scope-reasons",
+        "gate-scope-report#spec-html-shows-repo-default-scope"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "文档：schema、/opsx-propose 与同名 skill、/opsx-verify 与同名 skill、/test-tiers、README",
+      "owns": [
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/.claude/commands/opsx-verify.md",
+        "template/.claude/skills/openspec-verify-change/SKILL.md",
+        "template/.claude/commands/test-tiers.md",
+        "README.md",
+        "tests/test_scope_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_incremental_final_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py",
+      "scenarios": [
+        "tier-file-incremental#docs-describe-tier-file-narrowing",
+        "gate-scope-report#docs-describe-scope-contract"
+      ],
+      "packet": "slices/S4.md"
+    }
+  ],
+  "scenario_tests": {
+    "tier-file-incremental#slow-allow-change-keeps-incremental": "tests/test_tier_file_incremental.py::test_slow_allow_change_keeps_incremental",
+    "tier-file-incremental#selected-region-entry-change-runs-region": "tests/test_tier_file_incremental.py::test_selected_region_entry_change_runs_region",
+    "tier-file-incremental#unselected-region-change-ignored": "tests/test_tier_file_incremental.py::test_unselected_region_change_ignored",
+    "tier-file-incremental#unit-change-still-full": "tests/test_tier_file_incremental.py::test_unit_change_still_full",
+    "tier-file-incremental#impacted-not-full-on-slow-allow-change": "tests/test_tier_file_incremental.py::test_impacted_not_full_on_slow_allow_change",
+    "tier-file-incremental#docs-describe-tier-file-narrowing": "tests/test_scope_docs.py::test_docs_describe_tier_file_narrowing",
+    "gate-scope-report#scope-lint-rejects-malformed-declarations": "tests/test_gate_scope_lint.py::test_scope_lint_rejects_malformed_declarations",
+    "gate-scope-report#scope-command-failure-is-red": "tests/test_gate_scope_lint.py::test_scope_command_failure_is_red",
+    "gate-scope-report#scope-bad-report-is-red": "tests/test_gate_scope_lint.py::test_scope_bad_report_is_red",
+    "gate-scope-report#scope-not-full-passes": "tests/test_gate_scope_lint.py::test_scope_not_full_passes",
+    "gate-scope-report#repo-default-used-when-plan-silent": "tests/test_gate_scope_lint.py::test_repo_default_used_when_plan_silent",
+    "gate-scope-report#plan-scope-overrides-repo-default": "tests/test_gate_scope_lint.py::test_plan_scope_overrides_repo_default",
+    "gate-scope-report#waves-does-not-run-scope": "tests/test_gate_scope_lint.py::test_waves_does_not_run_scope",
+    "gate-scope-report#preflight-runs-scope": "tests/test_gate_scope_lint.py::test_preflight_runs_scope",
+    "gate-scope-report#scope-fields-not-in-plan-sha": "tests/test_gate_scope_lint.py::test_scope_fields_not_in_plan_sha",
+    "gate-scope-report#full-without-reason-is-red": "tests/test_gate_scope_lint.py::test_full_without_reason_is_red",
+    "gate-scope-report#full-with-matching-reasons-passes": "tests/test_gate_scope_lint.py::test_full_with_matching_reasons_passes",
+    "gate-scope-report#reason-keys-must-match-triggers": "tests/test_gate_scope_lint.py::test_reason_keys_must_match_triggers",
+    "gate-scope-report#reason-when-not-full-is-red": "tests/test_gate_scope_lint.py::test_reason_when_not_full_is_red",
+    "gate-scope-report#reason-without-scope-command-is-red": "tests/test_gate_scope_lint.py::test_reason_without_scope_command_is_red",
+    "gate-scope-report#spec-html-shows-scope-reasons": "tests/test_spec_html_scope.py::test_spec_html_shows_scope_reasons",
+    "gate-scope-report#spec-html-shows-repo-default-scope": "tests/test_spec_html_scope.py::test_spec_html_shows_repo_default_scope",
+    "gate-scope-report#docs-describe-scope-contract": "tests/test_scope_docs.py::test_docs_describe_scope_contract"
+  }
+}

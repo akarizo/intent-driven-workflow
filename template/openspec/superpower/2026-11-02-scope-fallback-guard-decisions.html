@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选测范围不被分类元数据拖成全量 · 决策页</title>
+<style>
+  :root { --fg:#1f2328; --mute:#59636e; --line:#d1d9e0; --bg:#f6f8fa; --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color:var(--fg); background:#fff; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 120px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .meta { color: var(--mute); font-size: 13px; }
+  .lead { background: var(--bg); border-left: 4px solid var(--acc); padding: 12px 16px; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff2f5; padding: 1px 5px; border-radius: 4px; }
+  pre { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; color: #e6edf3; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+  pre .c { color: #8b949e; }
+  pre .k { color: #7ee787; }
+  pre .r { color: #ff7b72; }
+  .tag { display:inline-block; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background:#fff; }
+  .tag.ok { color: var(--ok); border-color: #aceebb; background:#dafbe1; }
+  .tag.bad { color: var(--bad); border-color: #ffcecb; background:#ffebe9; }
+  .tag.warn { color: var(--warn); border-color: #f5e0a0; background:#fff8c5; }
+  .flow { display: grid; grid-template-columns: 1fr 36px 1fr 36px 1fr 36px 1fr; gap: 0; margin: 12px 0 8px; }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; font-size: 13px; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box.agent { border-color: #b6a6f5; background: #f5f0ff; }
+  .box.file { border-color: #9cc8f5; background: #eef6ff; }
+  .box.gate { border-color: #8fd6a2; background: #effbf2; }
+  .box.human { border-color: #f5c38f; background: #fff6ec; }
+  .arrow { display:flex; align-items:center; justify-content:center; color: var(--mute); font-size: 22px; }
+  .note { color: var(--mute); font-size: 12.5px; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .q { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .q h3 { margin-top: 0; }
+  .opt { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 8px 36px; margin: 8px 0; position: relative; cursor: pointer; }
+  .opt:hover { border-color: var(--acc); }
+  .opt input { position: absolute; left: 12px; top: 12px; }
+  .opt b { display: block; }
+  .opt .d { color: var(--mute); font-size: 13px; }
+  .opt.rec { border-color: #9cc8f5; }
+  textarea { width: 100%; min-height: 54px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 24px; display:flex; gap: 10px; justify-content: center; box-shadow: 0 -2px 8px rgba(0,0,0,.04); }
+  button { font: inherit; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  button.primary { background: var(--acc); color: #fff; border-color: var(--acc); }
+  #toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); background: #1f2328; color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>选测范围不被分类元数据拖成全量 · 决策页</h1>
+  <div class="meta">拟建 change：<code>scope-fallback-guard</code> · 2026-11-02 · 已定：A + B 两件都做，B 用「计划期表态」</div>
+
+  <div class="lead">
+    <b>一句话</b>：工作流自己写的分类元数据（afa 的集成登记表、模板的 <code>test-tiers.json</code>）一改动，选测逻辑就把整个文件当成「基础设施」，范围退回全量。<br>
+    <b>A</b> 修模板自己的这处：<code>test-tiers.json</code> 按条目差分，只有单元层变了才全量。<br>
+    <b>B</b> 管项目自带的选测：模板管不到项目自己的选测代码，所以在计划期让选测命令报告范围；一旦退化为全选，计划必须逐项写理由，人类批准飞行计划前就能看到。
+  </div>
+
+  <h2>1. 起因：afa 的 baseline 跑了 474.7 秒全量</h2>
+  <table>
+    <tr><th style="width:30%">事实</th><th>证据</th></tr>
+    <tr><td>propose 期登记 3 个真实库测试文件为集成用例，改动了 <code>executor/tests/tiering_registry.json</code>（+23 行，全是新文件的条目）</td><td><code>git diff --stat</code>（afa worktree <code>cpdb-lru-position</code>）</td></tr>
+    <tr><td>该文件在 afa 的 <code>INFRA_PATTERNS</code> 里，命中即全选集成用例</td><td><code>executor/tests/tiering_select.py:26</code>、<code>:177</code></td></tr>
+    <tr><td>实际：集成用例全选（登记 888 条 / 240 个文件）<span class="tag bad">全选</span></td><td rowspan="2">只读复算 <code>select_impacted</code>（不跑测试）</td></tr>
+    <tr><td>反事实：只拿掉登记表 → 只选 3 个集成文件（都是本 change 新加的 <code>*_real.py</code>）<span class="tag ok">应有范围</span></td></tr>
+    <tr><td>final 还会再全选一次（登记表相对 merge-base 的改动一直在）</td><td>同上逻辑</td></tr>
+  </table>
+  <p class="note">afa 侧的 <code>tiering_select.py</code> 修复（登记表按条目差分）你已同意，但它是 afa 自己的代码，<b>不在本 change 范围</b>；本 change 只改模板。</p>
+
+  <h2>2. 模板自己也有同一类问题（已在临时仓库实证）</h2>
+  <table>
+    <tr><th style="width:36%">baseline 之后只做了这件事，再改一行 <code>src/a.py</code></th><th>final 结果</th></tr>
+    <tr><td>在 <code>test-tiers.json</code> 的 <code>slow_allow</code> 加一条（等同 apply 期跑了 <code>allow-slow</code>）</td><td><code>{"mode": "full", "full_why": "没有可用锚点"}</code> <span class="tag bad">被迫全量</span></td></tr>
+    <tr><td>给区域 <code>hooks</code> 的 <code>covers</code> 加一个 glob</td><td><code>{"mode": "full", "full_why": "没有可用锚点"}</code> <span class="tag bad">被迫全量</span></td></tr>
+    <tr><td>对照：不碰分层文件</td><td><code>incremental</code>：重跑 1 个文件、沿用 2 个用例、区域 hooks 跳过 <span class="tag ok">增量</span></td></tr>
+  </table>
+  <p>原因有两处：</p>
+  <ul>
+    <li><code>slice-gate.py:3967</code>：锚点按 <code>tiers_key</code> 过滤，而 <code>tiers_key</code> 是整个分层文件的 blob 哈希（<code>:3982</code>），文件里改任何一个字节，所有锚点都失效；</li>
+    <li><code>slice-gate.py:3977</code>：<code>GLOBAL_FILES</code> 含 <code>test-tiers.json</code>，即使有可用锚点，Δ 里出现它也全量。</li>
+  </ul>
+  <p>这条行为是在役 ADR <code>DRAFT-final-incremental-by-dependency-anchor</code> 决策 4 明文规定的（「全局文件（…、分层文件）变动 → 全量」）。ADR 不可改，本 change 会另起一份新 ADR，<b>只 supersede 决策 4 里「分层文件」这一项</b>。</p>
+
+  <h2>3. 目标形态</h2>
+  <h3>A：<code>test-tiers.json</code> 拆成三块参与增量判定（简写形态）</h3>
+  <table>
+    <tr><th style="width:34%">apply 期分层文件的改动</th><th style="width:22%">现在</th><th>改后</th></tr>
+    <tr><td><code>unit.paths</code> / <code>unit.cmd</code></td><td>全量</td><td>全量（不变：单元层范围变了，锚点里的单元层结论不可信）</td></tr>
+    <tr><td>已选区域 R 的 <code>paths</code> / <code>covers</code></td><td>全量</td><td>增量；区域 R 必跑</td></tr>
+    <tr><td>已选区域 R 的 <code>cmd</code></td><td>全量 + 红「重跑 baseline」</td><td>红「重跑 baseline」（现有规则，不变）</td></tr>
+    <tr><td>未选区域的任何改动、新增未选区域</td><td>全量</td><td>增量，不受影响（本 change 不跑它）</td></tr>
+    <tr><td><code>slow_allow</code> 条目增 / 删 / 改</td><td>全量</td><td>增量；这些用例所在的测试文件重跑，G10 按新名单重判</td></tr>
+  </table>
+  <p class="note">做法：锚点里记三样东西——单元层指纹（替代现在的整文件哈希）、各区域条目指纹、<code>slow_allow</code> 的用例清单；final 取锚点后逐块比对。部件形态的 final 本来就恒全量，不在范围。</p>
+
+  <h3>B：项目自带选测的范围报告契约（计划期表态）</h3>
+  <div class="flow">
+    <div class="box agent">
+      <h4>propose 写计划</h4>
+      <ul>
+        <li><code>gate.scope</code>：只算范围、不跑测试的命令</li>
+        <li>或用仓库级默认（见 Q4）</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box gate">
+      <h4>lint / preflight 实跑</h4>
+      <ul>
+        <li>库给 <code>$GATE_SCOPE_OUT</code></li>
+        <li>命令写 <code>{"full", "triggers", "count"}</code></li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box file">
+      <h4>全选时须表态</h4>
+      <ul>
+        <li><code>gate.scope_full_reason</code> 逐个触发项写理由</li>
+        <li>缺一项、多一项都判红</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box human">
+      <h4>spec.html</h4>
+      <ul>
+        <li>显示选测命令与「触发项 → 理由」表</li>
+        <li>人类批准飞行计划前可见</li>
+      </ul>
+    </div>
+  </div>
+  <div class="two">
+<pre><span class="c">// 选测命令写到 $GATE_SCOPE_OUT 的内容</span>
+{
+  <span class="k">"full"</span>: true,
+  <span class="k">"triggers"</span>: [<span class="r">"executor/tests/tiering_registry.json"</span>],
+  <span class="k">"count"</span>: 10698
+}</pre>
+<pre><span class="c">// 计划里的表态（slices.json 的 gate，示意）</span>
+"scope": "bash tools/testgate/run.sh scope",
+"scope_full_reason": {
+  <span class="r">"executor/tests/tiering_registry.json"</span>:
+    "登记表改动只涉及本 change 新增的 3 个文件；
+     afa 选测修复合入前接受一次全量"
+}</pre>
+  </div>
+  <p class="note">如果当时有这条契约：afa 那次 propose 在 lint 就会红，并点名 <code>tiering_registry.json</code>。人类在 spec.html 里能看到「全选」和理由，而不是 baseline 默默跑 8 分钟。afa 要用上，还得在 afa 里给 testgate 加一个输出这个 JSON 的子命令（afa 侧工作，不在本 change）。</p>
+
+  <h2>4. 待你定的设计点</h2>
+
+  <div class="q" data-q="Q1" data-title="A 的收窄粒度">
+    <h3>Q1 A：<code>test-tiers.json</code> 收窄到多细</h3>
+    <label class="opt rec"><input type="radio" name="Q1" value="A" checked><b>A（推荐）三块分别比对：单元层 / 区域 / slow_allow</b><span class="d">按第 3 节的表：单元层变 → 全量；已选区域条目变 → 该区域必跑；未选区域无关；<code>slow_allow</code> 有变化的用例所在文件重跑并重判 G10。锚点多记区域指纹与放行清单。</span></label>
+    <label class="opt"><input type="radio" name="Q1" value="B"><b>B 只收窄 slow_allow，其余改动仍全量</b><span class="d">覆盖最常见的场景（apply 期 <code>allow-slow</code>），实现更小；区域条目改动仍让 final 全量。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="Q2" data-title="B 的输出通道">
+    <h3>Q2 B：选测命令怎么把范围交给库</h3>
+    <label class="opt rec"><input type="radio" name="Q2" value="A" checked><b>A（推荐）写到库给的 <code>$GATE_SCOPE_OUT</code> 文件（JSON）</b><span class="d">和现有的 <code>GATE_DELTA_FILE</code> 同一风格；选测命令的 stdout / stderr 随便打日志（afa 的 loguru 会刷很多行），不干扰解析。</span></label>
+    <label class="opt"><input type="radio" name="Q2" value="B"><b>B stdout 最后一行是 JSON</b><span class="d">少一个环境变量，但命令里任何收尾日志都会把它挤掉，容易误判。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="Q3" data-title="全选理由的形状">
+    <h3>Q3 B：全选理由写成什么样</h3>
+    <label class="opt rec"><input type="radio" name="Q3" value="A" checked><b>A（推荐）<code>{触发项: 理由}</code>，键必须和本次触发项完全一致</b><span class="d">和 <code>checks_skip</code>、<code>integration_skip</code> 同一模式。触发项由脚本给出、lint 核对键，spec.html 渲染成表，人看到的「触发了什么」是机械事实而不是模型转述；触发项变了（多了 / 少了），lint 判红，逼着重新表态。</span></label>
+    <label class="opt"><input type="radio" name="Q3" value="B"><b>B 一段自由文字</b><span class="d">写起来省事，但 spec.html 里看不到具体触发项，理由也无法核对是否过期。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="Q4" data-title="仓库级默认">
+    <h3>Q4 B：要不要仓库级默认，免得每个计划都要记得写</h3>
+    <label class="opt rec"><input type="radio" name="Q4" value="A" checked><b>A（推荐）openspec 根可放 <code>gate-scope.json</code>（<code>{"cmd": "..."}</code>）</b><span class="d">计划没写 <code>gate.scope</code> 时 lint 用仓库默认；计划写了以计划为准。仓库声明一次，之后每个 change 都受保护，不靠模型记得。做法和 <code>gate-checks.json</code> 同一思路，但不要求抄进计划。</span></label>
+    <label class="opt"><input type="radio" name="Q4" value="B"><b>B 不做，只靠 propose 文档提醒</b><span class="d">改动更小，但模型忘写就完全没有保护——恰好是这次 afa 的情形。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="Q5" data-title="何时实跑选测命令">
+    <h3>Q5 B：什么时候实跑选测命令</h3>
+    <label class="opt rec"><input type="radio" name="Q5" value="A" checked><b>A（推荐）<code>lint</code> 与 <code>preflight</code> 都跑，<code>waves</code> 不跑；超时 300 秒</b><span class="d">preflight 是起飞前的机械关口（模型可能跳过 lint，但跳不过 preflight）。afa 量级每次多约 10 秒（本次实测收集 10698 个用例用了 9.5 秒）。</span></label>
+    <label class="opt"><input type="radio" name="Q5" value="B"><b>B 只在 <code>lint</code> 跑</b><span class="d">起飞更快，但 propose 之后、起飞之前范围若变了（例如又改了基础设施文件），起飞时不再拦。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <div class="q" data-q="Q6" data-title="选测命令自身失败">
+    <h3>Q6 B：选测命令自身失败（非 0 退出 / JSON 不合法 / 超时）</h3>
+    <label class="opt rec"><input type="radio" name="Q6" value="A" checked><b>A（推荐）lint 判红（失败即拦）</b><span class="d">仓库既然声明了选测命令，算不出范围就等于不知道 baseline 会跑多大；和 afa 的 <code>ScopeError</code>「算不出一律抛错，不静默退回全量」同一取向。</span></label>
+    <label class="opt"><input type="radio" name="Q6" value="B"><b>B 只警告，不拦</b><span class="d">选测工具坏了不阻塞 propose，但保护会悄悄失效。</span></label>
+    <textarea placeholder="补充说明（可空）"></textarea>
+  </div>
+
+  <h2>5. 默认取向（不单独提问，有异议写在任一题的补充里）</h2>
+  <ul>
+    <li><b>不进 <code>plan_sha</code></b>：<code>gate.scope</code> / <code>gate.scope_full_reason</code> 不影响 baseline 的测试结论，改理由不需要重跑 baseline。</li>
+    <li><b>不做 baseline / final 侧的范围记录</b>：你选的是计划期表态。</li>
+    <li><b>不管 <code>gate.impacted</code> 在 final 的退化</b>：本 change 只管 baseline 范围（<code>gate.test</code>）。</li>
+    <li><b>锚点格式变化</b>：升级后各仓库第一次 final 会全量一次，之后恢复增量；不写兼容旧锚点的代码。</li>
+    <li><b>文档同改</b>：schema 的 tasks instruction、<code>/opsx-propose</code> 与同名 skill、<code>/test-tiers</code> 的「放行慢单测」一节。</li>
+  </ul>
+
+  <h2>6. 代价与风险</h2>
+  <ul>
+    <li><b>lint 变慢</b>：配了选测命令的仓库，每次 lint / preflight 多跑一次（见 Q5）。</li>
+    <li><b>契约靠项目实现</b>：模板只定 JSON 格式并核对；选测命令报 <code>full: false</code> 但实际全选，模板看不出来。这是「项目自带选测」的固有边界。</li>
+    <li><b>区域收窄的盲区</b>：区域 <code>paths</code> 改动只让该区域重跑，不追究「被移出该区域的文件」——前提是单元层 <code>paths</code> 没变，这些文件不会悄悄进入单元层；落到别处由 G12 / <code>check</code> 拦。</li>
+  </ul>
+
+  <h2>7. 接下来</h2>
+  <p>选完点「导出」或「复制结果」，把回执贴回对话。我按回执一次写出全部工件（proposal / specs / design / 两份 ADR / slices + 测试骨架），渲染 spec.html 给你审批，并在后台跑 baseline；起飞仍由你自己发 <code>/opsx-apply scope-fallback-guard</code>。</p>
+</main>
+
+<div class="bar">
+  <button onclick="resetRec()">恢复推荐</button>
+  <button onclick="copyMd()">复制结果</button>
+  <button class="primary" onclick="downloadMd()">导出 Markdown</button>
+</div>
+<div id="toast"></div>
+
+<script>
+var FIXED = "范围 A+B；B 计划期表态";
+function collect() {
+  var lines = ["# 选测范围不被分类元数据拖成全量 · 决策回执", "",
+    "- change：scope-fallback-guard",
+    "- 决策页：template/openspec/superpower/2026-11-02-scope-fallback-guard-decisions.html",
+    "- 已定：" + FIXED, ""];
+  var short = [];
+  document.querySelectorAll(".q").forEach(function (q) {
+    var id = q.dataset.q, title = q.dataset.title;
+    var picked = Array.prototype.slice.call(q.querySelectorAll("input:checked"));
+    var labels = picked.map(function (i) { return i.parentElement.querySelector("b").textContent.trim(); });
+    var note = q.querySelector("textarea").value.trim();
+    lines.push("## " + id + " " + title);
+    lines.push("- 选择：" + (labels.length ? labels.join("；") : "（未选）"));
+    if (note) lines.push("- 补充：" + note);
+    lines.push("");
+    short.push(id + " " + (picked.length ? picked.map(function (i) { return i.value; }).join("+") : "未选"));
+  });
+  lines.push("## 一行摘要");
+  lines.push(FIXED + "；" + short.join("；"));
+  return lines.join("\n") + "\n";
+}
+function toast(t) { var e = document.getElementById("toast"); e.textContent = t; e.style.display = "block"; setTimeout(function () { e.style.display = "none"; }, 1800); }
+function copyMd() {
+  var md = collect();
+  if (navigator.clipboard) { navigator.clipboard.writeText(md).then(function () { toast("已复制到剪贴板"); }, function () { fallbackCopy(md); }); }
+  else fallbackCopy(md);
+}
+function fallbackCopy(md) { var t = document.createElement("textarea"); t.value = md; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); toast("已复制到剪贴板"); }
+function downloadMd() {
+  var blob = new Blob([collect()], {type: "text/markdown;charset=utf-8"});
+  var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "2026-11-02-scope-fallback-guard-decisions.md"; a.click(); URL.revokeObjectURL(a.href);
+  toast("已导出 Markdown");
+}
+function resetRec() {
+  document.querySelectorAll(".q").forEach(function (q) {
+    q.querySelectorAll("input").forEach(function (i) { i.checked = i.closest(".opt").classList.contains("rec"); });
+    q.querySelector("textarea").value = "";
+  });
+  toast("已恢复推荐选项");
+}
+</script>
+</body>
+</html>
