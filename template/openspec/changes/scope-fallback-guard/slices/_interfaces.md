@@ -5,3 +5,20 @@
   - 计划字段：`gate.scope`（字符串）、`gate.scope_full_reason`（对象：触发项 → 理由）；
   - 仓库默认：`<openspec 根>/gate-scope.json` = `{"cmd": "<命令>"}`；
   - 报告：`GATE_SCOPE_OUT` 指向的文件里 `{"full": bool, "triggers": [str], "count": int?}`。
+
+## 合回签名摘要（wave 1）
+
+### S1（`template/.claude/hooks/slice-gate.py`）
+- `def cmd_final(args)` 全量 / 增量 final 门禁入口
+- `def cmd_baseline(args)` 写入基线与锚点
+- `def _tiers_key(root, change_dir, tiers)` 分层文件按条目的锚点键
+- `def _tiers_detail(tiers)` 分层条目明细
+- `def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None)` 判定走全量的原因
+
+### S3（`template/.claude/hooks/spec_html.py`）
+- `def render_scope(gate, change_dir)` 审批页渲染选测范围小节
+- `def render(change_dir, template_path, out_path, now_arg)` 总渲染入口
+
+### S4（文档 / schema，无代码签名）
+- `template/openspec/schemas/intent-driven/schema.yaml` 选测范围契约
+- `opsx-propose.md` / `openspec-propose/SKILL.md` 同步
