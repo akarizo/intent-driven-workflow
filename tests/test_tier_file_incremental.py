@@ -1,13 +1,10 @@
 """分层文件按条目参与增量 final（scenario: tier-file-incremental#slow-allow-change-keeps-incremental、
 #selected-region-entry-change-runs-region、#unselected-region-change-ignored、#unit-change-still-full、
 #impacted-not-full-on-slow-allow-change）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。护栏（unit-change-still-full）
-在 base 上已成立，不带 xfail。"""
+护栏（unit-change-still-full）在 base 上已成立。"""
 import json
 import shlex
 import sys
-
-import pytest
 
 from final_helpers import baseline, change_and_commit, final
 from test_final_tiers import tiers_repo
@@ -28,7 +25,6 @@ def _allow(t, nodeid):
     t["slow_allow"][nodeid] = {"reason": "样本大", "approved": "2026-11-02T00:00:00Z · 放行"}
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：slow_allow 改动不再让 final 全量")
 def test_slow_allow_change_keeps_incremental(git_repo):
     # Given: 已选区域 hooks 的分层仓库 baseline 绿；随后在 slow_allow 新增 tests/unit/test_z.py::test_z 的放行条目，
     #        并改了单元层依赖的 src/a.py
@@ -48,7 +44,6 @@ def test_slow_allow_change_keeps_incremental(git_repo):
     assert "hooks" in inc["regions_skipped"], inc
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：已选区域条目改动只让该区域必跑")
 def test_selected_region_entry_change_runs_region(git_repo):
     # Given: 已选区域 hooks 的分层仓库 baseline 绿；随后只给区域 hooks 的 covers 加了一个 glob，并改了 src/a.py
     d = tiers_repo(git_repo, with_region=True)
@@ -68,7 +63,6 @@ def test_selected_region_entry_change_runs_region(git_repo):
     assert "hooks" not in inc["regions_skipped"], inc
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：未选区域的改动不影响 final")
 def test_unselected_region_change_ignored(git_repo):
     # Given: 已选区域 hooks 的分层仓库 baseline 绿；随后在分层文件里新增未选区域 extra，并改了 src/a.py
     d = tiers_repo(git_repo, with_region=True)
@@ -104,7 +98,6 @@ def test_unit_change_still_full(git_repo):
     assert "没有可用锚点" in inc["full_why"], inc
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：gate.impacted 路径不因 slow_allow 改动退回全量")
 def test_impacted_not_full_on_slow_allow_change(git_repo):
     # Given: 分层仓库（无区域）配了 gate.impacted（只跑 tests/unit/test_a.py），baseline 绿；
     #        随后在 slow_allow 新增 tests/unit/test_a.py::test_a 的放行条目，并改了 src/a.py
