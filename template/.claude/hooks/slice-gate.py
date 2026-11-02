@@ -3041,7 +3041,8 @@ def cmd_final(args):
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
                         else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
             rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
-            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate)
+            why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate,
+                                 tier_rel=_change_rel(root, _tiers_path(args.change_dir)))
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
@@ -3069,12 +3070,21 @@ def cmd_final(args):
                 run_sel, unit_files, hit = sel, set(), {}
                 if tiers is not None:
                     regs = tiers.get("regions") or {}
+                    adet = anchor.get("tiers_detail") if isinstance(anchor.get("tiers_detail"), dict) else {}
+                    # 放行名单与锚点的对称差（scope-fallback-guard D3）：其用例所在、现存且落在单元层的文件并入重跑
+                    moved = set(tiers.get("slow_allow") or {}) ^ set(adet.get("slow_allow") or [])
+                    sel = sorted(set(sel) | {f for f in (str(n).split("::", 1)[0] for n in moved)
+                                             if os.path.isfile(os.path.join(root, f))
+                                             and any(glob_match(f, g) for g in tiers["unit"]["paths"])})
                     hit = {r: [f for f in sel if any(glob_match(f, g) for g in regs[r]["paths"])] for r in regs}
-                    # 锚点没测过的区域（锚点来自未选它的计划 / 本 change 后选的）依赖不在锚点里，必须跑；Δ 命中 covers 也跑
+                    # 锚点没测过的区域（锚点来自未选它的计划 / 本 change 后选的）依赖不在锚点里，必须跑；Δ 命中 covers 也跑；
+                    # 区域条目与锚点记录不同（或锚点缺记录）也跑（D3）
                     tested = set(anchor.get("regions") or [])
+                    aregs = adet.get("regions") if isinstance(adet.get("regions"), dict) else {}
                     run_regions = [r for r in _selected_regions(gate)
                                    if hit.get(r) or r not in tested
-                                   or any(glob_match(p, g) for p in delta for g in (regs.get(r) or {}).get("covers") or [])]
+                                   or any(glob_match(p, g) for p in delta for g in (regs.get(r) or {}).get("covers") or [])
+                                   or aregs.get(r) != _json_sha1(regs.get(r) or {})]
                     run_sel = [f for f in sel if not any(f in v for v in hit.values())]
                     unit_files = {f for f in run_sel if any(glob_match(f, g) for g in tiers["unit"]["paths"])}
                 d, pr, outcomes, rc, text, timed_out = {}, {}, [], 0, "", False
@@ -3174,7 +3184,8 @@ def cmd_final(args):
                                 anchor_part["tests"][f] = (anchor_part["tests"].get(f, 0) if full_run else 0) + n
             if cur_snap is not None and anchor_part is not None:
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
-                                             byproducts=byproducts, cmd_key=akey, tiers_key=tkey))
+                                             byproducts=byproducts, cmd_key=akey, tiers_key=tkey,
+                                             tiers_detail=_tiers_detail(tiers)))
                 if w:
                     warnings.append(w)
     checks = gate.get("checks") or []
@@ -3464,7 +3475,8 @@ def cmd_baseline(args):
         ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
         w = _anchor_write(root, {
             "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
-            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey, "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
+            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey,
+            "tiers_detail": _tiers_detail(tiers), "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
             "measured": measured, "source": "baseline"})
@@ -3975,18 +3987,34 @@ def _anchor_candidates(root, cmd_key, tiers_key, limit=10):
 FINAL_DIR = "flight-final"
 # Δ 含这些文件名（任何目录下）→ final 自动全量（spec「命中触发条件时 final 自动跑全量」）
 GLOBAL_FILES = {"conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", "setup.py", "Pipfile",
-                "Pipfile.lock", "poetry.lock", "uv.lock", ".python-version", TIER_FILE}
+                "Pipfile.lock", "poetry.lock", "uv.lock", ".python-version"}
 GLOBAL_GLOBS = ("requirements*.txt",)
 
 
+def _json_sha1(obj):
+    return hashlib.sha1(json.dumps(obj, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
 def _tiers_key(root, change_dir, tiers):
-    """分层文件的 blob（锚点与 final 指纹用）；无分层或取不到 → None。"""
+    """分层指纹（锚点与 final 指纹用；scope-fallback-guard design D1）：简写形态只取单元层规范 JSON 的 sha1，
+    部件形态取整文件 blob；无分层或取不到 → None。"""
     if tiers is None:
         return None
+    if not tiers_is_parts(tiers):
+        return _json_sha1(tiers.get("unit"))
     try:
         return _hash_paths(root, [_tiers_path(change_dir)])[0]
     except (RuntimeError, IndexError):
         return None
+
+
+def _tiers_detail(tiers):
+    """锚点记录的分层明细（design D2）：{"regions": {名: 条目规范 JSON 的 sha1}, "slow_allow": [用例 id，排序]}；
+    部件形态或无分层 → None。"""
+    if not isinstance(tiers, dict) or tiers_is_parts(tiers):
+        return None
+    return {"regions": {r: _json_sha1(e) for r, e in (tiers.get("regions") or {}).items()},
+            "slow_allow": sorted(tiers.get("slow_allow") or {})}
 
 
 def _node_counts(nodeids):
@@ -4103,9 +4131,10 @@ def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
     return best
 
 
-def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None):
+def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None):
     """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。
-    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。"""
+    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。
+    tier_rel：openspec 根分层文件的仓库相对路径，不算「未被任何用例触及的非 Python 文件」（scope-fallback-guard D4）。"""
     if full:
         return "手动要求 --full", []
     if pick is None:
@@ -4131,7 +4160,7 @@ def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None):
     seen = set()
     for v in (anchor.get("deps") or {}).values():
         seen.update(v)
-    cand = [p for p in delta if p not in seen and not _py_test_file(p)]
+    cand = [p for p in delta if p not in seen and not _py_test_file(p) and p != tier_rel]
     snap = anchor.get("snapshot") or {}
     try:
         blobs = _blobs_at(root, anchor["commit"], [p for p in cand if p not in snap])
