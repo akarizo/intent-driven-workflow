@@ -12,3 +12,6 @@
 2026-11-02T06:59:04Z	apply-done	blocked=0 blocking=0
 2026-11-02T06:59:15Z	ship	ready
 2026-11-02T06:59:19Z	ship	ready
+2026-11-02T06:59:46Z	ship	ready
+2026-11-02T07:00:10Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/9
+2026-11-02T07:05:40Z	ship	ready
