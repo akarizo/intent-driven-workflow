@@ -6,7 +6,10 @@
 #                                              含 gate.checks（name/baseline/final/timeout_sec）与 checks_skip 形状，并对账 <openspec 根>/gate-checks.json 默认检查
 #                                              tiers:：<openspec 根>/test-tiers.json 存在时校验其形状、gate.test == unit.cmd、
 #                                              gate.integration / integration_skip、covers × owns 表态、scenario 测试归层；不存在而计划写了区域选择 → 报缺文件
-#   waves    --change-dir DIR                 只打印 waves JSON
+#                                              scope:：gate.scope / gate.scope_full_reason / <openspec 根>/gate-scope.json 形状；有效选测命令
+#                                              （gate.scope 否则默认 cmd）在 git 顶层实跑、校验 GATE_SCOPE_OUT 报告、核对全选理由逐项表态；
+#                                              通过时 stderr 打一行范围摘要
+#   waves    --change-dir DIR                 只打印 waves JSON（不跑选测命令）
 #   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH]
 #                                              在 git toplevel 写 .openspec-slice 标记（slice / change_dir / base / started）；
 #                                              标记已是同一切片时不改（resume），保住区间与 red_count；
@@ -1449,6 +1452,132 @@ def _tiers_path(change_dir):
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), TIER_FILE)
 
 
+SCOPE_FILE = "gate-scope.json"
+SCOPE_TIMEOUT = 300  # 秒，不可配置
+SCOPE_REPORT_FIELDS = ("full", "triggers", "count")
+
+
+def _scope_default(change_dir):
+    """读 <openspec 根>/gate-scope.json（与 _repo_default_checks 同一解析）；返回 (cmd | None, 错误列表)。文件不存在 → (None, [])。"""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), SCOPE_FILE)
+    if not os.path.isfile(path):
+        return None, []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, ["scope: 仓库默认选测文件 %s 无法读取：%s" % (path, e)]
+    if not isinstance(obj, dict):
+        return None, ["scope: 仓库默认选测文件 %s 顶层须是对象 {\"cmd\": \"<命令>\"}" % path]
+    errors = []
+    extra = sorted(str(k) for k in obj if k != "cmd")
+    if extra:
+        errors.append("scope: 仓库默认选测文件 %s 有未知字段 %s（只允许 cmd）" % (path, ", ".join(extra)))
+    if not _nonblank(obj.get("cmd")):
+        errors.append("scope: 仓库默认选测文件 %s 缺少 cmd（须是非空字符串）" % path)
+    return (None if errors else obj["cmd"]), errors
+
+
+def _scope_report_errors(r):
+    """GATE_SCOPE_OUT 报告的形状：{"full": bool, "triggers": [非空 str]（full 为真时非空）, "count": 非负 int?}。"""
+    if not isinstance(r, dict):
+        return ["scope: 选测报告顶层须是对象 {\"full\", \"triggers\", \"count\"?}"]
+    errors = []
+    extra = sorted(str(k) for k in r if k not in SCOPE_REPORT_FIELDS)
+    if extra:
+        errors.append("scope: 选测报告有未知字段 %s" % ", ".join(extra))
+    full = r.get("full")
+    if not isinstance(full, bool):
+        errors.append("scope: 选测报告的 full 须是 true / false")
+    trig = r.get("triggers")
+    if not (isinstance(trig, list) and all(isinstance(t, str) for t in trig)):
+        errors.append("scope: 选测报告的 triggers 须是字符串数组")
+    else:
+        if any(not t.strip() for t in trig):
+            errors.append("scope: 选测报告的 triggers 每项须是非空字符串")
+        if full is True and not trig:
+            errors.append("scope: 选测报告 full 为 true 时 triggers 须非空（写出触发全选的文件）")
+    if "count" in r:
+        c = r["count"]
+        if isinstance(c, bool) or not isinstance(c, int) or c < 0:
+            errors.append("scope: 选测报告的 count 须是非负整数")
+    return errors
+
+
+def _run_scope(cmd, root):
+    """在 git 顶层实跑选测命令（GATE_SCOPE_OUT = 临时目录里的 scope.json）；返回 (errors, 报告 | None)。"""
+    with tempfile.TemporaryDirectory(prefix="flight-scope-") as tmp:
+        out = os.path.join(tmp, "scope.json")
+        env = dict(os.environ, GATE_SCOPE_OUT=out)
+        try:
+            p = subprocess.run(cmd, cwd=root, shell=True, capture_output=True, text=True, env=env,
+                               timeout=SCOPE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return ["scope: 选测命令 %s 超时（%d 秒）" % (cmd, SCOPE_TIMEOUT)], None
+        if p.returncode != 0:
+            tail = _tail((p.stdout or "") + (p.stderr or "")).replace("\n", " / ")
+            return ["scope: 选测命令 %s 失败（exit %d）%s" % (cmd, p.returncode, "：" + tail if tail else "")], None
+        if not os.path.isfile(out):
+            return ["scope: 选测命令 %s 退出 0 但没有写报告（GATE_SCOPE_OUT）" % cmd], None
+        try:
+            with open(out, "r", encoding="utf-8") as f:
+                report = json.load(f)
+        except (OSError, ValueError) as e:
+            return ["scope: 选测报告不是合法 JSON：%s" % e], None
+    errors = _scope_report_errors(report)
+    return errors, (None if errors else report)
+
+
+def _scope_reason_errors(report, reasons):
+    """D7 表态核对：全选 → gate.scope_full_reason 的键集合须等于 triggers；未全选 → 不得有理由。"""
+    keys = set(reasons or {})
+    if not report["full"]:
+        return ["scope: 选测范围未全选，gate.scope_full_reason 的 %s 应删除" % k for k in sorted(keys)]
+    trig = list(dict.fromkeys(report["triggers"]))
+    errors = []
+    missing = [t for t in trig if t not in keys]
+    if missing:
+        errors.append("scope: 选测范围全选，触发项 %s 缺理由：在 gate.scope_full_reason 逐项写明为何接受全量" % "、".join(missing))
+    extra = sorted(keys - set(trig))
+    if extra:
+        errors.append("scope: gate.scope_full_reason 的 %s 不是本次触发项，删除" % "、".join(extra))
+    return errors
+
+
+def _lint_scope(gate, change_dir, run_scope):
+    """选测范围契约；返回 (errors, 通过时的摘要行 | None)。形状恒校验；run_scope 为真且有有效命令时实跑并核对表态。"""
+    errors = []
+    scope = gate.get("scope")
+    if scope is not None and not _nonblank(scope):
+        errors.append("scope: gate.scope 须是非空字符串")
+    reasons = gate.get("scope_full_reason")
+    if reasons is not None and not isinstance(reasons, dict):
+        errors.append("scope: gate.scope_full_reason 须是对象（触发项 → 理由）")
+        reasons = {}
+    for k, v in (reasons or {}).items():
+        if not _nonblank(v):
+            errors.append("scope: gate.scope_full_reason 的 %s 理由须是非空字符串" % k)
+    default, derr = _scope_default(change_dir)
+    errors.extend(derr)
+    cmd = scope if _nonblank(scope) else default
+    if cmd is None and reasons is not None and not derr:
+        errors.append("scope: 没有选测命令（gate.scope 与 <openspec 根>/%s 都没有），gate.scope_full_reason 无从核对，删除"
+                      % SCOPE_FILE)
+    if errors or not (run_scope and cmd):
+        return errors, None
+    errors, report = _run_scope(cmd, toplevel())
+    if errors:
+        return errors, None
+    errors = _scope_reason_errors(report, reasons)
+    if errors:
+        return errors, None
+    if report["full"]:
+        return [], "scope: 选测范围全选（触发 %s），已逐项写理由" % "、".join(dict.fromkeys(report["triggers"]))
+    if "count" in report:
+        return [], "scope: 选测范围未全选（%d 条）" % report["count"]
+    return [], "scope: 选测范围未全选"
+
+
 def _tier_shape(label, obj, fields, selector=False):
     """unit / 区域对象的字段校验：只含 fields；paths 非空数组；covers（若在 fields）是数组；cmd 非空。
     selector=True（部件形态）：恰有 paths、list 之一，list 是非空字符串。"""
@@ -1936,8 +2065,9 @@ def _lint_tiers(data, change_dir):
     return errors
 
 
-def lint_plan(data, change_dir=None):
+def lint_plan(data, change_dir=None, run_scope=False):
     errors = []
+    scope_note = None
     if not ((data.get("gate") or {}).get("test") or "").strip():
         errors.append("gate: gate.test 缺失（须显式写出，baseline 不再自动探测写回）")
     slices = data.get("slices") or []
@@ -1983,6 +2113,10 @@ def lint_plan(data, change_dir=None):
             if name not in check_names and name not in skip_keys:
                 errors.append("checks: 仓库默认检查 %s 未出现在 gate.checks，也没有在 gate.checks_skip 写理由" % name)
         errors.extend(_lint_tiers(data, change_dir))
+        scope_errors, scope_note = _lint_scope(data.get("gate") or {}, change_dir, run_scope)
+        errors.extend(scope_errors)
+    if scope_note and not errors:
+        sys.stderr.write(scope_note + "\n")
     return errors, waves
 
 
@@ -2581,7 +2715,7 @@ def detect_test_cmd(root):
 
 def cmd_lint(args, print_waves=True):
     data = load_plan(args.change_dir)
-    errors, waves = lint_plan(data, args.change_dir)
+    errors, waves = lint_plan(data, args.change_dir, run_scope=(args.cmd == "lint"))
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     if print_waves:
@@ -3543,7 +3677,7 @@ def cmd_preflight(args):
     """起飞前四项校验：计划合法、基线存在且绿、基线未过期、基线 commit 在当前分支历史。通过打印 waves。"""
     root = toplevel()
     data = load_plan(args.change_dir)
-    errors, waves = lint_plan(data, args.change_dir)
+    errors, waves = lint_plan(data, args.change_dir, run_scope=True)
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     bl = load_baseline(args.change_dir)
