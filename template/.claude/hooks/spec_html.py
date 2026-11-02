@@ -477,6 +477,36 @@ def load_timeline_rows(change_dir):
     return rows
 
 
+def render_scope(gate, change_dir):
+    """选测范围小节（design D8）：只读文件、不运行命令；读不了 / 形状不对当作没有（校验归 lint）。"""
+    gate = gate if isinstance(gate, dict) else {}
+    cmd, source = gate.get("scope"), "计划 gate.scope"
+    if not (isinstance(cmd, str) and cmd.strip()):
+        cmd, source = None, None
+        openspec_root = os.path.dirname(os.path.dirname(os.path.abspath(change_dir)))
+        try:
+            repo = json.loads(read_text(os.path.join(openspec_root, "gate-scope.json")) or "null")
+        except ValueError:
+            repo = None
+        if isinstance(repo, dict) and isinstance(repo.get("cmd"), str) and repo["cmd"].strip():
+            cmd, source = repo["cmd"], "仓库默认 gate-scope.json"
+    reasons = gate.get("scope_full_reason")
+    reasons = reasons if isinstance(reasons, dict) and reasons else None
+    if not cmd and not reasons:
+        return ""
+    parts = ['<h3>选测范围</h3>']
+    if cmd:
+        parts.append('<p>选测命令（%s）：<code>%s</code></p>' % (esc(source), esc(cmd)))
+    else:
+        parts.append('<p class="placeholder">没有有效选测命令。</p>')
+    if reasons:
+        rows = "".join('<tr><td><code>%s</code></td><td>%s</td></tr>' % (esc(k), esc(v))
+                       for k, v in reasons.items())
+        parts.append('<table class="flight-table"><thead><tr><th>触发项</th><th>理由</th></tr></thead>'
+                     '<tbody>%s</tbody></table>' % rows)
+    return "".join(parts)
+
+
 def render_flight(change_dir):
     text = read_text(os.path.join(change_dir, "slices.json"))
     if not text:
@@ -532,10 +562,11 @@ def render_flight(change_dir):
 
     return (
         '<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th>'
-        '<th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody>%s</tbody></table>'
+        '<th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'
         '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s'
-        % ("".join(slice_rows), "".join(scenario_rows), timeline_html)
+        % ("".join(slice_rows), render_scope(data.get("gate"), change_dir),
+           "".join(scenario_rows), timeline_html)
     )
 
 

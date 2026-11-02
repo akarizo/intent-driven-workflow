@@ -1,0 +1,80 @@
+{
+  "commit": "471aa98eb36347d88bffdfc306af357402b6a0e9",
+  "at": "2026-11-02T06:12:53Z",
+  "plan_sha": "125508b33513df740b222f5417b721e729995dfe",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 227.5
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_tier_file_incremental.py tests/test_final_tiers.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_final_reuse.py tests/test_tiers_gate.py tests/test_baseline_incremental.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_gate_scope_lint.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_tiers_plan.py tests/test_tiers_parts_plan.py tests/test_slice_gate_baseline_preflight.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_spec_html_scope.py tests/test_spec_html.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_incremental_final_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "scope-fallback-guard",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-repo-selector-reports-scope-at-plan-time.md": "dfefb6f364f490de710cbc3cf97a27b3f3177b62",
+    "template/openspec/adr/DRAFT-tier-file-diffed-by-entry-in-final.md": "7db08ec245a1354c950ac4183de0a2a53e1d261c",
+    "template/openspec/superpower/2026-11-02-scope-fallback-guard-decisions.html": "7c0f4269718b10757d47d5f8c3fd6ca1b7b1bed4",
+    "tests/test_gate_scope_lint.py": "4457c78c743a6435ccedbce93e4c17eaddc18292",
+    "tests/test_scope_docs.py": "22164b462278e3d547889d72632ba4725f45ffdd",
+    "tests/test_spec_html_scope.py": "13fa67f43f4c8d340c5ce6546d11713bae3b15f5",
+    "tests/test_tier_file_incremental.py": "515f6218c5b5ab83439beb936c213ac673c010a2"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "test-tiers-polyglot",
+      "commit": "7a38afcb0faf",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/test-tiers.py, template/.claude/skills/openspec-propose/SKILL.md, template/CLAUDE.md.snippet, template/openspec/adr/DRAFT-repo-selector-reports-scope-at-plan-time.md"
+    },
+    {
+      "change": "incremental-final",
+      "commit": "7a222e474fc2",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/test-tiers.py"
+    },
+    {
+      "change": "test-tiers",
+      "commit": "a20e532c9d49",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    },
+    {
+      "change": "slice-gate-paired-checks",
+      "commit": "766d3fa9a435",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    },
+    {
+      "change": "decompose-role-by-label",
+      "commit": "20ba98478b05",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    }
+  ]
+}

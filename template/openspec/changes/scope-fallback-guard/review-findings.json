@@ -1,0 +1,91 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3188,
+      "summary": "增量 final 写新锚点时，tiers_detail 对所有区域都记当前条目指纹，包括本次没跑的区域（未选的区域，以及因基线缺记录或命令已变而走 continue 的区域）。同时 _anchor_forward（:4201）会把旧锚点的 regions 原样沿用下来。结果是锚点同时声称这个区域「测过」且「条目与当前一致」，但新条目其实从没在 final 里跑过。触发路径：锚点池跨 change 共享。change A 没选区域 Y，却改了 Y 的 paths 或 covers，它取的锚点链里 Y 早被测过，于是 A 的增量 final 写出 regions 含 Y、tiers_detail.regions[Y] 为新值的锚点。change B 选了 Y、取到这个锚点，此时 Y 在 tested 里、指纹相等、Δ 又没命中，Y 就被跳过。S1 之前分层文件一改，A 的 final 就走全量，regions 从空开始重建，不会有这个缺口；所以这是新增的放宽，与 D3「区域条目变了必跑」的意图相悖。需要说明：design D2 明写了「按当前分层文件写」，所以属于设计层面的遗漏；另外 B 的 baseline 若在 A 合入之后才取，会部分补偿。",
+      "fix": "写增量锚点时，区域指纹只对本次实际跑过并且并入了 anchor_part[\"regions\"] 的区域取当前值；其余区域沿用锚点里原来的值（adet[\"regions\"].get(r)），锚点里没有就不写，这样下次会按「缺记录」去跑。可以给 _tiers_detail 加一个可选参数（ran_regions、prev_regions），只在增量分支传入。补一条测试：已测区域在未被选中期间改了条目，之后再被选中时必须跑。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_tier_file_incremental.py",
+      "line": 28,
+      "summary": "slow_allow 的对称差只测了「新增放行条目」这一个方向。真正关系到门禁安全的是「删除放行条目」：原来放行的慢用例必须重跑，并由 G10 判红。这个方向目前没有测试保护，以后如果有人把对称差误改成「当前键 − 锚点清单」，现有测试照样全绿。",
+      "fix": "补一条测试：锚点的 slow_allow 里有 tests/unit/test_z.py::test_z，当前分层文件删掉这一条且没改 test_z.py。断言 final 是增量，rerun 包含 tests/unit/test_z.py；如果能构造慢用例，再断言 G10 的判定。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 503,
+      "summary": "render_scope 只检查了 scope_full_reason 是不是非空 dict，没有检查每个值是不是字符串。值写成非字符串（如 {\"a\": 1}、true、列表）时，esc(v) 会走到 html.escape(非 str)，抛出 AttributeError，整个 spec.html 生成失败，审批页出不来。这违反切片约束「形状不对时当作没有，不抛错——校验归 lint」。我用一次定向抽查复现了：render_scope({'scope':'x','scope_full_reason':{'a':1}}, ...) 抛出 AttributeError: 'int' object has no attribute 'replace'。",
+      "fix": "过滤 reasons 时只保留值为 str 的项，例如 reasons = {k: v for k, v in reasons.items() if isinstance(v, str)} if isinstance(reasons, dict) else {}，然后 reasons = reasons or None；或者在渲染时写 esc(v if isinstance(v, str) else str(v))。另补一条测试：值不是字符串时 returncode == 0。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 488,
+      "summary": "读取 gate-scope.json 时只捕获了 ValueError。read_text 在文件存在但没有读权限（或遇到其他 IO 错误）时会抛 OSError，这种情况不会按「读不了当作没有」处理，而是直接让渲染崩溃。",
+      "fix": "把 except ValueError 改为 except (OSError, ValueError)，与同文件第 593 行的做法一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_spec_html_scope.py",
+      "line": 18,
+      "summary": "测试没有断言来源标签「计划 gate.scope」。也没有覆盖切片约束里的两条：两者都没有时不渲染「选测范围」小节、gate-scope.json 损坏或形状不对时不抛错。这些约束目前没有任何测试保护，回归时发现不了。",
+      "fix": "在 test_spec_html_shows_scope_reasons 中加 assert '计划 gate.scope' in html；另加一个用例：不写 gate.scope、不放 gate-scope.json（或写入非 JSON 内容）时，returncode 为 0 且 '选测范围' 不在 html 中。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 276,
+      "summary": "「分层文件按条目判定」一行写成「区域条目变了只让该区域必跑」，漏了「已选」。按 design D3，未选区域的条目变了不会进入 run_regions，什么都不跑；/opsx-verify 和同名 skill 写的是「已选区域条目变了该区域必跑」，README 跟它们说法不一致。",
+      "fix": "改成「已选区域的条目变了只让该区域必跑（未选区域照旧不跑）」，和 opsx-verify.md / openspec-verify-change/SKILL.md 的措辞对齐。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/test-tiers.md",
+      "line": 174,
+      "summary": "「放行（或撤销放行）后 final 不退回全量，只重跑该用例所在的测试文件」没有限定形态。本文件第 63 行写明部件形态下 final 恒全量，slow_allow 在部件形态里同样存在，所以这句对部件形态不成立。另外，本节规定模型不得直接编辑 slow_allow，而文档里没有「撤销放行」的途径，这里的「撤销」没有对应操作。",
+      "fix": "在句首加「简写形态下」；「撤销放行」改成「slow_allow 增删」，或补一句由人类手工删除条目，和 D3「键集合对称差」的口径一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-verify.md",
+      "line": 22,
+      "summary": "「单元层指纹只取 test-tiers.json 的单元层」没有限定简写形态。design D1 规定部件形态仍取整个文件的 blob 哈希，所以这句话对部件形态不成立（部件形态 final 恒全量，实际行为不受影响，但文档口径不准确）。同名 skill template/.claude/skills/openspec-verify-change/SKILL.md:29 有同样的问题。",
+      "fix": "两份同时改成「简写形态下单元层指纹只取 test-tiers.json 的单元层（部件形态 final 恒全量）」，保持命令和 skill 一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/schemas/intent-driven/schema.yaml",
+      "line": 302,
+      "summary": "跨切片提醒（需进一步确认）：schema、/opsx-propose、README 写的是 lint / preflight 实跑 gate.scope、GATE_SCOPE_OUT 报告校验、gate.scope_full_reason 逐项核对。但当前分支 HEAD 的 git log 只有 integrate S1/S3/S4，没有本 change 的 S2；tests/test_gate_scope_lint.py 里仍有 strict xfail 标记，slice-gate.py 里也搜不到 GATE_SCOPE_OUT / scope_full_reason。如果 S2 没有落地就提 PR，这些文档写的是不存在的行为。这不是 S4 本身的缺陷：切片包要求以 design 为准。",
+      "fix": "PR 前确认 S2 已经集成，且 tests/test_gate_scope_lint.py 的骨架标记已经去掉；S2 的 stderr 摘要措辞（「选测范围全选（触发 …）」）要和文档里的「选测退化为全选」提法对得上，对不上就同步修改文档。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2116,
+      "summary": "lint_plan 不看前面已累积的违规，照样实跑选测命令。计划已经因 gate.test 缺失、owns 越界、成环、tiers 违规等变红时，lint / preflight 仍会执行一条最长 300 秒的仓库命令，跑完结论还是红，白白拖慢反馈。",
+      "fix": "把调用改为 `_lint_scope(gate, change_dir, run_scope and not errors)`。形状校验照常做，只有计划其余部分全绿时才实跑。也可以在 _lint_scope 的 docstring 里写明「仅在计划其余部分无违规时实跑」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1568,
+      "summary": "选测命令的工作目录取的是 toplevel()，即当前 shell 所在目录的 git 顶层；同文件 _lint_tiers 取的是 toplevel(change_dir)。若 --change-dir 指向另一个 worktree 或仓库，选测会在错误的仓库里算范围。cwd 不在 git 仓库时，die() 会直接中断 lint，报「不在 git 仓库内」，而不是一条 scope: 违规。（需进一步确认：切片包原文写的是 toplevel()，SKILL 里的标准调用两者等价。）",
+      "fix": "改为 `_run_scope(cmd, toplevel(change_dir))`，与 _lint_tiers 的根解析保持一致。如果有意按 cwd 取根，就在 design D5 里写明，并补一条用例覆盖 cwd 与 change_dir 不在同一仓库的情形。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1513,
+      "summary": "超时用的是 subprocess.run(shell=True, timeout=...)，超时时只杀掉 sh，选测命令派生的孙进程会成为孤儿继续运行。同文件的 G7 已经用 start_new_session=True 加 os.killpg 整组杀掉，本处未沿用这一做法（和 tier list 的写法一致，所以只记 LOW）。",
+      "fix": "改用 Popen(..., start_new_session=True) 加 communicate(timeout=SCOPE_TIMEOUT)，超时时调用 os.killpg(p.pid, 9) 后再 communicate()，与 G7 的处理一致。"
+    }
+  ],
+  "fix": null
+}

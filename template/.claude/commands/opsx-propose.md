@@ -51,6 +51,7 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    - 一次性写出全部该建的工件（proposal → specs → design(按触发器) → adr(按触发器) → tasks）。
    - **tasks 阶段**额外产出（详见 schema 的 tasks instruction）：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 测试骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 生成的 `tasks.md`。
    - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。部件形态（`test-tiers.json` 顶层是 `parts`）下 `gate.test` 改为等于 `python3 .claude/hooks/test-tiers.py run unit`、不得写 `gate.impacted`，骨架落在某部件的单元层或已选区域。
+   - 仓库自带选测（按改动选测试范围、可能退化为全选）时，在 openspec 根配 `gate-scope.json`（`{"cmd": "<只算范围的命令>"}`，仓库默认）或在计划写 `gate.scope`：lint 与 preflight 在 git 顶层实跑它（300 秒），命令往 `GATE_SCOPE_OUT` 指向的文件写 `{full, triggers, count}`，失败即红。lint 报「选测退化为全选」时，先看触发项是不是工作流自己的元数据改动——能修选测就修选测；不能修再在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），由人类在 spec.html 看着触发项与理由放行。
    - 随后跑：
      ```bash
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>
