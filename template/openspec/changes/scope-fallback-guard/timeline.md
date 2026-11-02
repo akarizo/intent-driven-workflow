@@ -7,3 +7,7 @@
 2026-11-02T06:36:54Z	integrate	wave 1
 2026-11-02T06:43:27Z	gate	S2 ok
 2026-11-02T06:43:38Z	integrate	wave 2
+2026-11-02T06:45:04Z	review	findings=12 blocking=0 deferred=12
+2026-11-02T06:58:53Z	final	增量（锚点 471aa98eb3，重跑 37 个文件 / 沿用 123 个用例） ok
+2026-11-02T06:59:04Z	apply-done	blocked=0 blocking=0
+2026-11-02T06:59:15Z	ship	ready
