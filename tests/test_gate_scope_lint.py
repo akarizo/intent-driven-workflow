@@ -57,7 +57,6 @@ def _scope_lines(stderr):
     return out
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：gate.scope / gate.scope_full_reason / gate-scope.json 形状校验")
 def test_scope_lint_rejects_malformed_declarations(git_repo):
     # Given: gate.scope 是空白串；gate.scope_full_reason 里 a.json 的理由是空白；openspec 根 gate-scope.json 带未知字段 args
     change = _repo(git_repo, gate_scope="  ", reasons={"a.json": " "}, default={"cmd": CMD, "args": "-x"})
@@ -72,7 +71,6 @@ def test_scope_lint_rejects_malformed_declarations(git_repo):
         assert any(word in l for l in lines), (word, p.stderr)
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：选测命令非 0 退出即 lint 红")
 def test_scope_command_failure_is_red(git_repo):
     # Given: 计划的 gate.scope 命令以退出码 3 退出
     change = _repo(git_repo, gate_scope=CMD + " 3")
@@ -85,7 +83,6 @@ def test_scope_command_failure_is_red(git_repo):
     assert any("exit 3" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：选测报告形状不合法即 lint 红")
 def test_scope_bad_report_is_red(git_repo):
     # Given: gate.scope 退出 0，但写进 GATE_SCOPE_OUT 的是 {"full": "yes", "triggers": "a"}
     change = _repo(git_repo, report={"full": "yes", "triggers": "a"}, gate_scope=CMD)
@@ -98,7 +95,6 @@ def test_scope_bad_report_is_red(git_repo):
     assert any("full" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：lint 实跑选测命令并打印范围摘要")
 def test_scope_not_full_passes(git_repo):
     # Given: gate.scope 从仓库相对路径读报告、写进 GATE_SCOPE_OUT：{"full": false, "triggers": [], "count": 12}
     change = _repo(git_repo, report={"full": False, "triggers": [], "count": 12}, gate_scope=CMD)
@@ -112,7 +108,6 @@ def test_scope_not_full_passes(git_repo):
     assert any("未全选" in l and "12" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：计划没写 gate.scope 时用仓库默认 gate-scope.json")
 def test_repo_default_used_when_plan_silent(git_repo):
     # Given: gate-scope.json 是 {"cmd": "python3 tools/scope.py"}，它报告全选、触发项 tools/infra.txt；计划没写 gate.scope 与理由
     change = _repo(git_repo, report={"full": True, "triggers": ["tools/infra.txt"]}, default={"cmd": CMD})
@@ -125,7 +120,6 @@ def test_repo_default_used_when_plan_silent(git_repo):
     assert any("tools/infra.txt" in l and "gate.scope_full_reason" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：计划的 gate.scope 优先于仓库默认")
 def test_plan_scope_overrides_repo_default(git_repo):
     # Given: gate-scope.json 的命令以退出码 1 退出；计划的 gate.scope 报告未全选、count 为 7
     change = _repo(git_repo, report={"full": False, "triggers": [], "count": 7}, gate_scope=CMD,
@@ -151,7 +145,6 @@ def test_waves_does_not_run_scope(git_repo):
     assert isinstance(json.loads(p.stdout.strip().splitlines()[-1]), list), p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：preflight 同样实跑选测命令并核对表态")
 def test_preflight_runs_scope(git_repo):
     # Given: 计划的 gate.scope 报告全选、触发项 tools/infra.txt，计划没写 gate.scope_full_reason
     change = _repo(git_repo, report={"full": True, "triggers": ["tools/infra.txt"]}, gate_scope=CMD)
@@ -179,7 +172,6 @@ def test_scope_fields_not_in_plan_sha():
     assert sa == sb
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：全选时须逐项写理由")
 def test_full_without_reason_is_red(git_repo):
     # Given: gate.scope 报告全选、触发项 a.json 与 b.py，计划没写 gate.scope_full_reason
     change = _repo(git_repo, report={"full": True, "triggers": ["a.json", "b.py"]}, gate_scope=CMD)
@@ -194,7 +186,6 @@ def test_full_without_reason_is_red(git_repo):
         assert any(word in l for l in lines), (word, p.stderr)
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：理由与触发项一一对应时放行并打印摘要")
 def test_full_with_matching_reasons_passes(git_repo):
     # Given: gate.scope 报告全选、触发项 a.json 与 b.py；gate.scope_full_reason 为两项各写了非空理由
     change = _repo(git_repo, report={"full": True, "triggers": ["a.json", "b.py"]}, gate_scope=CMD,
@@ -209,7 +200,6 @@ def test_full_with_matching_reasons_passes(git_repo):
                for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：理由的键须等于本次触发项")
 def test_reason_keys_must_match_triggers(git_repo):
     # Given: gate.scope 报告全选、触发项只有 a.json；gate.scope_full_reason 写了 a.json 与 old.txt
     change = _repo(git_repo, report={"full": True, "triggers": ["a.json"]}, gate_scope=CMD,
@@ -223,7 +213,6 @@ def test_reason_keys_must_match_triggers(git_repo):
     assert any("old.txt" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：未全选时不得写全选理由")
 def test_reason_when_not_full_is_red(git_repo):
     # Given: gate.scope 报告未全选；gate.scope_full_reason 写了 a.json
     change = _repo(git_repo, report={"full": False, "triggers": []}, gate_scope=CMD, reasons={"a.json": "理由"})
@@ -236,7 +225,6 @@ def test_reason_when_not_full_is_red(git_repo):
     assert any("a.json" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：没有选测命令时不得写全选理由")
 def test_reason_without_scope_command_is_red(git_repo):
     # Given: 计划没写 gate.scope，openspec 根也没有 gate-scope.json；gate.scope_full_reason 写了 a.json
     change = _repo(git_repo, reasons={"a.json": "理由"})
