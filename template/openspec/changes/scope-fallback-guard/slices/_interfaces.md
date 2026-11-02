@@ -22,3 +22,15 @@
 ### S4（文档 / schema，无代码签名）
 - `template/openspec/schemas/intent-driven/schema.yaml` 选测范围契约
 - `opsx-propose.md` / `openspec-propose/SKILL.md` 同步
+
+## 合回签名摘要（wave 2）
+
+### S2（`template/.claude/hooks/slice-gate.py`）
+- `SCOPE_FILE` / `SCOPE_REPORT_FIELDS` / `SCOPE_TIMEOUT` 选测范围常量
+- `def _scope_default(change_dir)` 读取仓库默认 gate-scope.json
+- `def _scope_report_errors(r)` 校验 GATE_SCOPE_OUT 报告字段
+- `def _run_scope(cmd, root)` 执行选测范围命令并取报告
+- `def _scope_reason_errors(report, reasons)` 校验 scope_full_reason 与触发项
+- `def _lint_scope(gate, change_dir, run_scope)` lint 阶段选测范围检查
+- `def lint_plan(data, change_dir=None, run_scope=False)` 计划 lint（新增 run_scope）
+- `def cmd_lint(args, print_waves=True)` / `def cmd_preflight(args)` 接入选测范围
