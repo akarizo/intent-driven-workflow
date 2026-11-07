@@ -4189,6 +4189,9 @@ def _merge_links(root, sid, sha, links):
             target = ours
         else:
             pre = _sub_head(root, p)
+            if pre != ours:
+                _merge_rollback(root, sub_pre)
+                return "merge %s: %s 的检出 %s 与 gitlink %s 不一致" % (sid, p, (pre or "?")[:10], ours[:10])
             m = _sub_git(root, p, "merge", "--no-ff", "--no-edit", "-m", "integrate: " + sid, theirs)
             if m.returncode != 0:
                 files = _unmerged(subdir)
