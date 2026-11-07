@@ -277,6 +277,18 @@
 3306:def cmd_start(args)  # start 前调用 _sub_sync，失败退出 1
 4131:def cmd_sub_sync(args)  # 子命令 sub-sync [--expect-branch] [--change-dir]，打印 {ok, synced, failed, warnings}
 
+## S3
+### template/.claude/hooks/slice-gate.py
+4144:def _in_merge(root)  # 是否存在 MERGE_HEAD
+4148:def _unmerged(root)  # 未合并（冲突）路径列表
+4159:def _merge_rollback(root, sub_pre)  # 回滚父仓合并与已合过的子仓
+4167:def _merge_links(root, sid, sha, links)  # 处理 gitlink：快进直钉 / 分叉在子仓内合并后钉
+4205:def _merge_sync_checkout(root, links, warnings)  # 合回后同步子仓检出到 gitlink
+4225:def cmd_merge(args)  # 子命令 merge <S>=<sha> ...，逐片 merge --no-ff，打印 {ok, merged, failed, warnings}，退出 0 / 1
+
+### tests/test_submodule_merge.py
+(仅去掉 @PENDING，无新增公开签名)
+
 ## S4
 ### template/.claude/workflows/opsx-apply.js
 20:export const meta = {
