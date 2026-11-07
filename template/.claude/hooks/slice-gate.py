@@ -4137,6 +4137,140 @@ def cmd_sub_sync(args):
     sys.exit(1 if failed else 0)
 
 
+def _run_git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+
+
+def _in_merge(root):
+    return _run_git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+
+
+def _unmerged(root):
+    return [f for f in _run_git(root, "diff", "--name-only", "--diff-filter=U", "-z").stdout.split("\0") if f]
+
+
+def _theirs_links(root, mb, sha):
+    """mb→sha 一侧新 mode 为 160000 的路径（design D5）。"""
+    parts = _run_git(root, "diff", "--raw", "-z", "--no-renames", mb, sha).stdout.split("\0")
+    return sorted(parts[i + 1] for i in range(0, len(parts) - 1, 2)
+                  if parts[i].startswith(":") and parts[i][1:].split()[1:2] == [GITLINK_MODE])
+
+
+def _merge_rollback(root, sub_pre):
+    """回滚本片：已合过的子仓 reset --keep 回合前 HEAD，父仓 merge --abort。"""
+    for p, pre in sub_pre.items():
+        _sub_git(root, p, "reset", "-q", "--keep", pre)
+    if _in_merge(root):
+        _run_git(root, "merge", "--abort")
+
+
+def _merge_links(root, sid, sha, links):
+    """逐个钉 gitlink：快进直钉，分叉在家子仓内合并后再钉。成功返回 None，失败已回滚并返回 failed 文案。"""
+    sub_pre = {}
+    for p in links:
+        ours = _recorded_gitlink(root, p)
+        if not ours:
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 是新增 submodule，不支持（改走 --gate=per-task）" % (sid, p)
+        r = _run_git(root, "rev-parse", "%s:%s" % (sha, p))
+        theirs = r.stdout.strip()
+        if ours == theirs:
+            continue
+        if not _sub_ready(root, p):
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 子仓未填充：在 %s 运行 git submodule update --init %s" % (sid, p, root, p)
+        if r.returncode != 0 or not _sub_has(root, p, theirs):
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 的对象库里没有被合入一侧的 gitlink %s" % (sid, p, theirs[:10] or "?")
+        subdir = os.path.join(root, p)
+        if _is_ancestor(subdir, ours, theirs):
+            target = theirs
+        elif _is_ancestor(subdir, theirs, ours):
+            target = ours
+        else:
+            pre = _sub_head(root, p)
+            m = _sub_git(root, p, "merge", "--no-ff", "--no-edit", "-m", "integrate: " + sid, theirs)
+            if m.returncode != 0:
+                files = _unmerged(subdir)
+                _sub_git(root, p, "merge", "--abort")
+                _merge_rollback(root, sub_pre)
+                return "merge %s: %s 子仓合并冲突（%s）" % (
+                    sid, p, ", ".join(files) or _first_line(m.stderr + m.stdout, "?"))
+            sub_pre[p] = pre
+            target = _sub_head(root, p)
+        _run_git(root, "update-index", "--cacheinfo", "%s,%s,%s" % (GITLINK_MODE, target, p))
+    return None
+
+
+def _merge_sync_checkout(root, links, warnings):
+    """合回后子仓检出对齐父仓 HEAD 的 gitlink：分支上快进，detached 直接检出，其余记 warning。"""
+    for p in links:
+        if not _sub_ready(root, p):
+            continue
+        target, head = _recorded_gitlink(root, p), _sub_head(root, p)
+        if not target or head == target:
+            continue
+        on_branch = _sub_git(root, p, "symbolic-ref", "-q", "HEAD").returncode == 0
+        if on_branch and head and _is_ancestor(os.path.join(root, p), head, target):
+            r = _sub_git(root, p, "merge", "-q", "--ff-only", target)
+        elif not on_branch:
+            r = _sub_git(root, p, "checkout", "-q", "--detach", target)
+        else:
+            warnings.append("merge: %s 的分支检出 %s 不是 gitlink %s 的祖先，未同步" % (p, (head or "?")[:10], target[:10]))
+            continue
+        if r.returncode != 0:
+            warnings.append("merge: %s 同步到 gitlink %s 失败：%s" % (p, target[:10], _first_line(r.stderr, "?")))
+
+
+def cmd_merge(args):
+    """integrator 合回：逐片 merge --no-ff，gitlink 快进直钉 / 分叉在家子仓内合并后钉（design D5）。退出 0 / 1。"""
+    pairs = []
+    for a in args.pairs:
+        sid, sep, sha = a.partition("=")
+        if not sep or not sid.strip() or not sha.strip():
+            die("merge 参数须形如 <S>=<sha>：%r" % a)
+        pairs.append((sid.strip(), sha.strip()))
+    root = toplevel()
+    merged, failed, warnings = [], [], []
+    for p in sorted(_gitlinks(root)):
+        if not _sub_ready(root, p):
+            continue
+        rec, head = _recorded_gitlink(root, p), _sub_head(root, p)
+        busy = "（合并中）" if _in_merge(os.path.join(root, p)) else ""
+        if head != rec or busy:
+            failed.append("merge: %s 的检出 %s%s 与 gitlink %s 不一致，先同步" % (
+                p, (head or "?")[:10], busy, (rec or "无")[:10]))
+    for sid, sha in ([] if failed else pairs):
+        r = _run_git(root, "merge", "--no-ff", "--no-commit", "-m", "integrate: " + sid, sha)
+        conflicted = set(_unmerged(root))
+        if r.returncode != 0 and not conflicted:
+            if _in_merge(root):
+                _run_git(root, "merge", "--abort")
+            failed.append("merge %s: %s" % (sid, _first_line(r.stderr + r.stdout, "?")))
+            break
+        mb = _run_git(root, "merge-base", "HEAD", sha).stdout.strip()
+        links = _theirs_links(root, mb, sha) if mb else []
+        if conflicted - set(links):
+            _run_git(root, "merge", "--abort")
+            failed.append("merge %s: 冲突文件 %s" % (sid, ", ".join(sorted(conflicted - set(links)))))
+            break
+        err = _merge_links(root, sid, sha, links)
+        if err:
+            failed.append(err)
+            break
+        if _in_merge(root):
+            c = _run_git(root, "commit", "-q", "-m", "integrate: " + sid)
+            if c.returncode != 0:
+                _merge_rollback(root, {})
+                failed.append("merge %s: 提交失败：%s" % (sid, _first_line(c.stderr + c.stdout, "?")))
+                break
+        _merge_sync_checkout(root, links, warnings)
+        merged.append(sid)
+    ok = not failed
+    print(json.dumps({"ok": ok, "merged": merged, "failed": failed, "warnings": warnings}, ensure_ascii=False))
+    sys.exit(0 if ok else 1)
+
+
 def cmd_preflight(args):
     """起飞前四项校验：计划合法、基线存在且绿、基线未过期、基线 commit 在当前分支历史。通过打印 waves。"""
     root = toplevel()
@@ -5261,13 +5395,16 @@ def main():
     p.add_argument("--red", action="store_true")
     p.add_argument("--failed")
     p.add_argument("--warnings")
+    p = sub.add_parser("merge", help="integrator 合回：逐片 merge --no-ff 并处理 gitlink；打印 {ok, merged, failed, warnings}，exit 0 / 1")
+    p.add_argument("pairs", nargs="+", metavar="S=sha")
     p = sub.add_parser("ship", help="draft / ready 裁决：读 gate-report.md + HEAD + review-findings.json；退出码 0 ready / 1 draft")
     p.add_argument("--change-dir", required=True)
     p.add_argument("--markdown", action="store_true", help="打印可贴入 PR 正文的段落而不是 JSON")
     args = ap.parse_args()
     {"lint": cmd_lint, "waves": cmd_lint, "start": cmd_start, "gate": cmd_gate, "record": cmd_record,
      "final": cmd_final, "baseline": cmd_baseline, "preflight": cmd_preflight, "ship": cmd_ship,
-     "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync}[args.cmd](args)
+     "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync,
+     "merge": cmd_merge}[args.cmd](args)
 
 
 if __name__ == "__main__":
