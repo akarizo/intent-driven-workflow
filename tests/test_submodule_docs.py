@@ -84,3 +84,20 @@ def test_apply_docs_mirror_submodule():
     for sec in sections:
         assert "slice-gate.py merge" in sec and "slice-gate.py sub-sync" in sec, sec[:200]
     assert "## Submodule" in disc and "linked worktree" in disc
+
+
+def test_integrator_merge_falls_back_when_subcommand_missing(tmp_path):
+    # Given: integrator.md 第 1 项；waves [[S1, S2], [S3]] 门禁全绿，S1 评审给出 1 条 HIGH，fix 返回 commit 9…9
+    integrator = read("agents/integrator.md")
+    item1 = integrator[integrator.index("## 1."):integrator.index("## 2.")]
+    replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
+               ["^review:S1$", REVIEW_HIGH], ["^fix$", gate_json("final", commit="9" * 40)]]
+
+    # When: 跑完工作流，取 wave 1 合回与 finalize 的 prompt
+    out, calls = _calls(tmp_path, replies)
+    prompts = [calls["integrate:w1"]["prompt"], calls["final-gate"]["prompt"]]
+
+    # Then: 第 1 项写明 merge 报 invalid choice（hooks 未升级）时逐片 git merge --no-ff、冲突 git merge --abort 返回 ok:false，且脚本存在时仍禁手工 merge；两处 prompt 都指向该回退
+    assert "invalid choice" in item1 and "git merge --abort" in item1 and "脚本存在时" in item1, item1
+    for p in prompts:
+        assert "invalid choice" in p and "第 1 项的回退" in p, p
