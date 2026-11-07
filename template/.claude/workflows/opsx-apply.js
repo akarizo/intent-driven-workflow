@@ -173,7 +173,7 @@ for (const [i, allWave] of waves.entries()) {
     // integrator 抛错与未返回同样重派一次；返回 ok:false（合回冲突）是确定性的，不重派
     const callInteg = (retry) => agent(
       rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件（timeline.md / gate-report.md / evidence.log）提交掉；` +
-      `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge ${pairs.join(' ')}\` 合回切片 ${merged.join(', ')}（它逐片 git merge --no-ff 并处理 submodule gitlink；退出非 0 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
+      `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge ${pairs.join(' ')}\` 合回切片 ${merged.join(', ')}（它逐片 git merge --no-ff 并处理 submodule gitlink；报 invalid choice（子命令不存在）→ 按第 1 项的回退逐片 git merge --no-ff；退出 1 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
       `合回后逐条运行（把临时 worktree 里的门禁结论写回分支）：\n${recordCmds.join('\n')}\n` +
       `然后按第 2 项刷新 ${changeDir}/slices/_interfaces.md，并 \`python3 ${hooksDir}/timeline.py record integrate --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后再按第 0 项把飞行记录提交。` +
       '本次只合回，不要运行第 3 项（全量门禁 final）——后续 wave 的 scenario 还没解锁，现在跑必然红。返回 JSON {ok, merged, failed, warnings}。',
@@ -225,7 +225,7 @@ if (blocking.length) {
 phase('Finalize')
 // fix 在临时 worktree 里提交：合回指令必须先于 final，否则 final 验的是没有修复的分支
 const mergeFix = fix && fix.commit
-  ? `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge fix=${fix.commit}\` 合回 fix 的 commit（退出非 0 → 返回 ok:false 且 failed 写「merge fix 冲突」，不再往下跑）；` +
+  ? `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge fix=${fix.commit}\` 合回 fix 的 commit（报 invalid choice（子命令不存在）→ 按第 1 项的回退 git merge --no-ff；冲突 → 返回 ok:false 且 failed 写「merge fix 冲突」，不再往下跑）；` +
     `\`python3 ${hooksDir}/timeline.py record fix --change-dir ${changeDir} --note "blocking=${blocking.length}"\`；`
   : ''
 // final-gate 同 integrator：抛错与未返回重派一次，仍为空记 blocked（infra），返回的 final 为 null

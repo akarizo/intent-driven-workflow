@@ -20,6 +20,7 @@ color: cyan
 - 它逐片执行 `git merge --no-ff <sha> -m "integrate: <S>"`；
 - submodule gitlink 冲突由脚本在子仓内合并后钉回父仓；合回后子仓检出与 gitlink 同步；
 - 任何真冲突由脚本自行 abort 并退出 1：把它 JSON 的 `failed` 原样返回（`ok: false`），不要手工 merge 或解冲突。
+- **回退**：`slice-gate.py merge` 报 `invalid choice`（hooks 未升级、子命令不存在，退出 2、无 JSON）→ 按 prompt 顺序逐片 `git merge --no-ff <sha> -m "integrate: <S>"`；冲突时 `git merge --abort`，返回 `{"ok": false, "failed": ["merge <S>: 冲突文件 …"]}`，不解冲突；`warnings` 记「slice-gate.py merge 不可用，已回退 git merge」。只有这种情况允许直接 `git merge`，脚本存在时仍禁止手工 merge。
 
 ## 2. 抽公开接口摘要
 
