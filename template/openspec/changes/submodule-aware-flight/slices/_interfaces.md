@@ -266,6 +266,17 @@
 147:def commit_parent(cwd, msg, *paths):
 153:def run_executor(env, sid, mod, name=None):
 
+## S2
+### template/.claude/hooks/slice-gate.py
+3049:def _need_subs(root, owns)  # 返回 owns 以 P/ 开头的 gitlink 路径集合
+3054:def _home_root(root, branch)  # 找 branch 所在 worktree 路径，找不到 → None
+3073:def _sub_sync(root, branch, need)  # -> (synced, failed, warnings)，按 gitlink 填充子仓
+3173:def _checkpoint(root)  # 快照覆盖子仓段
+3216:def _ckpt_commit(repo, head, files, msg)  # 临时 index 生成快照 commit，父仓/子仓共用
+3258:def _ckpt_restore(root, ref, owns)  # 恢复快照，覆盖子仓
+3306:def cmd_start(args)  # start 前调用 _sub_sync，失败退出 1
+4131:def cmd_sub_sync(args)  # 子命令 sub-sync [--expect-branch] [--change-dir]，打印 {ok, synced, failed, warnings}
+
 ## S4
 ### template/.claude/workflows/opsx-apply.js
 20:export const meta = {
