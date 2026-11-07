@@ -12,3 +12,6 @@
 2026-11-07T05:16:39Z	integrate	wave 2
 2026-11-07T05:22:55Z	gate	S3 ok
 2026-11-07T05:23:03Z	integrate	wave 3
+2026-11-07T05:25:27Z	review	findings=15 blocking=0 deferred=15
+2026-11-07T05:29:36Z	final	全量（Δ 含全局文件：tests/conftest.py） ok
+2026-11-07T05:29:42Z	apply-done	blocked=0 blocking=0
