@@ -12,3 +12,7 @@
 2026-11-07T08:56:06Z	integrate	wave 2
 2026-11-07T09:03:58Z	gate	S3 ok
 2026-11-07T09:04:10Z	integrate	wave 1
+2026-11-07T09:13:53Z	fix	blocking=1
+2026-11-07T09:13:53Z	review	findings=3 blocking=1 deferred=2
+2026-11-07T09:13:54Z	final	同树沿用 417cd291fd ok
+2026-11-07T09:13:56Z	apply-done	blocked=0 blocking=1
