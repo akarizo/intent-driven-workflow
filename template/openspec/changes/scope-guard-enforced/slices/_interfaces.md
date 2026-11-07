@@ -1,50 +1,114 @@
-# 切片间接口
+# 公开接口摘要
 
-- **S1 → S2 → S3** 同改 `template/.claude/hooks/slice-gate.py`，只能串行；**S4** 只依赖 S1 落地的 `scope-seed` 子命令与声明形态，与 S2 同属 wave 2，owns 不相交。
-- 各片只动自己那一块：
-  - S1：声明解析、提供方、lint 路径、`scope-seed`、审批页；
-  - S2：内建预测与 final 判定 / 选中；
-  - S3：baseline / final 的复核与 approve 绑定。
+## S1
 
-## S1 落地、后续切片依赖的签名（`slice-gate.py`）
-
-- `SCOPE_UNDECLARED = "scope:undeclared"`：伪触发项。
-- `def _scope_provider(gate, change_dir) -> (dict, list)`：
-  - 返回 `({"kind": "cmd" | "builtin" | None, "cmd": str | None, "source": str | None}, errors)`；
-  - 优先级：`gate.scope` > `<openspec 根>/gate-scope.json` > 未声明；
-  - `errors` 是声明形态违规（只能取其一 / builtin 须为 true / 未知字段 / 读不出）。
-- `def _plain_test_cmd(cmd) -> bool`：builtin 的 gate.test 识别（design D3），`scope-seed` 共用。
-- `def _planned_owns(data) -> list`：各片 owns 按切片顺序去重。
-- `def _establishes_decl(data, change_dir) -> bool`：任一 owns glob 匹配 `<openspec 根>/gate-scope.json` 的仓库相对路径。
-- `def _run_scope(cmd, root, planned=(), change_rel="") -> (errors, report | None)`：另设 `GATE_SCOPE_PLANNED`（临时文件路径，一行一条）与 `GATE_SCOPE_CHANGE`。
-- `def _builtin_report(root, change_dir, data, phase) -> dict`：
-  - S1 先给最小实现：`{"full": False, "triggers": [], "pending": [], "notes": []}`；
-  - S2 替换为真实预测，签名不变；
-  - `phase ∈ {"lint", "preflight", "baseline", "final"}`。
-- `def _scope_reason_errors(report, reasons, pending=())`：`pending` 里的键不算多余理由。
-- `def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint") -> (errors, note)`：
-  - 实跑核对时处理三种提供方与「未声明」；
-  - `run_scope` 为假时只做形状校验，不判未声明。
-- `def lint_plan(data, change_dir=None, run_scope=False, phase="lint")`：
-  - `cmd_lint` 传 `phase="lint"`；
-  - `cmd_preflight` 传 `phase="preflight"`；
-  - S3 的 baseline 复核直接调 `_lint_scope(..., phase="baseline")`。
-
-## S2 落地、S3 依赖的签名
-
-- `def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels=(), impacted=False) -> list`：
-  - 返回全部触发项：文件类用路径；代码类用 `final:no-anchor` / `final:baseline-missing-failed-nodes` / `final:gate-test-unreproducible`；
-  - `anchor is None` 表示没有可用锚点。
-- `def _full_why(...)`：签名不变，改为基于 `_full_triggers` 的第一条拼原有措辞（现有测试断言的 `full_why` 子串不得变）。
-- `def _shell_closure(root, files) -> set`：返回新到达的仓库相对路径，不含输入本身。
-- `def _decl_rels(root, change_dir) -> set`：声明文件的仓库相对路径（`gate-scope.json`、`gate-checks.json`）；`.claude/` 前缀另判。
-
-## S3 新增
-
-- `def _approved_reasons(root, change_dir) -> dict | None`：最近一次新增 approve 行的提交里的 `gate.scope_full_reason`（缺省 `{}`）；没有 approve 提交 → `None`。
-
-## S4 依赖
-
-- CLI：`python3 <模板>/.claude/hooks/slice-gate.py scope-seed --openspec-root DIR`：
-  - 恒退出 0；
-  - stdout 首行含「已种」/「未种」/「保留已有声明」之一，「未种」时含例子与指引。
+### template/.claude/hooks/slice-gate.py
+```
+118:def _outcome(report):
+205:def _nested():
+209:def _abs_rel(p):
+216:def _repo_rel(path, cwd=None):
+237:def _argv(args):
+246:def _is_blind(executable, argv, env):
+285:def _emit(recs):
+343:def _key(node):
+348:def _enter(key):
+355:def _leave():
+380:def _window(item):
+403:def _run_window(item):
+427:def _rootdir():
+444:def _chain(path):
+455:def _resolve(mod, level, path, roots):
+483:def _imports(path, roots):
+511:def _closure(key, roots):
+524:def _conftests(key):
+570:def _flight_site():
+675:def _write(rec):
+739:def now_iso():
+743:def die(msg, code=2):
+748:def git(root, *args):
+755:def toplevel(cwd=None):
+762:def load_plan(change_dir):
+770:def save_plan(change_dir, data):
+776:def run_cmd_full(cmd, cwd):
+781:def _tail(out, n=6):
+785:def run_cmd(cmd, cwd):
+794:def _summary_failed(line):
+804:def _read_probe(path, by_top=False):
+838:def _drop_inherited(env):
+862:def _flight_plugins(tmp, env, root, deps):
+883:def _read_deps(path):
+936:def _deps_merge(a, b):
+949:def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=None, cwd=None):
+1039:def normalize_lines(text):
+1050:def plan_sha(data):
+1066:def load_baseline(change_dir):
+1077:def gate_cmd_verdict(kind, cmd, root, baseline):
+1101:def _diff_verdict(label, tg, known_failed):
+1115:def _tg_measurable(tg):
+1124:def _selected_regions(gate):
+1130:def slow_candidates(probe):
+1137:def tier_verdicts(probe, probe_why, rerun, allow):
+1162:def _root_id(root, nid):
+1168:def _junit_secs(paths, root, name):
+1189:def run_part(top, name, part, probe=True):
+1231:def part_tier_verdicts(name, res, rerun, allow):
+1264:def part_tier_verdict(top, name, part, res, allow):
+1279:def _baseline_parts(top, tiers, reasons, warnings):
+1305:def _final_parts(top, tiers, gate, baseline, failed, warnings):
+1341:def glob_match(path, pattern):
+1349:def globs_intersect(a, b):
+1360:def compute_waves(slices):
+1378:def _nonblank(v):
+1382:def _lint_checks(gate):
+1426:def _repo_default_checks(change_dir):
+1454:def _tiers_path(change_dir):
+1467:def _scope_decl_path(change_dir):
+```
+### template/.claude/hooks/spec_html.py
+```
+49:def now_iso(now_arg):
+58:def read_text(path):
+65:def esc(s):
+69:def inline_md(text):
+76:def split_sections(text, level="##"):
+94:def paragraphs(text):
+98:def list_items(text):
+107:def substitute_block(html_text, name, content):
+117:def render_why(proposal_text):
+130:def render_what(proposal_text):
+149:def render_capabilities(proposal_text):
+176:def render_scenario(name, body):
+187:def render_requirement(heading, body):
+201:def render_specs(change_dir):
+231:def extract_diagrams(design_text):
+246:def render_diagrams(design_text):
+260:def strip_mermaid(text):
+264:def render_generic_md(text):
+283:def render_design(design_text):
+311:def project_root(change_dir):
+316:def scan_adrs(change_dir):
+356:def render_tasks(tasks_text):
+386:def compute_waves(slices):
+400:def find_def_line(lines, func):
+411:def decorator_source(source, func):
+424:def scenario_flight_status(root, rel, func):
+450:def gate_report_passed_slices(change_dir):
+466:def load_timeline_rows(change_dir):
+481:def scope_provider(gate, change_dir):
+501:def establishes_scope_decl(gate_owns, change_dir):
+518:def render_scope(gate, change_dir, owns=()):
+539:def render_flight(change_dir):
+605:def compute_meta_chips(change_dir, change_name):
+644:def render_footer(now, section_count, diagram_count, task_count):
+656:def render(change_dir, template_path, out_path, now_arg):
+707:def main():
+```
+### tests/conftest.py
+```
+16:def hook_path(name: str) -> pathlib.Path:
+38:def git(repo, *args: str) -> str:
+42:def write(path: pathlib.Path, text: str) -> pathlib.Path:
+48:def commit_all(repo, msg: str) -> str:
+59:def git_repo(tmp_path):
+```
