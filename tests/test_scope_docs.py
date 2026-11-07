@@ -53,12 +53,7 @@ def test_docs_describe_scope_contract():
 # ---------------------------------------------------------------- change scope-guard-enforced · scenario: install-scope-seed#docs-describe-scope-contract-v2
 # 骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。
 
-import pytest  # noqa: E402
 
-PENDING_S4 = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S4 未实现")
-
-
-@PENDING_S4
 def test_docs_describe_scope_contract_v2():
     # Given: 本 change 的文档改动已完成
     contract = {rel: read(rel) for rel in ("template/openspec/schemas/intent-driven/schema.yaml",
