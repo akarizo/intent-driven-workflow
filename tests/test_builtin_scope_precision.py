@@ -9,13 +9,9 @@ import json
 import re
 import shutil
 
-import pytest
-
 from conftest import commit_all, load_hook, run_hook, write
 from final_helpers import baseline, change_and_commit, final, make_repo
 from test_slice_gate import plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S2 未实现")
 
 # 恒报未全选的 cmd 声明：隔离出 final 的内建判定，不受提供方复核影响
 STUB = {"cmd": "printf '{\"full\": false, \"triggers\": []}' > \"$GATE_SCOPE_OUT\""}
@@ -66,7 +62,6 @@ def _scope_lines(stderr):
     return out
 
 
-@PENDING
 def test_planned_global_file_is_trigger(git_repo):
     # Given: 仓库声明 {"builtin": true}，gate.test 是 pytest 命令；切片 owns 含已跟踪的 pyproject.toml
     _decl(git_repo, {"builtin": True})
@@ -80,7 +75,6 @@ def test_planned_global_file_is_trigger(git_repo):
     assert "pyproject.toml" in _missing(p.stderr), p.stderr
 
 
-@PENDING
 def test_planned_unseen_non_python_file_is_trigger(git_repo):
     # Given: 仓库声明 builtin，基线已跑并写下依赖图；scripts/helper.sh 从未被任何用例触及，切片 owns 含它
     _decl(git_repo, {"builtin": True})
@@ -95,7 +89,6 @@ def test_planned_unseen_non_python_file_is_trigger(git_repo):
     assert "scripts/helper.sh" in _missing(p.stderr), p.stderr
 
 
-@PENDING
 def test_preflight_reports_missing_anchor(git_repo):
     # Given: 仓库声明 builtin，基线绿，但锚点池随后被清空
     _decl(git_repo, {"builtin": True})
@@ -111,7 +104,6 @@ def test_preflight_reports_missing_anchor(git_repo):
     assert "final:no-anchor" in _missing(p.stderr), p.stderr
 
 
-@PENDING
 def test_non_pytest_runner_is_by_design(git_repo):
     # Given: 仓库声明 builtin，计划的 gate.test 是 npm test
     _decl(git_repo, {"builtin": True})
@@ -126,7 +118,6 @@ def test_non_pytest_runner_is_by_design(git_repo):
     assert any("设计边界" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@PENDING
 def test_declaration_files_do_not_force_full(git_repo):
     # Given: 仓库声明是恒报未全选的 cmd；基线已跑并写下依赖图
     _decl(git_repo, STUB)
@@ -144,7 +135,6 @@ def test_declaration_files_do_not_force_full(git_repo):
     assert inc["mode"] == "incremental" and not inc.get("full_why"), inc
 
 
-@PENDING
 def test_sourced_shell_file_selects_its_tests(git_repo):
     # Given: tests/test_run.py 用子进程运行 bash scripts/run.sh，run.sh 用 dirname 形式 source 同目录的 lib.sh；
     #        仓库声明是恒报未全选的 cmd；基线已跑
@@ -163,7 +153,6 @@ def test_sourced_shell_file_selects_its_tests(git_repo):
     assert inc["rerun"] == ["tests/test_run.py"], inc
 
 
-@PENDING
 def test_shell_closure_resolves_common_forms(git_repo):
     # Given: scripts/run.sh 用变量、BASH_SOURCE 截取、循环里的动态文件名、git 顶层相对路径五种写法引用文件；
     #        scripts/lib/common.sh 再 source ./scripts/lib/deep.sh；相关文件都存在

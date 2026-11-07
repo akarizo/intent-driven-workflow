@@ -1552,9 +1552,59 @@ def _establishes_decl(data, change_dir):
 
 
 def _builtin_report(root, change_dir, data, phase):
-    """模板内建提供方的报告（进程内，不起子进程）；phase ∈ lint / preflight / baseline / final。
-    root 为 git 顶层，不在 git 仓库里为 None。S1 最小实现：恒不全选；真实预测见 change scope-guard-enforced S2。"""
-    return {"full": False, "triggers": [], "pending": [], "notes": []}
+    """模板内建提供方的报告（进程内，不起子进程；design D5）；phase ∈ lint / preflight / baseline / final。
+    root 为 git 顶层，不在 git 仓库里为 None。→ {"full", "triggers", "pending", "notes"}：
+    预测 Δ = git ls-files 中匹配任一 owns glob 的文件，按 _full_triggers 与 final 同一套规则判触发项；
+    lint / baseline 取不到锚点时「没见过」类改列待定 pending；preflight 取不到锚点报 final:no-anchor。"""
+    owns = _planned_owns(data)
+    gate = (data or {}).get("gate") or {}
+    trig, pending, notes = [], [], []
+
+    def report():
+        t = list(dict.fromkeys(trig))
+        return {"full": bool(t), "triggers": t, "pending": pending, "notes": notes}
+
+    if root is None:  # 库外：只按 owns 条目的文件名判全局文件，不取锚点、不展开 glob
+        trig.extend(o for o in owns if _global_file(o))
+        return report()
+    tiers, _ = _load_tiers(change_dir)
+    if (gate.get("test") or "").strip() in PLAIN_TEST_CMDS or tiers_is_parts(tiers):
+        notes.append("final 恒全量（设计边界）")
+        return report()
+    try:
+        delta = [p for p in _git_raw(root, ["ls-files", "-z"]).split("\0") if p and any(glob_match(p, o) for o in owns)]
+    except RuntimeError:
+        delta = []
+    change_rel = _change_rel(root, change_dir)
+    test_cmd = gate.get("test") or detect_test_cmd(root)
+    rgate = dict(gate, test=test_cmd)
+    akey = _anchor_key(root, change_rel, test_cmd, gate) if test_cmd else None
+    tkey = _tiers_key(root, change_dir, tiers)
+    baseline, anchor = None, None
+    if phase == "preflight":
+        baseline = load_baseline(change_dir)
+        try:
+            pick = _pick_anchor(root, akey, tkey, _snapshot(root, change_rel), git(root, "rev-parse", "HEAD"),
+                                change_rel, os.path.basename(os.path.realpath(change_dir)))
+        except RuntimeError:
+            pick = None
+        anchor = pick[0] if pick else None
+    else:
+        cands = _anchor_candidates(root, akey, tkey, limit=1)
+        anchor = cands[0] if cands else None
+    decl = _decl_rels(root, change_dir)
+    tier_rel = _change_rel(root, _tiers_path(change_dir))
+    t, _, err = _full_triggers(root, delta, anchor, baseline, rgate, tier_rel, decl, bool(gate.get("impacted")))
+    if err:
+        notes.append(err)
+    if anchor is None and phase != "preflight":
+        t = [x for x in t if x != NO_ANCHOR]
+        pending.extend(p for p in delta if os.path.isfile(os.path.join(root, p)) and p not in t
+                       and not p.endswith(".py") and not is_test_path(p) and p not in decl and p != tier_rel
+                       and not p.startswith(".claude/") and os.path.splitext(p)[1].lower() not in DOC_EXT)
+        notes.append("final 精确预测在 preflight")
+    trig.extend(t)
+    return report()
 
 
 def _scope_report_errors(r):
@@ -1659,13 +1709,14 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
                     "npm test / go test ./... / cargo test），当前是 %s，认不出：自带选测的仓库改用 {\"cmd\": \"<只算范围的命令>\"}"
                     % (test if _nonblank(test) else "空")], None
         report = _builtin_report(_git_top(os.path.dirname(_scope_decl_path(change_dir))), change_dir, data, phase)
-        errors = _scope_reason_errors(report, reasons)
+        errors = _scope_reason_errors(report, reasons, report.get("pending") or ())
         if errors:
             return errors, None
+        tail = "".join("；" + n for n in report.get("notes") or [])
         if report["full"]:
-            return [], "scope: 模板内建选测（builtin）：%s 预测全选（触发 %s），已逐项写理由" % (
-                phase, "、".join(dict.fromkeys(report["triggers"])))
-        return [], "scope: 模板内建选测（builtin）：final 预测未全选"
+            return [], "scope: 模板内建选测（builtin）：%s 预测全选（触发 %s），已逐项写理由%s" % (
+                phase, "、".join(dict.fromkeys(report["triggers"])), tail)
+        return [], "scope: 模板内建选测（builtin）：final 预测未全选" + tail
     root = toplevel()
     errors, report = _run_scope(provider["cmd"], root, _planned_owns(data), _change_rel(root, change_dir))
     if errors:
@@ -3278,7 +3329,8 @@ def cmd_final(args):
                         else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
             rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
             why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate,
-                                 tier_rel=_change_rel(root, _tiers_path(args.change_dir)))
+                                 tier_rel=_change_rel(root, _tiers_path(args.change_dir)),
+                                 decl_rels=_decl_rels(root, args.change_dir))
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
@@ -4367,53 +4419,193 @@ def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
     return best
 
 
-def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None):
-    """自动全量的原因（按 spec 顺序取第一条命中）→ (why | None, warnings)。
-    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。
-    tier_rel：openspec 根分层文件的仓库相对路径，不算「未被任何用例触及的非 Python 文件」（scope-fallback-guard D4）。"""
-    if full:
-        return "手动要求 --full", []
-    if pick is None:
-        return "没有可用锚点" + ("（%s）" % snap_why if snap_why else ""), []
-    bt = (baseline or {}).get("test") or {}
-    if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
-        return "基线缺 failed_nodes（有预存红），重跑 baseline", []
-    anchor, delta = pick
-    glob = [p for p in delta if _global_file(p)]
-    if glob:
-        return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
-    if impacted:
-        return None, []
-    gate = gate or {}
+NO_ANCHOR = "final:no-anchor"
+BASELINE_NO_NODES = "final:baseline-missing-failed-nodes"
+UNREPRODUCIBLE = "final:gate-test-unreproducible"
+
+
+def _decl_rels(root, change_dir):
+    """工作流声明文件的仓库相对路径：<openspec 根>/gate-scope.json、<openspec 根>/gate-checks.json（design D6）。"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(change_dir)))
+    return [_change_rel(root, os.path.join(base, n)) for n in (SCOPE_FILE, DEFAULT_CHECKS)]
+
+
+def _unreproducible_why(root, gate):
+    """gate.test 能否被增量 final 等价复现：不能 → 原因文字，能 → None（final 与内建预测共用）。"""
     h = _pytest_head(gate.get("test") or "")
     if not gate.get("pytest"):  # 增量重跑用从 gate.test 截出的 pytest 前缀，其后的选项会丢
         if h is None or _derive_paths(h[1]) is None:
-            return "gate.test 带 pytest 之后的选项（或认不出 pytest 前缀），增量无法等价复现；配置 gate.pytest 可走增量", []
+            return "gate.test 带 pytest 之后的选项（或认不出 pytest 前缀），增量无法等价复现；配置 gate.pytest 可走增量"
     elif h is not None:  # 增量重跑用 gate.pytest：gate.test 的白名单外选项词（不是现存路径的词）都得在 gate.pytest 里
         miss = _uncovered_opts(root, h[1], shlex.split(gate["pytest"]))
         if miss:
-            return "gate.test 的选项 %s 不在 gate.pytest 里，增量无法等价复现" % " ".join(miss), []
+            return "gate.test 的选项 %s 不在 gate.pytest 里，增量无法等价复现" % " ".join(miss)
+    return None
+
+
+def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels=(), impacted=False):
+    """全量触发项（design D5，按 spec 顺序收集全部命中）→ (triggers, warnings, err)。
+    代码类：final:no-anchor / final:baseline-missing-failed-nodes / final:gate-test-unreproducible；文件类：仓库相对路径。
+    impacted=True 只看锚点与全局文件；anchor 为 None 时不判「没见过」；err = 锚点内容比对失败的原因（不抛）。"""
+    trig = []
+    if anchor is None:
+        trig.append(NO_ANCHOR)
+    bt = (baseline or {}).get("test") or {}
+    if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
+        trig.append(BASELINE_NO_NODES)
+    delta = list(delta or [])
+    trig.extend(p for p in delta if _global_file(p))
+    if impacted:
+        return trig, [], None
+    if _unreproducible_why(root, gate or {}):
+        trig.append(UNREPRODUCIBLE)
+    if anchor is None:
+        return trig, [], None
     seen = set()
     for v in (anchor.get("deps") or {}).values():
         seen.update(v)
-    cand = [p for p in delta if p not in seen and not _py_test_file(p) and p != tier_rel]
+    seen |= _shell_closure(root, seen)
+    skip = set(decl_rels) | {tier_rel}
+    cand = [p for p in delta if p not in seen and not _py_test_file(p) and p not in skip and not p.startswith(".claude/")
+            and not _global_file(p)]
     snap = anchor.get("snapshot") or {}
     try:
         blobs = _blobs_at(root, anchor["commit"], [p for p in cand if p not in snap])
     except RuntimeError as e:
-        return "锚点内容比对失败：%s" % e, []
+        return trig, [], "锚点内容比对失败：%s" % e
     existed = [p for p in cand if (snap[p] if p in snap else blobs.get(p)) is not None]
-    other = [p for p in existed if not p.endswith(".py") and os.path.splitext(p)[1].lower() not in DOC_EXT]
-    if other:
-        return "Δ 含未被任何用例触及的非 Python 文件：%s" % ", ".join(other[:8]), []
+    trig.extend(p for p in existed if not p.endswith(".py") and os.path.splitext(p)[1].lower() not in DOC_EXT)
     py = [p for p in existed if p.endswith(".py")]
-    return None, (["Δ 中 %d 个 .py 文件未被任何用例加载：%s" % (len(py), ", ".join(py[:8]))] if py else [])
+    return trig, (["Δ 中 %d 个 .py 文件未被任何用例加载：%s" % (len(py), ", ".join(py[:8]))] if py else []), None
+
+
+def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None, decl_rels=()):
+    """自动全量的原因（_full_triggers 的第一条触发项拼成人话）→ (why | None, warnings)。
+    impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。
+    tier_rel / decl_rels：openspec 根的分层文件与声明文件，不算「未被任何用例触及的非 Python 文件」（scope-fallback-guard D4、本 change D6）。"""
+    if full:
+        return "手动要求 --full", []
+    anchor, delta = pick if pick is not None else (None, None)
+    trig, warns, err = _full_triggers(root, delta, anchor, baseline, gate, tier_rel, decl_rels, impacted)
+    if not trig:
+        return (None, warns) if err is None else (err, [])
+    first = trig[0]
+    if first == NO_ANCHOR:
+        return "没有可用锚点" + ("（%s）" % snap_why if snap_why else ""), []
+    if first == BASELINE_NO_NODES:
+        return "基线缺 failed_nodes（有预存红），重跑 baseline", []
+    if first == UNREPRODUCIBLE:
+        return _unreproducible_why(root, gate or {}), []
+    files = [t for t in trig if t not in (NO_ANCHOR, BASELINE_NO_NODES, UNREPRODUCIBLE)]
+    glob = [p for p in files if _global_file(p)]
+    if glob:
+        return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
+    return "Δ 含未被任何用例触及的非 Python 文件：%s" % ", ".join(files[:8]), []
+
+
+SHELL_EXT = (".sh", ".bash")
+SHEBANG_RE = re.compile(r"^#!\s*(?:\S*/)?(?:env\s+)?(?:\S*/)?(?:sh|bash|zsh|dash)\b")
+# 脚本所在目录的四种形态（含引号变体）
+SH_DIR_RE = re.compile(r"""\$\(\s*dirname\s+["']?(?:\$\{BASH_SOURCE(?:\[0\])?\}|\$BASH_SOURCE|\$\{0\}|\$0)["']?\s*\)"""
+                       r"""|\$\{(?:BASH_SOURCE(?:\[0\])?|0)%/\*\}""")
+SH_CD_PWD_RE = re.compile(r"""\$\(\s*cd\s+["']?(/[^"'$()&;]*)["']?\s*&&\s*pwd(?:\s+-[LP])?\s*\)""")
+SH_ASSIGN_RE = re.compile(r"^(?:(?:export|local|readonly|declare(?:\s+-\w+)?)\s+)?([A-Za-z_]\w*)=(\S+)$")
+SH_TOKEN_RE = re.compile(r"[^\s;|&<>`]+")
+
+
+def _is_shell(root, rel):
+    """后缀 .sh / .bash，或首行 #! 指向 sh / bash / zsh / dash。"""
+    if rel.endswith(SHELL_EXT):
+        return True
+    if rel.endswith(".py"):
+        return False
+    try:
+        with open(os.path.join(root, rel), "r", encoding="utf-8", errors="replace") as f:
+            return bool(SHEBANG_RE.match(f.readline()))
+    except OSError:
+        return False
+
+
+def _sh_refs(root, rel):
+    """一个 shell 脚本静态引用到的现存仓库文件（design D7）；解析不到的引用（目录含未解析的 $）跳过、不猜。"""
+    # ceiling: 逐行正则启发式，不处理续行 / heredoc / 函数返回值 -> 漏解析的引用照旧触发全量；误判多时改用 shell 语法树
+    top = os.path.realpath(root)
+    sdir = os.path.dirname(os.path.join(top, rel))
+    try:
+        with open(os.path.join(top, rel), "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return set()
+    out, vars_ = set(), {}
+
+    def keep(path):
+        p = os.path.realpath(path)
+        if os.path.isfile(p) and p.startswith(top + os.sep):
+            out.add(os.path.relpath(p, top).replace(os.sep, "/"))
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        for v, val in vars_.items():
+            line = re.sub(r"\$\{%s\}|\$%s(?!\w)" % (v, v), lambda _m, val=val: val, line)
+        line = SH_DIR_RE.sub(lambda _m: sdir, line)
+        line = SH_CD_PWD_RE.sub(lambda m: m.group(1), line)
+        m = SH_ASSIGN_RE.match(line)
+        if m:
+            val = m.group(2).replace('"', "").replace("'", "")
+            if val.startswith("/") and "$" not in val:
+                vars_[m.group(1)] = val.rstrip("/")
+        for tok in SH_TOKEN_RE.findall(line.replace('"', "").replace("'", "")):
+            if tok.startswith("-") or not ("/" in tok or re.search(r"\.\w+$", tok)):
+                continue
+            d, name = tok.rsplit("/", 1) if "/" in tok else ("", tok)
+            if "$" in d or "`" in d:
+                continue  # 目录含未解析的 $(…) / $VAR：不猜
+            bases = [d] if d.startswith("/") else [os.path.join(sdir, d), os.path.join(top, d)]
+            if "$" in name:
+                ext = os.path.splitext(name)[1]
+                for b in bases:
+                    if os.path.isdir(b):
+                        for n in sorted(os.listdir(b)):
+                            if ext and n.endswith(ext):
+                                keep(os.path.join(b, n))
+                        break
+                continue
+            for b in bases:
+                if os.path.isfile(os.path.join(b, name)):
+                    keep(os.path.join(b, name))
+                    break
+    return out
+
+
+def _shell_closure(root, files, memo=None):
+    """shell 静态闭包（design D7）：从 files 里的 shell 脚本出发，递归解析新到达的 shell 脚本（防环），
+    返回新到达的仓库文件集合（不含 files 本身）。memo：{脚本: 直接引用} 缓存，同一树上多次调用共用。"""
+    memo = {} if memo is None else memo
+    files = set(files)
+    todo = [f for f in files if _is_shell(root, f)]
+    done, out = set(), set()
+    while todo:
+        s = todo.pop()
+        if s in done:
+            continue
+        done.add(s)
+        if s not in memo:
+            memo[s] = _sh_refs(root, s)
+        for r in memo[s]:
+            if r not in files and r not in out:
+                out.add(r)
+                if _is_shell(root, r):
+                    todo.append(r)
+    return out
 
 
 def _final_select(root, anchor, delta):
-    """选中集合（design D5）：依赖与 Δ 相交 ∪ Δ 里的测试文件 ∪ 锚点失败所在 ∪ 盲；只留现存文件，排序。"""
-    ds = set(delta)
-    sel = {f for f, v in (anchor.get("deps") or {}).items() if ds.intersection(v)}
+    """选中集合（design D5、D7）：依赖（∪ 其 shell 静态闭包）与 Δ 相交 ∪ Δ 里的测试文件 ∪ 锚点失败所在 ∪ 盲；只留现存文件，排序。"""
+    ds, memo = set(delta), {}
+    sel = {f for f, v in (anchor.get("deps") or {}).items()
+           if ds.intersection(v) or ds.intersection(_shell_closure(root, v, memo))}
     sel.update(p for p in delta if _py_test_file(p))
     sel.update(str(n).split("::", 1)[0] for n in anchor.get("failed") or [])
     sel.update(anchor.get("blind") or [])
