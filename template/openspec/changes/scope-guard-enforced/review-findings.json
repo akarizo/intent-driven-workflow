@@ -1,0 +1,112 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1653,
+      "summary": "「本 change 建立声明」这条路径在声明落地之后会自相矛盾（需进一步确认是否计划在 S3 处理）：计划期没有声明、owns 含 gate-scope.json，于是按 D2 写了理由键 scope:undeclared。等某个切片写出 gate-scope.json（builtin 或 cmd）后，提供方解析成 builtin 或 cmd，报告不全选，_scope_reason_errors 就会把 scope:undeclared 判成「应删除」。结果是落地之后再跑 lint（或 S3 接上 baseline 复核后）会变红，执行者只能删掉已经批准的理由，而这又会撞上 D10「批准后改理由」的拦截。",
+      "fix": "在 builtin 和 cmd 分支调用 _scope_reason_errors 时，如果 _establishes_decl(data, change_dir) 为真，就传 pending=(SCOPE_UNDECLARED,)，让这个已批准的伪触发项不算多余。同时补一条用例：先建立声明并写理由，声明落地后再跑 lint，应保持绿。如果设计上打算在 S3 处理，就在 design D2 里写明。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1667,
+      "summary": "builtin 通过时的两条摘要口径不一致：全选分支用 phase 拼成「lint/preflight 预测全选」，未全选分支却固定写「final 预测未全选」。预测对象应该始终是 final Δ（builtin-scope-precision spec），全选分支用 phase 会误导读者。在 S1 里全选分支执行不到，但 S2 会直接用上。",
+      "fix": "两条统一写成「final 预测…」，phase 只用来标注例如「final 精确预测在 preflight」这类说明。或者 S2 落地时一并修正。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4558,
+      "summary": "_sh_refs 只在赋值值可解析时才写 vars_。变量后来被改成解析不到的值（如 D=\"$(lib_dir)\"）时，旧值仍留在 vars_，后续的 $D/lib.sh 会按旧目录解析。这违反 spec / 切片包「目录含未解析的 $(…)、$VAR 时不猜」。我定向抽查确认过：脚本先写 D=\"$(dirname \"$0\")/a\"，再写 D=\"$(lib_dir)\"，最后 source \"$D/lib.sh\"，_sh_refs 返回 ['scripts/a/lib.sh']。后果是一个实际没被测试用到的文件被算作「见过」。它改动时不再触发全量，只会重跑一个其实没跑到它的测试，属于漏测方向。",
+      "fix": "在 SH_ASSIGN_RE 命中的分支里，值不是不含 $ 的绝对路径时执行 vars_.pop(m.group(1), None)。另外补一条用例，覆盖「重新赋值成解析不到的值后，引用不得解析」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1603,
+      "summary": "lint 期 pending 排除测试文件用的是 is_test_path（tests/ 等目录下的任何文件都算），而 preflight / final 的 _full_triggers 用的是 _py_test_file（只认 .py 测试文件）。这样 tests/fixtures/data.json、tests/run.sh 这类非 Python 文件在 lint 时不进 pending：作者预写的理由会被判成「不是本次触发项，删除」，到 preflight 却又被报成缺理由的触发项。两期口径不一致，偏离 spec「上述排除项以外的非 Python 文件列为待定」。排除逻辑也在两处各写了一份（decl / tier_rel / .claude/ / DOC_EXT / .py），容易再次漂移。",
+      "fix": "pending 改用 not _py_test_file(p)，与 _full_triggers 对齐。更好的做法是抽一个共用谓词，例如 _unseen_candidate(p, decl_rels, tier_rel)，_full_triggers 的 cand 和 _builtin_report 的 pending 都用它。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1598,
+      "summary": "_full_triggers 返回 err（锚点内容比对失败）时，_builtin_report 只把它放进 notes，不算触发项，报告给出 full=False。而同样的情况下 final 的 _full_why 会以「锚点内容比对失败」走全量。结果是计划期预测「未全选」，final 实际却全量，表态没能提前拦下来。",
+      "fix": "有 err 时加一个代码类触发项（例如 final:anchor-compare-failed），或至少在摘要里明确写「预测不可靠，final 可能全量」。最好和 final 的口径保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4559,
+      "summary": "切词前先去掉引号，再按空白切。仓库绝对路径含空格时，被替换进来的脚本目录 sdir 会被切断；SH_ASSIGN_RE 的 \\S+ 也匹配不上，dirname 这一类引用全部解析不到。这一点是安全方向，会退回全量，但精度会悄悄失效。另外只跳过整行注释，行内注释里的路径（如 foo # see lib/x.sh）也会被当成依赖，属于虚增「见过」的方向。",
+      "fix": "替换 dirname 形态时先换成不含空白的占位记号（如 \\x00SDIR\\x00），切出记号后再还原成 sdir。用 shlex 的 comments=True，或者按「未被引号包住的 #」截掉行内注释。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4587,
+      "summary": "_final_select 对每个测试文件调用一次 _shell_closure。memo 只缓存了 _sh_refs，_is_shell 没有缓存，于是每个测试文件的每个非 .sh / .py 依赖都要打开一次读首行，开销是 测试文件数 × 依赖数。依赖里有大的二进制、又没有换行的文件时，readline 会把整个文件读进来。大仓库里 final 可能明显变慢（需进一步确认实际规模）。",
+      "fix": "把 _is_shell 的结果也放进 memo，例如 memo 里存 {('is_shell', rel): bool}，或单独用一个 dict。readline 加长度上限，例如 f.readline(256)。"
+    },
+    {
+      "severity": "LOW",
+      "file": "install.sh",
+      "line": 413,
+      "summary": "`*未种*` 分支同时会命中 scope-seed 的「写入失败」输出（`未种 …：写入失败（…）`），这时安装器仍会追加「本仓库自带选测：须实现一条只算范围的命令…」的醒目提示。真实原因是权限或磁盘写入失败，提示会把用户引向错误的处置方向。",
+      "fix": "在 case 里先匹配 `*写入失败*`，给出一句只提示手动写声明的说明，再落到 `*未种*` 分支；也可以让 scope-seed 对写入失败使用不同的首行字样。"
+    },
+    {
+      "severity": "LOW",
+      "file": "install.sh",
+      "line": 415,
+      "summary": "提示文案写「新 change 的 lint 会判『未声明选测范围』（伪触发项 scope:undeclared，final 全量）」，结尾「更多」小节（约 :521）也写「未声明 → lint 判红、final 全量（scope:undeclared）」。按 schema 与 spec 的契约 v2，未声明时 lint 直接判红，过不了规划；只有 owns 正在建立 gate-scope.json 的 change 才按伪触发项 scope:undeclared 写理由、走全量。现在的写法容易被读成未声明也能跑、只是 final 全量，与 README 和 schema 的表述不一致。",
+      "fix": "改为「lint 判红；只有正在建立 gate-scope.json 的 change 可以按伪触发项 scope:undeclared 写理由放行（final 全量）」，与 README 第 40 行和 schema 的措辞保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "install.sh",
+      "line": 419,
+      "summary": "没有 python3 时打印的手动声明指引，列出的可识别命令只有 pytest / npm test / go test ./... / cargo test，漏了 `python3 <路径>/test-tiers.py run unit`。`_plain_test_cmd`、README 和 schema 都认这条命令，所以这里与其他出处不一致。",
+      "fix": "在指引里补上 `python3 .claude/hooks/test-tiers.py run unit`，或者改为引用 README 里的完整清单。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_scope_docs.py",
+      "line": 54,
+      "summary": "xfail 已经去掉，但段头注释「骨架：strict xfail……切片 S4 实现后去掉标记即解锁」还留着，已经过时；删除 import 与 PENDING_S4 后还留下了连续 3 个空行。tests/test_install.py:504 有同样的过时注释。",
+      "fix": "把两处段头注释改为只保留 scenario 指针（或删掉「骨架」一句），并把多余空行压成 2 行。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3320,
+      "summary": "final 复核只插在『有 test_cmd 的非部件形态』分支里。部件形态（tiers_is_parts）这条路径照样调 _final_parts 跑测试，但完全不复核：既不做 D10 的 approve 绑定，也不判『未声明』，cmd 提供方报全选且有未批准触发项时也不拦。spec 原文是『final SHALL 在运行测试之前复核一次』，D10 也和提供方类型无关。切片包只列了 gate.impacted / 增量 / 全量三个分支，部件形态算不算在范围内需进一步确认。",
+      "fix": "把 _final_scope_guard 挪到 `if v7 … else` 分支开头、分支判断之前（parts 形态下 why 取 PARTS_FULL_WHY，builtin 按设计边界视为不全选，只做 approve 绑定和未声明 / cmd 校验）；不通过时同样跳过 _final_parts。如果确认部件形态有意豁免，就在 design D9 里写明这条边界，并补一条护栏测试。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4533,
+      "summary": "git log -G 匹配的是增或删 approve 行的提交，不只是『新增』。如果后来某次提交删掉或改写了 timeline.md 里的 approve 行（回滚、重排之类），绑定点会落到这次提交，和 D10『最近一次新增 approve 行的提交』的语义不一致。",
+      "fix": "取出候选提交后，再用 `git show --format= -U0 <sha> -- <rel>/timeline.md` 确认里面有以 '+' 开头、包含 \\tapprove\\t 的行；没有就沿 `git log -G … --format=%H` 的结果继续往前找。也可以在 docstring 里注明删行也算绑定点。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4539,
+      "summary": "批准提交的 slices.json 里，gate 如果是真值但不是 dict（比如字符串或列表），`(plan.get(\"gate\") or {}).get(...)` 会抛 AttributeError。这个异常不在 except 范围内，final 会直接崩溃，而不是按『视同找不到』处理。",
+      "fix": "改成 `g = plan.get(\"gate\") if isinstance(plan, dict) else None; reasons = g.get(\"scope_full_reason\") if isinstance(g, dict) else None`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4570,
+      "summary": "builtin 下 _full_why 可能因为『锚点内容比对失败』（_full_triggers 的 err）返回非空的 why，这时触发项为空，复核直接放行，final 照样走全量，等于未表态的全量没被拦住（fail-open）。和 design D9 的字面规则一致，但没在设计里注明。",
+      "fix": "why 非空而 triggers() 为空时，要么判红（G2 scope：全量原因 … 无法归到触发项），要么在 design D9 里明确写成设计边界；至少把 why 写进 scope 段或 warnings 留痕。"
+    }
+  ],
+  "fix": null
+}
