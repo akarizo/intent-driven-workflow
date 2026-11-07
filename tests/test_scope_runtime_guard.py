@@ -8,13 +8,9 @@
 import json
 import re
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 from final_helpers import baseline, change_and_commit, gate_json, make_repo
 from test_slice_gate import plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S3 未实现")
 
 FULL_X = "printf '{\"full\": true, \"triggers\": [\"x\"]}' > \"$GATE_SCOPE_OUT\""
 MARK_CMD = 'touch "$SCOPE_GUARD_MARK"'
@@ -75,7 +71,6 @@ def _builtin_repo(repo, **kw):
     return make_repo(repo, extra=extra, **kw)
 
 
-@PENDING
 def test_baseline_refuses_unapproved_full(git_repo, tmp_path):
     # Given: 计划 gate.scope 报告 {"full": true, "triggers": ["x"]}，没写理由；gate.test 一运行就写出标记
     d = _marker_plan(git_repo, {"scope": FULL_X})
@@ -103,7 +98,6 @@ def test_baseline_runs_when_full_is_approved(git_repo, tmp_path):
     assert mark.exists()
 
 
-@PENDING
 def test_baseline_refuses_undeclared(git_repo, tmp_path):
     # Given: 没有任何选测声明，切片 owns 不含 gate-scope.json；gate.test 一运行就写出标记
     d = _marker_plan(git_repo)
@@ -120,7 +114,6 @@ def test_baseline_refuses_undeclared(git_repo, tmp_path):
     assert not mark.exists()
 
 
-@PENDING
 def test_final_refuses_unapproved_builtin_full(git_repo, tmp_path):
     # Given: 仓库声明 builtin，基线已跑；随后提交了对 scripts/helper.sh 的修改（任何用例都没触及它），计划没写理由
     d = _builtin_repo(git_repo)
@@ -153,7 +146,6 @@ def test_final_runs_approved_full(git_repo, tmp_path):
     assert mark.exists()
 
 
-@PENDING
 def test_final_refuses_unapproved_cmd_full(git_repo, tmp_path):
     # Given: 计划 gate.scope 的替身在仓库根有 flag 时报 {"full": true, "triggers": ["y"]}，否则不全选；
     #        基线已跑（当时没有 flag）；随后提交了 flag，计划没写理由
@@ -186,7 +178,6 @@ def test_manual_full_flag_is_exempt(git_repo, tmp_path):
     assert mark.exists()
 
 
-@PENDING
 def test_reasons_edited_after_approval_are_red(git_repo, tmp_path):
     # Given: 仓库声明 builtin，基线已跑；随后一次提交只新增 timeline.md 的 approve 行（当时计划没写理由）；
     #        之后计划加上 {"scripts/helper.sh": "补写"} 并提交，又提交了对 scripts/helper.sh 的修改

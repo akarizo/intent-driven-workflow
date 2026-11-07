@@ -1678,6 +1678,12 @@ def _scope_reason_errors(report, reasons, pending=()):
     return errors
 
 
+def _undeclared_msg(change_dir):
+    """未声明选测范围的违规原文（lint / baseline / final 共用）。"""
+    return ("未声明选测范围：在 %s 写 {\"builtin\": true}（gate.test 是普通测试命令）"
+            "或 {\"cmd\": \"<只算范围的命令>\"}（仓库自带选测）" % _scope_decl_path(change_dir))
+
+
 def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     """选测范围契约；返回 (errors, 通过时的摘要行 | None)。形状恒校验；run_scope 为真时按提供方核对：
     未声明 → 判红（本 change 建立声明时按伪触发项 scope:undeclared 表态）；builtin → 认 gate.test 后进程内预测；cmd → 实跑。"""
@@ -1698,8 +1704,7 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
         return errors, None
     if provider["kind"] is None:
         if not _establishes_decl(data, change_dir):
-            return ["scope: 未声明选测范围：在 %s 写 {\"builtin\": true}（gate.test 是普通测试命令）"
-                    "或 {\"cmd\": \"<只算范围的命令>\"}（仓库自带选测）" % _scope_decl_path(change_dir)], None
+            return ["scope: " + _undeclared_msg(change_dir)], None
         errors = _scope_reason_errors({"full": True, "triggers": [SCOPE_UNDECLARED]}, reasons)
         return errors, (None if errors else "scope: 未声明选测范围，本 change 建立仓库选测声明（已写理由）")
     if provider["kind"] == "builtin":
@@ -3300,6 +3305,7 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     inc = None
+    sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
     final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
     if v7:
         warnings.append("G2 全量未跑：G7 已红，scenario 全绿后重跑 final")
@@ -3328,17 +3334,25 @@ def cmd_final(args):
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
                         else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
             rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
+            tier_rel, decl = _change_rel(root, _tiers_path(args.change_dir)), _decl_rels(root, args.change_dir)
             why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate,
-                                 tier_rel=_change_rel(root, _tiers_path(args.change_dir)),
-                                 decl_rels=_decl_rels(root, args.change_dir))
+                                 tier_rel=tier_rel, decl_rels=decl)
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
                              "anchor": pick[0].get("commit") or ""}
+            # 开跑前复核选测范围（design D9）；--full 是显式要求，豁免
+            if not args.full:
+                anc, dlt = pick if pick is not None else (None, None)
+                sfail, scope_info = _final_scope_guard(
+                    root, args.change_dir, data, why,
+                    lambda: _full_triggers(root, dlt, anc, baseline, rgate, tier_rel, decl, bool(imp))[0])
             anchor_part, byproducts = None, []
             run_regions = None  # 本次运行的已选区域；None = 全部
             t0 = time.time()
-            if why is None and imp:  # gate.impacted 代替内建选测（design D8）
+            if sfail:  # 复核未过：跳过测试运行，不写锚点
+                failed.extend(sfail)
+            elif why is None and imp:  # gate.impacted 代替内建选测（design D8）
                 anchor, delta = pick
                 with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
                     tg = run_test_gate(imp, root, extra_env=_final_env(final_ctx, tmp))
@@ -3438,7 +3452,7 @@ def cmd_final(args):
                 elif not anchor_part["measured"]:
                     warnings.append("锚点不可用：全量 exit %d 不可度量（%s）" % (tg["rc"], tg["why"]))
                 inc = {"mode": "full", "full_why": why}
-            if tiers is not None:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
+            if tiers is not None and not sfail:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
                 bregions = (baseline or {}).get("regions")
                 for rname in _selected_regions(gate):  # 跳过的区域也先校验基线记录
                     rcmd = ((tiers.get("regions") or {}).get(rname) or {}).get("cmd")
@@ -3482,6 +3496,8 @@ def cmd_final(args):
         failed.append("G9 gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
     elif checks and v7:
         warnings.append("G9 检查未跑：G7 已红，scenario 全绿后重跑 final")
+    elif checks and sfail:
+        warnings.append("G9 检查未跑：G2 scope 复核未过，表态并重新批准后重跑 final")
     elif checks:
         failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx))
     result = {"slice": "final", "ok": not failed, "commit": head,
@@ -3490,6 +3506,8 @@ def cmd_final(args):
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
     if dirty:
         result["dirty"] = True
+    if scope_info is not None:
+        result["scope"] = scope_info
     inc_note = None
     if inc is not None:
         result["incremental"] = inc
@@ -3553,6 +3571,10 @@ def cmd_baseline(args):
     unknown = [n for n in regions if n not in (_tier_regions(tiers) if tiers else {})]
     if unknown:
         die("gate.integration 的区域 %s 不在测试分层文件 regions 里，先跑 lint 修好" % ", ".join(unknown))
+    # 选测范围复核（design D8）：与 lint 同一套规则；不通过时不写运行标记，不碰现有 gate-baseline.json
+    serrs = _lint_scope(gate, args.change_dir, True, data, "baseline")[0]
+    if serrs:
+        die("选测范围复核未过（baseline 不运行）：\n  - " + "\n  - ".join(serrs))
     sha0 = plan_sha(data)
     name = os.path.basename(os.path.realpath(args.change_dir))
     change_rel = _change_rel(root, args.change_dir)
@@ -4501,6 +4523,64 @@ def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, t
     if glob:
         return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
     return "Δ 含未被任何用例触及的非 Python 文件：%s" % ", ".join(files[:8]), []
+
+
+def _approved_reasons(root, change_dir):
+    """已批准的理由（design D10）：最近一次新增 approve 行的提交里 slices.json 的 gate.scope_full_reason（缺省 {}）。
+    找不到 approve 提交 / 任一 git 调用失败 → None（以当前计划为准）。"""
+    rel = _change_rel(root, change_dir)
+    try:
+        sha = _git_raw(root, ["log", "-G", "\tapprove\t", "--format=%H", "-n", "1", "--", rel + "/timeline.md"]).strip()
+        if not sha:
+            return None
+        plan = json.loads(_git_raw(root, ["show", "%s:%s/slices.json" % (sha, rel)]))
+    except (RuntimeError, ValueError):
+        return None
+    reasons = ((plan.get("gate") or {}) if isinstance(plan, dict) else {}).get("scope_full_reason")
+    return reasons if isinstance(reasons, dict) else {}
+
+
+def _g2_scope(err):
+    """lint 口径的 "scope: …" 违规 → final 失败项 "G2 scope：…"。"""
+    return "G2 scope：" + (err[len("scope: "):] if err.startswith("scope: ") else err)
+
+
+def _final_scope_guard(root, change_dir, data, why, triggers):
+    """final 开跑前复核选测范围（design D9 / D10）→ (failed, scope 段 | None)；通过时 ([], None)。
+    why：_full_why 的结论；triggers：无参函数，按与 _full_why 同一组参数取 _full_triggers 的触发项（仅 builtin 调用）。"""
+    gate = data.get("gate") or {}
+    current = gate.get("scope_full_reason") or {}
+    approved = _approved_reasons(root, change_dir)
+    failed = []
+    if approved is None:
+        approved = current
+    elif approved != current:
+        failed.append("G2 scope：gate.scope_full_reason 在批准后被修改（批准时 %s；当前 %s）" % (
+            json.dumps(approved, ensure_ascii=False), json.dumps(current, ensure_ascii=False)))
+    provider, perr = _scope_provider(gate, change_dir)
+    kind, full, trig = provider["kind"], False, []
+    if perr:
+        failed.extend(_g2_scope(e) for e in perr)
+    elif kind is None:
+        if _establishes_decl(data, change_dir):
+            full, trig = True, [SCOPE_UNDECLARED]
+        else:
+            failed.append(_g2_scope("scope: " + _undeclared_msg(change_dir)))
+    elif kind == "builtin":
+        if why:
+            full, trig = True, list(dict.fromkeys(triggers()))
+    else:
+        errs, report = _run_scope(provider["cmd"], root, _planned_owns(data), _change_rel(root, change_dir))
+        failed.extend(_g2_scope(e) for e in errs)
+        if report is not None and report["full"]:
+            full, trig = True, list(dict.fromkeys(report["triggers"]))
+    unapproved = [t for t in trig if t not in approved]
+    if unapproved:
+        failed.append("G2 scope：final 将全量（触发 %s），未在计划期表态：在 propose 期写理由并重新批准，或修复后重跑"
+                      % "、".join(unapproved))
+    if not failed:
+        return [], None
+    return failed, {"kind": kind, "full": full, "triggers": trig, "unapproved": unapproved}
 
 
 SHELL_EXT = (".sh", ".bash")
