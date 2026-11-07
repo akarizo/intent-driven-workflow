@@ -2,12 +2,8 @@
 #gate-flags-unowned-submodule-file、#gate-flags-unrecorded-gitlink、#gate-collects-ceiling-in-submodule，共 4 条）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。
 用例都在 change 家里跑（submodule 已初始化，不依赖 S2 的隔离填充）。"""
-import pytest
-
 from submodule_helpers import SUB, commit_parent, commit_sub, g, gate, make_super, start, write_impl
 from conftest import write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change submodule-aware-flight S1 未实现")
 
 
 def _started(tmp_path):
@@ -17,7 +13,6 @@ def _started(tmp_path):
     return env
 
 
-@PENDING
 def test_gate_expands_gitlink_to_files(tmp_path):
     # Given: change 家里 start S1；子仓里写了 owns 内的 lib1.py 与配对测试并提交，父仓把 gitlink 并入切片 commit
     env = _started(tmp_path)
@@ -35,7 +30,6 @@ def test_gate_expands_gitlink_to_files(tmp_path):
     assert g(env.home / SUB, "rev-parse", "refs/flight-sub/c/S1") == sha
 
 
-@PENDING
 def test_gate_flags_unowned_submodule_file(tmp_path):
     # Given: 同上，但子仓提交里还多了一个 owns 之外的 stray.py
     env = _started(tmp_path)
@@ -53,7 +47,6 @@ def test_gate_flags_unowned_submodule_file(tmp_path):
     assert any(f.startswith("G6") and SUB + "/stray.py" in f for f in out["failed"]), out["failed"]
 
 
-@PENDING
 def test_gate_flags_unrecorded_gitlink(tmp_path):
     # Given: 子仓里提交了 owns 内的改动，但父仓没有 git add mods/sub（gitlink 未进切片 commit）
     env = _started(tmp_path)
@@ -69,7 +62,6 @@ def test_gate_flags_unrecorded_gitlink(tmp_path):
     assert hits and SUB in hits[0] and sha[:10] in hits[0], out["failed"]
 
 
-@PENDING
 def test_gate_collects_ceiling_in_submodule(tmp_path):
     # Given: 子仓 lib1.py 新增一行完整的 ceiling 标记，提交并钉 gitlink
     env = _started(tmp_path)
