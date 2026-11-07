@@ -26,9 +26,10 @@ SCOPE = """
 CMD = "python3 tools/scope.py"
 
 
-def _repo(repo, report=None, gate_scope=None, reasons=None, default=None):
+def _repo(repo, report=None, gate_scope=None, reasons=None, default=None, undeclared=False):
     """被测仓库：tools/scope.py 替身 + 可选 tools/report.json；change c 单片计划，可带 gate.scope / gate.scope_full_reason；
-    default 为对象时写成 openspec 根的 gate-scope.json。返回 change 目录。"""
+    default 为对象时写成 openspec 根的 gate-scope.json（覆盖基座声明）；undeclared 为真时删掉基座声明（契约 v2「未声明」）。
+    返回 change 目录。"""
     write(repo / "tools" / "scope.py", SCOPE)
     if report is not None:
         write(repo / "tools" / "report.json", json.dumps(report, ensure_ascii=False))
@@ -39,7 +40,10 @@ def _repo(repo, report=None, gate_scope=None, reasons=None, default=None):
         data["gate"]["scope"] = gate_scope
     if reasons is not None:
         data["gate"]["scope_full_reason"] = reasons
-    return write_plan(repo / "openspec" / "changes" / "c", data)
+    change = write_plan(repo / "openspec" / "changes" / "c", data)
+    if undeclared:
+        (repo / "openspec" / "gate-scope.json").unlink()
+    return change
 
 
 def _run(sub, change, cwd):
@@ -227,11 +231,11 @@ def test_reason_when_not_full_is_red(git_repo):
 
 def test_reason_without_scope_command_is_red(git_repo):
     # Given: 计划没写 gate.scope，openspec 根也没有 gate-scope.json；gate.scope_full_reason 写了 a.json
-    change = _repo(git_repo, reasons={"a.json": "理由"})
+    change = _repo(git_repo, reasons={"a.json": "理由"}, undeclared=True)
 
     # When: 运行 slice-gate.py lint
     p = _run("lint", change, git_repo)
 
-    # Then: 退出非 0；有一行以 scope: 开头、含 gate.scope_full_reason
+    # Then: 退出非 0；有一行以 scope: 开头、含「未声明选测范围」
     assert p.returncode != 0, p.stdout
-    assert any("gate.scope_full_reason" in l for l in _scope_lines(p.stderr)), p.stderr
+    assert any("未声明选测范围" in l for l in _scope_lines(p.stderr)), p.stderr

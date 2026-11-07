@@ -1,5 +1,6 @@
 """本仓库自身的测试基座：按路径加载 template/.claude/hooks/*.py，并提供临时 git 仓库。"""
 import importlib.util
+import json
 import os
 import pathlib
 import subprocess
@@ -50,13 +51,21 @@ def commit_all(repo, msg: str) -> str:
     return git(repo, "rev-parse", "HEAD")
 
 
+# 基座选测声明（契约 v2 必有提供方）：恒报未全选的 cmd，只起一次 sh
+SCOPE_DECL = {"cmd": "printf '{\"full\": false, \"triggers\": []}' > \"$GATE_SCOPE_OUT\""}
+
+
 @pytest.fixture
 def git_repo(tmp_path):
+    """临时 git 仓库；初始提交带 openspec/gate-scope.json = SCOPE_DECL（恒报未全选），
+    让既有用例在「选测提供方必有」下保持原语义；测「未声明」/「builtin」的用例自行删改该文件。"""
     repo = tmp_path / "repo"
     repo.mkdir()
     git(repo, "init", "-q", "-b", "main")
     git(repo, "config", "user.email", "t@example.com")
     git(repo, "config", "user.name", "t")
     (repo / "README.md").write_text("# t\n", encoding="utf-8")
+    (repo / "openspec").mkdir()
+    (repo / "openspec" / "gate-scope.json").write_text(json.dumps(SCOPE_DECL) + "\n", encoding="utf-8")
     commit_all(repo, "init")
     return repo

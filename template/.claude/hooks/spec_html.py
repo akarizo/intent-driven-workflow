@@ -12,6 +12,7 @@
 # 兼容 Python 3.8+，只用标准库。
 import argparse
 import ast
+import fnmatch
 import html
 import json
 import os
@@ -477,29 +478,57 @@ def load_timeline_rows(change_dir):
     return rows
 
 
-def render_scope(gate, change_dir):
-    """选测范围小节（design D8）：只读文件、不运行命令；读不了 / 形状不对当作没有（校验归 lint）。"""
+def scope_provider(gate, change_dir):
+    """与 slice-gate D1 同口径的只读解析：gate.scope（cmd）> <openspec 根>/gate-scope.json（cmd | builtin）> 未声明。
+    返回 (kind: "cmd" | "builtin" | None, cmd, source)；读不了 / 形状不对当作未声明（校验归 lint）。"""
+    cmd = gate.get("scope")
+    if isinstance(cmd, str) and cmd.strip():
+        return "cmd", cmd, "计划 gate.scope"
+    openspec_root = os.path.dirname(os.path.dirname(os.path.abspath(change_dir)))
+    try:
+        decl = json.loads(read_text(os.path.join(openspec_root, "gate-scope.json")) or "null")
+    except ValueError:
+        decl = None
+    if not isinstance(decl, dict) or len(decl) != 1:
+        return None, None, None
+    if decl.get("builtin") is True:
+        return "builtin", None, "仓库声明 gate-scope.json"
+    if isinstance(decl.get("cmd"), str) and decl["cmd"].strip():
+        return "cmd", decl["cmd"], "仓库声明 gate-scope.json"
+    return None, None, None
+
+
+def establishes_scope_decl(gate_owns, change_dir):
+    """任一 owns glob 匹配 <openspec 根>/gate-scope.json 的仓库相对路径（git 顶层取不到时相对 openspec 根的上一级）。"""
+    decl = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), "gate-scope.json")
+    top = project_root(change_dir)
+    try:
+        p = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(decl),
+                           capture_output=True, text=True, timeout=10)
+        if p.returncode == 0 and p.stdout.strip():
+            top = p.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    rel = os.path.relpath(os.path.realpath(decl), os.path.realpath(top)).replace(os.sep, "/")
+    return any(isinstance(g, str) and (rel == g or fnmatch.fnmatchcase(rel, g)
+                                       or (g.endswith("/**") and rel.startswith(g[:-3] + "/")))
+               for g in gate_owns)
+
+
+def render_scope(gate, change_dir, owns=()):
+    """选测范围小节（design D13）：恒输出；只读文件、不运行选测命令。owns：各片 owns（判本 change 是否建立仓库声明）。"""
     gate = gate if isinstance(gate, dict) else {}
-    cmd, source = gate.get("scope"), "计划 gate.scope"
-    if not (isinstance(cmd, str) and cmd.strip()):
-        cmd, source = None, None
-        openspec_root = os.path.dirname(os.path.dirname(os.path.abspath(change_dir)))
-        try:
-            repo = json.loads(read_text(os.path.join(openspec_root, "gate-scope.json")) or "null")
-        except ValueError:
-            repo = None
-        if isinstance(repo, dict) and isinstance(repo.get("cmd"), str) and repo["cmd"].strip():
-            cmd, source = repo["cmd"], "仓库默认 gate-scope.json"
-    reasons = gate.get("scope_full_reason")
-    reasons = reasons if isinstance(reasons, dict) and reasons else None
-    if not cmd and not reasons:
-        return ""
+    kind, cmd, source = scope_provider(gate, change_dir)
     parts = ['<h3>选测范围</h3>']
-    if cmd:
+    if kind == "cmd":
         parts.append('<p>选测命令（%s）：<code>%s</code></p>' % (esc(source), esc(cmd)))
+    elif kind == "builtin":
+        parts.append('<p>模板内建（builtin）（%s）</p>' % esc(source))
     else:
-        parts.append('<p class="placeholder">没有有效选测命令。</p>')
-    if reasons:
+        note = "：本 change 建立仓库选测声明" if establishes_scope_decl(owns, change_dir) else ""
+        parts.append('<p class="placeholder">未声明选测范围%s</p>' % esc(note))
+    reasons = gate.get("scope_full_reason")
+    if isinstance(reasons, dict) and reasons:
         rows = "".join('<tr><td><code>%s</code></td><td>%s</td></tr>' % (esc(k), esc(v))
                        for k, v in reasons.items())
         parts.append('<table class="flight-table"><thead><tr><th>触发项</th><th>理由</th></tr></thead>'
@@ -565,7 +594,8 @@ def render_flight(change_dir):
         '<th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'
         '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s'
-        % ("".join(slice_rows), render_scope(data.get("gate"), change_dir),
+        % ("".join(slice_rows), render_scope(data.get("gate"), change_dir,
+                                                        [o for s in slices for o in (s.get("owns") or [])]),
            "".join(scenario_rows), timeline_html)
     )
 

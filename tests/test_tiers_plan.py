@@ -37,8 +37,11 @@ def plan(owns=("src/app.py",), scenario_tests=None, **gate):
 
 
 def make(root, data, tiers_obj=None):
-    """写 openspec/changes/c/slices.json 与可选的 openspec/test-tiers.json（tiers_obj 为 str 时原样写入）。返回 change 目录。"""
+    """写 openspec/changes/c/slices.json 与可选的 openspec/test-tiers.json（tiers_obj 为 str 时原样写入）；
+    openspec 根没有选测声明时补写 {"builtin": true}（契约 v2 必有提供方）。返回 change 目录。"""
     d = root / "openspec" / "changes" / "c"
+    if not (root / "openspec" / "gate-scope.json").exists():
+        write(root / "openspec" / "gate-scope.json", '{"builtin": true}\n')
     write(d / "slices.json", json.dumps(data, ensure_ascii=False))
     if tiers_obj is not None:
         text = tiers_obj if isinstance(tiers_obj, str) else json.dumps(tiers_obj, ensure_ascii=False)
