@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>飞行模式支持 git submodule · 模板侧方案决策页</title>
+<style>
+  :root { --fg:#1f2328; --mute:#59636e; --line:#d1d9e0; --bg:#f6f8fa; --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color:var(--fg); background:#fff; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 140px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .meta { color: var(--mute); font-size: 13px; }
+  .lead { background: var(--bg); border-left: 4px solid var(--acc); padding: 12px 16px; margin: 16px 0; }
+  .lead.warn { border-left-color: var(--warn); background: #fffbea; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff2f5; padding: 1px 5px; border-radius: 4px; }
+  pre { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f6f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; overflow-x: auto; }
+  .tag { display:inline-block; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background:#fff; white-space: nowrap; }
+  .tag.ok { color: var(--ok); border-color: #aceebb; background:#dafbe1; }
+  .tag.bad { color: var(--bad); border-color: #ffcecb; background:#ffebe9; }
+  .tag.warn { color: var(--warn); border-color: #f5e0a0; background:#fff8c5; }
+  .tag.acc { color: var(--acc); border-color: #b6d7ff; background:#ddf4ff; }
+  .note { color: var(--mute); font-size: 12.5px; }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; font-size: 13px; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box.file { border-color: #9cc8f5; background: #eef6ff; }
+  .box.new { border-color: #8fd6a2; background: #effbf2; }
+  .box.keep { border-color: #d1d9e0; background: #f6f8fa; }
+  .box.full { border-color: #ffb3ad; background: #fff1f0; }
+  .box.gate { border-color: #f5c38f; background: #fff6ec; }
+  .box.human { border-color: #b6a6f5; background: #f5f0ff; }
+  .flow { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+  .row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: stretch; }
+  .row .stage { font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: flex-end; color: var(--mute); text-align: right; }
+  .row .cells { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+  .row .cells .box { flex: 1 1 200px; }
+  .down { text-align: center; color: var(--mute); font-size: 18px; line-height: 1; margin-left: 160px; }
+  .q { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .q h3 { margin-top: 0; }
+  .q .why { color: var(--mute); font-size: 13px; margin: 0 0 8px; }
+  .opt { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 6px 0; cursor: pointer; }
+  .opt:hover { border-color: var(--acc); }
+  .opt input { margin-right: 8px; }
+  .opt .d { color: var(--mute); font-size: 12.5px; margin-left: 24px; display: block; }
+  .opt.rec { border-color: #b6d7ff; }
+  textarea.memo { width: 100%; min-height: 38px; margin-top: 6px; font: 13px/1.5 -apple-system, "PingFang SC", sans-serif; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.97); border-top: 1px solid var(--line); padding: 10px 24px; display: flex; gap: 10px; align-items: center; justify-content: center; z-index: 9; }
+  .bar button { font-size: 14px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--acc); background: var(--acc); color: #fff; cursor: pointer; }
+  .bar button.sec { background: #fff; color: var(--acc); }
+  .bar .st { color: var(--mute); font-size: 13px; min-width: 160px; }
+  #out { width: 100%; min-height: 220px; font: 12px/1.5 ui-monospace, Menlo, monospace; margin-top: 8px; display: none; }
+  ol.steps li, ul.inv li { margin: 6px 0; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toc { font-size: 13px; color: var(--mute); }
+  .toc a { color: var(--acc); text-decoration: none; margin-right: 12px; }
+  svg text { font-family: -apple-system, "PingFang SC", sans-serif; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>飞行模式支持 git submodule · 模板侧方案决策页</h1>
+<div class="meta">2026-11-07 · 触发：afa change <code>raw-file-viewer</code>（9 片里 6 片改 submodule <code>admin/viewer</code>）不能起飞，退化为 <code>--gate=per-task</code> · 拟建 change：<code>submodule-aware-flight</code> · 本页只做只读推演和 /tmp 玩具仓实验，<b>没有改动任何代码</b></div>
+<div class="toc" style="margin-top:8px">
+  <a href="#s1">1 失败链</a><a href="#s2">2 实验证据</a><a href="#s3">3 修复后的保证</a><a href="#s4">4 全景</a><a href="#s5">5 合回时序</a><a href="#s6">6 门禁展开</a><a href="#s7">7 待你拍板</a><a href="#s8">8 切片与验证</a><a href="#s9">9 风险与回退</a>
+</div>
+
+<div class="lead">
+  <b>结论：</b>afa 那边的退化，原因在模板：飞行模式从隔离 worktree、执行体提交、合回到门禁，每一环都只按「单仓」设计。submodule 一进来，共有 <b>6 处断点</b>。3 处是 afa 会话实测的，另 3 处是我读代码定位的。<br>
+  <b>推荐：</b>在本仓库开 change <code>submodule-aware-flight</code>。办法有三条：
+  <ul style="margin:6px 0 0; padding-left:20px">
+    <li>隔离 worktree 里的 submodule 不再去远端 clone，改为借用 change 家 submodule 的 <b>linked worktree</b>。这一步由 <code>slice-gate.py start</code> 机械完成。</li>
+    <li>gitlink 冲突交给新增的 <code>slice-gate.py merge</code> 脚本处理：在家 submodule 内合并，再钉 gitlink。</li>
+    <li>门禁、快照、起飞前校验都会把 gitlink 展开成 submodule 内的文件来判。</li>
+  </ul>
+  不含 submodule 的仓库，行为与现在逐项一致。
+</div>
+
+<h2 id="s1">1 · 失败链：6 个断点</h2>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:20%">断点</th><th style="width:32%">现状（证据）</th><th style="width:20%">后果</th><th>修法</th></tr>
+  <tr><td>1</td><td><b>隔离 worktree 里 submodule 是空目录</b></td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>afa 实测 #1：<code>submodule update --init</code> 去远端 clone。gitlink <code>be74886</code> 只在本地、没有 push，报 <code>not our ref</code>。</li>
+      <li>执行体也不能自己从家里取：Claude Code 的隔离检查会拦 <code>git -C &lt;家&gt;</code>（官方文档 worktrees · Git redirects）。</li>
+    </ul></td><td>viewer 切片在隔离 worktree 里无从下手；backend 片的 typecheck 带 viewer vite build，同样会红</td><td><code>start</code> 通过基点校验后，从家 submodule 借出 linked worktree，检出到 HEAD 的 gitlink（§4）</td></tr>
+  <tr><td>2</td><td><b>执行体的 submodule 提交，家里看不到</b></td><td>afa 实测 #2：从家 fetch 能检出起点。但执行体新建的提交在隔离 worktree 自己的 submodule 仓里，家 submodule <code>cat-file</code> 找不到</td><td>integrator 合回的 gitlink 指向一个家里不存在的提交</td><td>linked worktree 与家共享对象库：提交即刻对家可见（实验 E1）</td></tr>
+  <tr><td>3</td><td><b>并行切片同改 gitlink → 合回冲突</b></td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>afa 实测 #3：<code>CONFLICT (submodule)</code>。</li>
+      <li><code>integrator.md</code> 第 1 项规定冲突即 abort，不许手解。</li>
+    </ul></td><td>afa 三个 wave 各有两片 viewer 切片并行，每一波都会冲突</td><td>新增 <code>slice-gate.py merge</code>：在家 submodule 内合并双方提交，再用 <code>update-index</code> 钉 gitlink（实验 E2）</td></tr>
+  <tr><td>4</td><td><b>切片门禁只看父仓 diff</b></td><td><code>changed_files</code>（<code>slice-gate.py:2429</code>）与 <code>added_lines</code>（<code>:2443</code>）只拿到 <code>admin/viewer</code> 这一条 gitlink</td><td>三项判错：
+    <ul style="margin:0;padding-left:16px">
+      <li>G6：<code>admin/viewer 不在 owns 内</code>。</li>
+      <li>G3：看不到测试改动。</li>
+      <li>G8：漏掉 submodule 内的 ceiling 行。</li>
+    </ul>
+    afa 会话里「6 片写不出门禁记录 → ship 判 draft」就是这一条</td><td>gitlink 展开为 <code>&lt;P&gt;/&lt;文件&gt;</code>：已提交部分用 <code>git -C P diff old..new</code>，未提交部分用 <code>git -C P status</code>；<code>added_lines</code> 加 <code>--submodule=diff</code>（§6）</td></tr>
+  <tr><td>5</td><td><b>快照不含 submodule 内的半成品</b></td><td><code>_checkpoint</code>（<code>:2960</code>）只看父仓 porcelain。submodule 在那里只显示为 <code> M admin/viewer</code>，匹配不上 owns，会被跳过</td><td>执行体撞 maxTurns 后重派，submodule 内的半成品丢失，要重做（违背 <code>--resume-checkpoint</code> 的承诺）</td><td>快照和恢复按仓分别进行：父仓一份，每个有 owns 落在里面的 submodule 各一份，ref 同名（§6）</td></tr>
+  <tr><td>6</td><td><b>起飞前不校验 submodule 就绪</b></td><td><code>cmd_preflight</code>（<code>:3857</code>）只做四项基线校验</td><td>家 submodule 未初始化、或 HEAD 与 gitlink 不一致，要到合回时才红</td><td>preflight 加一项校验：家 submodule 已填充，HEAD 等于 gitlink，gitlink 提交在本地存在</td></tr>
+</table>
+
+<h2 id="s2">2 · 实验证据（/tmp 玩具仓，git 2.54；脚本 <code>/tmp/subm-exp/exp1.sh</code>、<code>exp2.sh</code>）</h2>
+<table>
+  <tr><th style="width:8%">实验</th><th style="width:44%">做了什么</th><th>结果</th></tr>
+  <tr><td>E1</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>父仓建 change 家 worktree，家 submodule 做一个本地、未 push 的提交，并钉 gitlink。</li>
+      <li>另开一个隔离 worktree，执行 <code>git -C 家/admin/viewer worktree add --detach 隔离/admin/viewer &lt;gitlink&gt;</code>。</li>
+      <li>在隔离 worktree 的 submodule 内提交，再在父仓 <code>git add admin/viewer</code> 提交。</li>
+    </ul></td><td>
+    <span class="tag ok">通过</span>
+    <ul style="margin:4px 0 0;padding-left:16px">
+      <li>吸收进 <code>modules/</code> 的 gitdir 带有 <code>core.worktree</code>，但不影响 linked worktree：toplevel 指向隔离目录。</li>
+      <li>父仓 status 干净。</li>
+      <li>执行体的提交在家 submodule 里立即可见（<code>cat-file -t</code> 返回 commit）。</li>
+      <li>父仓 diff 为 <code>:160000 160000 old new M admin/viewer</code>。</li>
+      <li><code>git worktree remove</code> 拒删含 submodule 的 worktree，加 <code>--force</code> 可以删。删除后提交对象仍在，家里的登记变为 prunable。</li>
+    </ul></td></tr>
+  <tr><td>E2</td><td>同一 wave 的 S1、S2 各开一个隔离 worktree，都改 submodule、都提交 gitlink。在家里按「父仓 <code>merge --no-ff --no-commit</code> → 判断 gitlink → 必要时在家 submodule 内 merge → <code>update-index --cacheinfo 160000</code> → commit → 家 submodule 分支 ff」逐片合回</td><td>
+    <span class="tag ok">通过</span>
+    <ul style="margin:4px 0 0;padding-left:16px">
+      <li>S1：gitlink 是快进，无冲突。</li>
+      <li>S2：gitlink 冲突，在家 submodule 生成合并提交后解掉。</li>
+      <li>家 submodule 分支包含双方提交，父仓 status 干净。</li>
+      <li>下一 wave 的隔离 worktree 能按新 gitlink 填充。</li>
+      <li>重派场景：在未填充 submodule 的隔离 worktree 里 <code>cherry-pick</code> 上一轮父仓提交，成功，gitlink 随之更新。</li>
+      <li>家里执行 <code>git show --submodule=diff &lt;切片 commit&gt;</code>，能展开执行体在 submodule 内的 diff，路径带 <code>admin/viewer/</code> 前缀。</li>
+    </ul></td></tr>
+</table>
+<p class="note">afa 现状核对：家 submodule 的 gitdir 是 <code>afa/.git/worktrees/raw-file-viewer/modules/admin/viewer</code>，在共享 <code>.git</code> 内。分支 <code>feat/raw-frame-viewer</code> 的 HEAD 是 <code>be74886</code>，与父仓 gitlink 一致。viewer 的 <code>.gitignore</code> 写的是 <code>node_modules</code>（不带斜杠），<code>run-viewer.sh</code> 建的软链会被忽略，不会误报 G6。</p>
+
+<h2 id="s3">3 · 修复后的保证</h2>
+<ul class="inv">
+  <li><b>I1 隔离 worktree 自带 submodule</b>：
+    <ul>
+      <li>家里已初始化的每个 submodule，<code>start</code> 都会在隔离 worktree 里检出到 HEAD 的 gitlink。</li>
+      <li>不访问远端，本地未 push 的提交也能用。</li>
+      <li>家 submodule 未初始化 → G0 红，并给出修法。</li>
+    </ul></li>
+  <li><b>I2 提交不丢</b>：执行体在 submodule 内的提交进入家 submodule 的对象库；门禁同时写 ref 锚住它，防止被 gc。</li>
+  <li><b>I3 并行不冲突</b>：同一 wave 多片改同一 submodule 时，由脚本在家 submodule 内合并后钉 gitlink；所有权不相交，所以不会出现内容冲突。合回后家 submodule 的检出和分支与 gitlink 一致。</li>
+  <li><b>I4 门禁按文件判</b>：G3、G6、G8、GWT 看到的是 <code>admin/viewer/src/...</code> 这类真实文件。submodule 里有提交、但 gitlink 没提交进父仓 → 红（这种提交合回时会丢）。</li>
+  <li><b>I5 重派可续</b>：撞上限后重派，submodule 内的半成品照样能从快照恢复。</li>
+  <li><b>I6 无 submodule 的仓库零变化</b>：所有新逻辑都以「存在 gitlink」为前提；没有 gitlink 时，<code>merge</code> 子命令等价于逐条 <code>git merge --no-ff</code>。</li>
+</ul>
+
+<h2 id="s4">4 · 全景：家 / 隔离 worktree / submodule 对象库</h2>
+<svg viewBox="0 0 1040 330" width="100%" role="img" aria-label="全景图">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#59636e"/></marker></defs>
+  <rect x="10" y="10" width="1020" height="64" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <text x="24" y="34" font-size="13" font-weight="600">共享 .git（afa/.git）</text>
+  <text x="24" y="56" font-size="12" fill="#59636e">父仓对象库 · refs/heads/raw-file-viewer · worktrees/raw-file-viewer/modules/admin/viewer ← 家 submodule 的 gitdir（对象库 + 分支 feat/raw-frame-viewer + worktrees/&lt;id&gt; 登记）</text>
+  <rect x="20" y="104" width="470" height="200" rx="10" fill="#eef6ff" stroke="#9cc8f5"/>
+  <text x="34" y="128" font-size="13" font-weight="600">change 家：.worktrees/raw-file-viewer（主会话 · integrator · final）</text>
+  <rect x="40" y="144" width="200" height="60" rx="8" fill="#fff" stroke="#9cc8f5"/>
+  <text x="52" y="166" font-size="12">父仓检出（分支 raw-file-viewer）</text>
+  <text x="52" y="186" font-size="11" fill="#59636e">HEAD:admin/viewer = gitlink</text>
+  <rect x="260" y="144" width="210" height="60" rx="8" fill="#fff" stroke="#9cc8f5"/>
+  <text x="272" y="166" font-size="12">admin/viewer（家 submodule）</text>
+  <text x="272" y="186" font-size="11" fill="#59636e">分支 feat/raw-frame-viewer = gitlink</text>
+  <rect x="40" y="220" width="430" height="66" rx="8" fill="#effbf2" stroke="#8fd6a2"/>
+  <text x="52" y="242" font-size="12" font-weight="600">新：slice-gate.py merge（integrator 第 1 项）</text>
+  <text x="52" y="262" font-size="11" fill="#59636e">父仓 merge --no-ff → gitlink 冲突？→ 家 submodule 内 merge 双方</text>
+  <text x="52" y="278" font-size="11" fill="#59636e">→ update-index 钉 gitlink → commit → 家 submodule 分支 ff 到 gitlink</text>
+  <rect x="550" y="104" width="470" height="200" rx="10" fill="#fff6ec" stroke="#f5c38f"/>
+  <text x="564" y="128" font-size="13" font-weight="600">隔离 worktree：.claude/worktrees/wf_…（执行体 · fix）</text>
+  <rect x="570" y="144" width="200" height="60" rx="8" fill="#fff" stroke="#f5c38f"/>
+  <text x="582" y="166" font-size="12">父仓检出（detached）</text>
+  <text x="582" y="186" font-size="11" fill="#59636e">G0：HEAD ⊇ change 分支</text>
+  <rect x="790" y="144" width="210" height="60" rx="8" fill="#fff" stroke="#f5c38f"/>
+  <text x="802" y="166" font-size="12">admin/viewer（借出的 linked wt）</text>
+  <text x="802" y="186" font-size="11" fill="#59636e">detached @ gitlink → 执行体提交</text>
+  <rect x="570" y="220" width="430" height="66" rx="8" fill="#effbf2" stroke="#8fd6a2"/>
+  <text x="582" y="242" font-size="12" font-weight="600">新：start 第 0.5 步 sub-sync（G0 通过之后）</text>
+  <text x="582" y="262" font-size="11" fill="#59636e">git -C 家/P worktree add --detach 隔离/P &lt;HEAD:P&gt;（由 hook 脚本执行，</text>
+  <text x="582" y="278" font-size="11" fill="#59636e">只写共享 .git 内的元数据，不碰家的工作区文件）</text>
+  <line x1="895" y1="144" x2="895" y2="80" stroke="#59636e" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="903" y="96" font-size="11" fill="#59636e">提交写入家 submodule 对象库</text>
+  <line x1="365" y1="144" x2="365" y2="80" stroke="#59636e" marker-end="url(#ar)"/>
+  <line x1="490" y1="174" x2="548" y2="174" stroke="#59636e" marker-end="url(#ar)"/>
+  <text x="494" y="166" font-size="11" fill="#59636e">分叉</text>
+</svg>
+<p class="note">隔离 worktree 的实际位置以 afa 的 <code>git worktree list</code> 为准：在 <b>afa 主 checkout</b> 的 <code>.claude/worktrees/wf_*</code> 下，不在家目录里。所以 <code>start</code> 要靠 <code>--expect-branch &lt;branch&gt;</code> 在 <code>git worktree list --porcelain</code> 里找到检出该分支的 worktree，把它认作「家」。飞行模式起飞时已经传入 branch。</p>
+
+<h2 id="s5">5 · 合回时序（一个 wave，S1 ∥ S2 都改 <code>admin/viewer</code>）</h2>
+<pre>
+wave 起点：父仓 HEAD gitlink = GL；家 submodule 分支 tip = GL
+ ├─ S1 执行体（隔离 A）: start → sub-sync 借出 A/admin/viewer@GL → 子仓提交 s1 → 父仓提交 C1（含 gitlink GL→s1 + 父仓 owns 文件）→ gate（展开判文件）
+ └─ S2 执行体（隔离 B）: 同上 → s2 / C2
+integrator（家）: slice-gate.py merge --change-dir … S1=C1 S2=C2
+ ├─ C1: 父仓 merge --no-ff --no-commit；gitlink GL→s1 是快进 → 钉 s1 → commit "integrate: S1" → 家子仓分支 ff 到 s1
+ ├─ C2: 父仓 merge → CONFLICT (submodule) 只在 gitlink 上
+ │     → 家子仓（HEAD = s1）merge --no-ff s2 → M  （所有权不相交 ⇒ 无内容冲突；真冲突 → 两边都 abort，返回 ok:false）
+ │     → update-index --cacheinfo 160000,M,admin/viewer → commit "integrate: S2"
+ └─ 返回 {ok, merged:[S1,S2], failed:[], warnings:[]}；父仓 status 干净；下一 wave 从 gitlink M 填充
+</pre>
+
+<h2 id="s6">6 · 门禁展开规则（只在存在 gitlink 时生效）</h2>
+<table>
+  <tr><th style="width:22%">位置</th><th style="width:39%">现在</th><th>改后</th></tr>
+  <tr><td><code>changed_files</code> 已提交</td><td><code>diff --name-only base..HEAD</code> → <code>admin/viewer</code></td><td>用 <code>diff --raw</code> 找出 mode 160000 的条目，展开为 <code>P/</code> + <code>git -C P diff --name-only old..new</code>，去掉 gitlink 伪路径。P 未填充或 old/new 有一侧为空（新增或删除 submodule）→ 保留伪路径，G6 会点名</td></tr>
+  <tr><td><code>changed_files</code> 未提交</td><td>父仓 porcelain 里只有 <code> M admin/viewer</code></td><td>展开为 <code>git -C P status</code>（尊重 submodule 自己的 .gitignore），再加上「子仓 HEAD 领先 gitlink」那段区间的文件</td></tr>
+  <tr><td>G6 新增一条</td><td>—</td><td><code>G6 gitlink: P 有提交 x 未记录进父仓（git add P 后并入本切片 commit）</code>：这种提交合回时会丢，所以判红</td></tr>
+  <tr><td><code>added_lines</code>（G8）</td><td><code>diff --unified=0 base..HEAD</code></td><td>加 <code>--submodule=diff</code>，git 原生输出 <code>+++ b/admin/viewer/...</code>，解析逻辑不用改</td></tr>
+  <tr><td><code>_checkpoint</code> / <code>_ckpt_restore</code></td><td>只做父仓</td><td>对每个有 owns 落在里面的 submodule 各做一份：临时 index、<code>commit-tree</code>，写入子仓的同名 ref <code>refs/flight/&lt;change&gt;/&lt;S&gt;</code>（子仓 ref 在各 linked worktree 间共享）</td></tr>
+  <tr><td>评审 prompt</td><td><code>git show &lt;commit&gt;</code></td><td><code>git show --submodule=diff &lt;commit&gt;</code>（没有 submodule 时输出不变）</td></tr>
+  <tr><td>final 增量</td><td>gitlink 变动按「未被任何用例触及的非 Python 文件」触发全量</td><td><b>不动</b>（Q5）：结果偏保守但正确；配了 <code>gate.scope</code> 的仓库由提供方裁决</td></tr>
+</table>
+
+<h2 id="s7">7 · 待你拍板（已预选推荐项，改完点底部「导出结果」）</h2>
+
+<div class="q" data-q="Q1" data-title="隔离 worktree 的 submodule 怎么来">
+  <h3>Q1 · 隔离 worktree 里的 submodule 怎么来</h3>
+  <p class="why">关键约束（官方文档）：执行体自己执行 <code>git -C &lt;家&gt;</code> 会被 Claude Code 的隔离检查拦下。所以任何方案都只能由 hook 脚本代办，或者在家里（主会话 / integrator）完成。</p>
+  <label class="opt rec"><input type="radio" name="Q1" value="A" checked>A · <code>start</code> 借出家 submodule 的 linked worktree（推荐）<span class="d">E1 已验证。对象库共享，执行体的提交对家即刻可见，不需要搬运。写入只发生在共享 <code>.git</code> 内（家 submodule gitdir 下的 <code>worktrees/&lt;id&gt;</code> 登记、对象、per-worktree HEAD），不碰家的工作区文件，与父仓提交写共享 <code>.git</code> 属于同一类操作。需要你明确接受：由 hook 脚本代办、绕过文本检查的这一步</span></label>
+  <label class="opt"><input type="radio" name="Q1" value="B">B · <code>clone --shared</code> 到隔离目录，合回前 integrator 从隔离目录 fetch<span class="d">不写家的元数据。代价：门禁 JSON 要带隔离目录路径；重派时要从上一轮的隔离目录取提交；隔离目录在合回前被清理，提交就丢</span></label>
+  <label class="opt"><input type="radio" name="Q1" value="C">C · <code>WorktreeCreate</code> hook 接管 worktree 创建<span class="d">文档写明会「替换默认 git 行为」：要自己实现 baseRef、<code>.worktreeinclude</code>、锁和 LFS 中和。hook 建的 worktree 也不进 Claude Code 的定期清扫。代价最大</span></label>
+  <label class="opt"><input type="radio" name="Q1" value="D">D · 改 submodule 的切片不隔离，在家里串行<span class="d">改动最小，但 afa 那 6 片 viewer 切片会全部串行，本次要消除的就是这种退化</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q2" data-title="gitlink 谁提交">
+  <h3>Q2 · gitlink 由谁提交</h3>
+  <label class="opt rec"><input type="radio" name="Q2" value="A" checked>A · 执行体在同一个切片 commit 里一起提交 gitlink（推荐）<span class="d">这是标准的 submodule 工作流。门禁、评审、重派 cherry-pick 都只需要看一个父仓 commit；冲突交给 Q3 的脚本</span></label>
+  <label class="opt"><input type="radio" name="Q2" value="B">B · 执行体只在 submodule 内提交，由 integrator 统一钉 gitlink<span class="d">父仓合回永远不冲突。代价：纯 viewer 切片的父仓 commit 为空；评审和重派都要另传子仓提交；执行体还要守「别 git add P」这条反直觉的纪律</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q3" data-title="合回执行者">
+  <h3>Q3 · 合回由谁做</h3>
+  <label class="opt rec"><input type="radio" name="Q3" value="A" checked>A · 新增 <code>slice-gate.py merge</code>，integrator 第 1 项一律调用它（推荐）<span class="d">符合零 token 优先：模型不解冲突。没有 gitlink 时等价于逐条 <code>merge --no-ff -m "integrate: &lt;S&gt;"</code>，冲突即 abort。Workflow 与 Agent 回退两条路径都通过 integrator 调用，语义一致</span></label>
+  <label class="opt"><input type="radio" name="Q3" value="B">B · integrator 照旧手动 merge，只在出现 <code>CONFLICT (submodule)</code> 时调用脚本<span class="d">普通仓库的路径一行不动。但每次 merge 后同步家 submodule 的检出也要靠模型判断输出再分支，更容易漏</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q4" data-title="门禁与快照覆盖">
+  <h3>Q4 · 门禁、快照、起飞前校验覆盖到哪</h3>
+  <label class="opt rec"><input type="radio" name="Q4" value="A" checked>A · gate 展开 + 快照恢复 + preflight 就绪校验，三项全做（推荐）<span class="d">断点 4、5、6 一起闭环；<code>--resume-checkpoint</code> 的语义对 submodule 同样成立（铁律 10：回退语义一致）</span></label>
+  <label class="opt"><input type="radio" name="Q4" value="B">B · 只做 gate 展开和 preflight<span class="d">撞上限重派时，submodule 内的半成品要重做；在 PR 里写明这是一处天花板</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q5" data-title="final 增量">
+  <h3>Q5 · final 的增量选测要不要认识 gitlink</h3>
+  <label class="opt rec"><input type="radio" name="Q5" value="A" checked>A · 不动，记一条天花板（推荐）<span class="d">gitlink 变动 → 全量，保守而且正确。afa 这类仓库用 <code>gate.scope</code> 提供方裁决。要升级时，在内建依赖图里展开 gitlink</span></label>
+  <label class="opt"><input type="radio" name="Q5" value="B">B · 本 change 一起做：final 的 Δ 展开 gitlink<span class="d">要动 <code>_delta</code>、<code>_snapshot</code>、<code>_blobs_at</code> 三处的内容指纹，还要改基线池的跨 change 复用。范围翻倍，风险集中在最复杂的 final 增量</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q6" data-title="不支持的形态">
+  <h3>Q6 · 嵌套 submodule、新增或删除 submodule 的切片</h3>
+  <label class="opt rec"><input type="radio" name="Q6" value="A" checked>A · 本 change 不支持，机械判红并给出提示（推荐）<span class="d">
+    <ul style="margin:2px 0 0;padding-left:16px">
+      <li><code>start</code> 只填充一层；子仓里还有未填充的 submodule → warning。</li>
+      <li>gitlink 一侧为空（新增或删除 submodule）→ G6 点名伪路径，提示改走 <code>--gate=per-task</code>。</li>
+    </ul></span></label>
+  <label class="opt"><input type="radio" name="Q6" value="B">B · 一并支持<span class="d">递归填充，并处理 <code>.gitmodules</code> 的变更。没有真实样本可验证</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q7" data-title="组织">
+  <h3>Q7 · 怎么组织</h3>
+  <label class="opt rec"><input type="radio" name="Q7" value="A" checked>A · 一个 change <code>submodule-aware-flight</code>，分四片，外加一份 DRAFT ADR（推荐）<span class="d">填充、展开、合回三者互相依赖，放在一起审才看得出是否闭环。ADR 记长期承诺：「隔离 worktree 的 submodule 借用家的 linked worktree；gitlink 冲突由脚本合并」</span></label>
+  <label class="opt"><input type="radio" name="Q7" value="B">B · 拆成两个 change：「门禁展开 + preflight」与「填充 + 合回」<span class="d">前者单独合入后，per-task 路径的 6 片 viewer 切片也能写出门禁记录，但飞行模式仍不能用</span></label>
+  <textarea class="memo" placeholder="补充说明（可空，也可以改名）"></textarea>
+</div>
+
+<div class="q" data-q="Q8" data-title="afa raw-file-viewer 怎么走">
+  <h3>Q8 · 在飞的 afa <code>raw-file-viewer</code> 怎么走</h3>
+  <p class="why">afa 会话停在「选路线 A / B / C」：S1 已经按 per-task 做完，评审还没补；baseline 在新版上重跑时以 exit 2 失败，原因 afa 会话还没报。</p>
+  <label class="opt rec"><input type="radio" name="Q8" value="A" checked>A · 不等模板：afa 先按它会话里的路线 B（混合）继续，新机制留给下一个 submodule change（推荐）<span class="d">不阻塞 afa。模板 change 合入并升级 afa 后，在下一个改 viewer 的 change 上实测</span></label>
+  <label class="opt"><input type="radio" name="Q8" value="B">B · afa 暂停，等本 change 合入并升级后，剩余 8 片改为飞行<span class="d">raw-file-viewer 正好当新机制的首个真实样本。代价：afa 要等，还要改 design D8、重跑 baseline、重新批准</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<h3>导出结果</h3>
+<p class="note">点底部「导出结果」后，结果会复制到剪贴板（同时显示在下面的文本框里）。直接粘贴回对话即可。</p>
+<textarea id="out" readonly></textarea>
+
+<h2 id="s8">8 · 切片草案与验证（按推荐项）</h2>
+<table>
+  <tr><th style="width:6%">片</th><th style="width:40%">做什么</th><th style="width:10%">依赖</th><th>场景（先写骨架、验红；玩具仓「父仓 + 本地 submodule + 家 worktree + 隔离 worktree」做夹具）</th></tr>
+  <tr><td>S1</td><td>门禁展开：<code>_gitlinks</code>，<code>changed_files</code> 展开已提交和未提交部分，<code>added_lines</code> 加 <code>--submodule=diff</code>，新增 G6 gitlink 未记录</td><td>—</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>只改 submodule 内文件（在 owns 里）、配对测试齐全 → 绿，<code>files</code> 不含 <code>admin/viewer</code>。</li>
+      <li>改了 owns 外的子仓文件 → G6 点名 <code>admin/viewer/x</code>。</li>
+      <li>子仓已提交、gitlink 未提交 → G6 gitlink 红。</li>
+      <li>子仓文件里的 ceiling 行 → 进 G8。</li>
+      <li>无 submodule 的仓库 → 输出与改前逐字段一致。</li>
+    </ul></td></tr>
+  <tr><td>S2</td><td><code>sub-sync</code>：<code>start</code> 在 G0 之后填充；fix 路径单独调用；快照和恢复覆盖子仓；preflight 就绪校验</td><td>S1</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>隔离 worktree 里 <code>start --expect-branch</code> → 子仓检出到 gitlink，家里看得到登记，执行体提交即刻可见。</li>
+      <li>家子仓未初始化 → G0 红并给出修法。</li>
+      <li>G0 不通过 → 不填充。</li>
+      <li>重派 cherry-pick 后 <code>start</code> → 子仓检出到新 gitlink。</li>
+      <li>快照含子仓半成品 → 新隔离 worktree 用 <code>--resume-checkpoint</code> 恢复。</li>
+      <li>家子仓 HEAD ≠ gitlink → preflight 红。</li>
+    </ul></td></tr>
+  <tr><td>S3</td><td><code>slice-gate.py merge</code>：逐片 <code>merge --no-ff</code>；gitlink 快进直接钉、分叉则在家子仓内合并后钉；合回后家子仓分支 ff；任一真冲突就两边都 abort</td><td>S2</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>同一 wave 两片都改子仓 → <code>ok:true</code>，家子仓分支含双方提交，父仓 status 干净。</li>
+      <li>子仓内容冲突（人为制造）→ <code>ok:false</code>，父仓和子仓都回到合回前的状态。</li>
+      <li>无 submodule → 等价于逐条 <code>merge --no-ff</code>。</li>
+      <li>端到端：wave1 合回后，wave2 的隔离 worktree 从新 gitlink 填充。</li>
+    </ul></td></tr>
+  <tr><td>S4</td><td>编排与文档：
+    <ul style="margin:2px 0 0;padding-left:16px">
+      <li><code>opsx-apply.js</code>：integrator 调用 <code>merge</code>；fix 调用 <code>sub-sync</code>；评审加 <code>--submodule=diff</code>。</li>
+      <li><code>integrator.md</code>、<code>slice-executor.md</code>：子仓提交纪律。</li>
+      <li><code>opsx-apply.md</code> 与同名 skill 同步改；git-discipline skill；README / WORKFLOW_zh。</li>
+      <li>DRAFT ADR。</li>
+    </ul></td><td>—（接口按 design 固定，与 S1 并行）</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>脚本与回退路径都让 integrator 调用 <code>merge</code>。</li>
+      <li>fix 的 prompt 含 <code>sub-sync</code>。</li>
+      <li>评审 prompt 含 <code>--submodule=diff</code>。</li>
+      <li>命令与 skill 文本同步（沿用现有文档测试）。</li>
+    </ul></td></tr>
+</table>
+<p>waves：<code>[[S1, S4], [S2], [S3]]</code>。S1、S2、S3 都要改 <code>slice-gate.py</code>，所以只能分在不同 wave 串行。</p>
+<p><b>收口必过：</b>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li><code>python3 -m pytest -q tests</code> 全绿。</li>
+    <li><code>cd template &amp;&amp; openspec schema validate intent-driven</code> 绿。</li>
+    <li><code>.claude/hooks/*.py</code> 能通过 compileall。</li>
+    <li>独立评审的 CRITICAL / HIGH 全部闭环。</li>
+    <li>打印飞行记录。</li>
+  </ul></p>
+
+<h3>批准后的步骤</h3>
+<ol class="steps">
+  <li>你导出本页的选择后，我在本仓库按 <code>opsx-propose</code> 推进：
+    <ul>
+      <li>建 worktree <code>.worktrees/submodule-aware-flight</code>。</li>
+      <li>产出工件、spec.html，场景骨架逐条验红。</li>
+      <li>验证：slice-gate lint 绿，schema validate 绿。</li>
+    </ul></li>
+  <li>你审 spec.html，然后运行 <code>/opsx-apply</code>（takeoff-gate 只认你的消息）。飞行顺序：S1 ∥ S4 → S2 → S3 → final → PR。</li>
+  <li>合入后，在 afa 执行 <code>./install.sh --upgrade</code>。下一个改 viewer 的 change 先做实测（Q8-A），或者在 raw-file-viewer 上做（Q8-B）。</li>
+</ol>
+
+<h2 id="s9">9 · 风险与回退</h2>
+<table>
+  <tr><th style="width:30%">风险</th><th>缓解</th><th style="width:22%">残余</th></tr>
+  <tr><td>Q1-A 让 hook 脚本在 Claude Code 的文本检查之外，写家 submodule 的 git 元数据</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>只做三件事：<code>worktree add --detach</code>、写 <code>refs/flight/…</code>、提交对象落库，全部在共享 <code>.git</code> 内。</li>
+      <li>不改家的分支、不改家的工作区文件。</li>
+      <li>家子仓分支只由家里的 <code>merge</code> 推进。</li>
+      <li>写进 ADR，交人审批。</li>
+    </ul></td><td>Claude Code 以后若把「写共享 .git 内其他 worktree 的元数据」也列入拦截范围，需要回到 Q1-B</td></tr>
+  <tr><td>含已填充 submodule 的隔离 worktree，<code>git worktree remove</code> 会拒删（E1）</td><td>
+    <ul style="margin:0;padding-left:16px">
+      <li>有提交的隔离 worktree 本来就保留到定期清扫。</li>
+      <li>G0 不通过时不填充，所以不会出现「无改动但删不掉」。</li>
+    </ul></td><td>Claude Code 清扫时如何处理这种 worktree 未实测；可能残留，届时用 <code>git worktree remove --force</code> 加子仓 <code>git worktree prune</code> 清理</td></tr>
+  <tr><td>每个隔离 worktree 多检出一份 submodule</td><td>只检出家里已初始化的 submodule；afa 的 viewer 是 197 个文件</td><td>大型 submodule 会增加每片的起步耗时</td></tr>
+  <tr><td>家子仓有未记录进 gitlink 的本地提交，或检出了别的分支</td><td>preflight 判红并给出修法；<code>merge</code> 开跑前再复核一次</td><td>—</td></tr>
+  <tr><td><code>merge</code> 子命令替换了 integrator 原来的手动 merge</td><td>无 gitlink 时，行为由场景测试锁定为与原来等价；Agent 回退路径用的是同一个 integrator</td><td>—</td></tr>
+</table>
+<p><b>回退：</b>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li>revert 本 change，回到「含 submodule 的 change 用 <code>--gate=per-task</code>」的现状。</li>
+    <li>单个 change 也可以继续显式走 <code>--gate=per-task</code>：新的门禁展开对 per-task 路径同样生效，那 6 片也能写出门禁记录。</li>
+  </ul></p>
+
+</main>
+
+<div class="bar">
+  <span class="st" id="st">已预选推荐项</span>
+  <button id="btn-export">导出结果（复制）</button>
+  <button class="sec" id="btn-dl">下载 JSON</button>
+</div>
+
+<script>
+(function () {
+  function labelOf(input) {
+    var t = input.parentNode.childNodes, s = '';
+    for (var k = 0; k < t.length; k++) {
+      if (t[k].nodeType === 3) s += t[k].textContent;
+      if (t[k].nodeType === 1 && t[k].tagName === 'CODE') s += t[k].textContent;
+    }
+    return s.trim();
+  }
+  function collect() {
+    var answers = {}, notes = {}, lines = [];
+    document.querySelectorAll('.q').forEach(function (q) {
+      var id = q.getAttribute('data-q'), title = q.getAttribute('data-title');
+      var picked = Array.prototype.slice.call(q.querySelectorAll('input:checked'));
+      answers[id] = picked.length ? picked[0].value : null;
+      var memo = ((q.querySelector('textarea.memo') || {}).value || '').trim();
+      if (memo) notes[id] = memo;
+      lines.push('- ' + id + ' ' + title + '：' + (picked.length ? picked.map(labelOf).join(' + ') : '（未选）') + (memo ? '｜备注：' + memo : ''));
+    });
+    var payload = { page: 'submodule-aware-flight-decisions.html', date: '2026-11-07', answers: answers, notes: notes };
+    return { text: '决策页导出（submodule-aware-flight）\n' + lines.join('\n') + '\n\n```json\n' + JSON.stringify(payload, null, 2) + '\n```', payload: payload };
+  }
+  var out = document.getElementById('out'), st = document.getElementById('st');
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var r = collect();
+    out.style.display = 'block';
+    out.value = r.text;
+    out.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(r.text).then(function () { st.textContent = '已复制到剪贴板'; }, function () { out.select(); st.textContent = '复制失败：已选中文本框，请手动复制'; });
+    } else { out.select(); st.textContent = '请手动复制文本框内容'; }
+  });
+  document.getElementById('btn-dl').addEventListener('click', function () {
+    var r = collect();
+    var blob = new Blob([JSON.stringify(r.payload, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'submodule-aware-flight-decisions.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    st.textContent = '已下载 JSON';
+  });
+  document.querySelectorAll('.q input').forEach(function (i) { i.addEventListener('change', function () { st.textContent = '有改动，记得导出'; }); });
+})();
+</script>
+</body>
+</html>

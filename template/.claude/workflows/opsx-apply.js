@@ -126,7 +126,7 @@ const executorPrompt = (s, retryOf) => [
 ].join('\n')
 
 const reviewPrompt = (s, gate) => [
-  rules('code-reviewer') + `评审模式：full。审 OpenSpec change \`${change}\` 切片 ${s} 的实现 commit：\`git show ${gate.commit}\`。`,
+  rules('code-reviewer') + `评审模式：full。审 OpenSpec change \`${change}\` 切片 ${s} 的实现 commit：\`git show --submodule=diff ${gate.commit}\`。`,
   `切片包（scenario 与约束）：${changeDir}/slices/${s}.md。`,
   `门禁 JSON（已机械判定 verify / 配对 / GWT / 所有权 / scenario 状态，不要重报）：${JSON.stringify(gate)}。`,
   `evidence：${changeDir}/evidence.log（本切片的测试运行留痕，可 grep）。`,
@@ -162,7 +162,7 @@ for (const [i, allWave] of waves.entries()) {
   }
   const merged = wave.filter((s, k) => done[k] && done[k].ok)
   if (merged.length) {
-    const shas = merged.map((s) => done[wave.indexOf(s)].commit)
+    const pairs = merged.map((s) => `${s}=${done[wave.indexOf(s)].commit}`)
     // 临时 worktree 里跑出的门禁结论（含天花板行）不会随 commit 进分支，由 integrator 用 record --json 幂等写回
     const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
     const recordCmds = merged.map((s) => {
@@ -173,7 +173,7 @@ for (const [i, allWave] of waves.entries()) {
     // integrator 抛错与未返回同样重派一次；返回 ok:false（合回冲突）是确定性的，不重派
     const callInteg = (retry) => agent(
       rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件（timeline.md / gate-report.md / evidence.log）提交掉；` +
-      `再按第 1 项把切片 ${merged.join(', ')} 的 commit 合回当前分支：${shas.join(' ')}（冲突则 abort 并返回 ok:false）。` +
+      `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge ${pairs.join(' ')}\` 合回切片 ${merged.join(', ')}（它逐片 git merge --no-ff 并处理 submodule gitlink；报 invalid choice（子命令不存在）→ 按第 1 项的回退逐片 git merge --no-ff；退出 1 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
       `合回后逐条运行（把临时 worktree 里的门禁结论写回分支）：\n${recordCmds.join('\n')}\n` +
       `然后按第 2 项刷新 ${changeDir}/slices/_interfaces.md，并 \`python3 ${hooksDir}/timeline.py record integrate --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后再按第 0 项把飞行记录提交。` +
       '本次只合回，不要运行第 3 项（全量门禁 final）——后续 wave 的 scenario 还没解锁，现在跑必然红。返回 JSON {ok, merged, failed, warnings}。',
@@ -206,7 +206,9 @@ if (blocking.length) {
     branch
       ? `第一步做基点校验：运行 \`git merge-base --is-ancestor $(git rev-parse ${branch}) HEAD\`；非 0 退出（HEAD 不是分支 ${branch} 最新 commit 的后代）→ 不做任何改动，直接返回 {"slice":"fix","ok":false,"commit":"<实际 HEAD>","failed":["G0 base: HEAD 不是分支 ${branch} 的后代"]}。`
       : '',
-    `${branch ? '再' : '先'}运行 \`${startCmd('fix')}\` 记录起点（fix 不受单切片所有权限制：slices.json 若无 fix 条目，start 会拒绝，此时跳过 start${branch ? '；基点已由上一步校验' : ''}）。`,
+    `${branch ? '再' : '先'}运行 \`python3 ${hooksDir}/slice-gate.py sub-sync --change-dir ${changeDir}` + (branch ? ` --expect-branch ${branch}` : '') + '`' +
+      '（按 gitlink 填充隔离 worktree 的 submodule；无 submodule 时是空操作）；非 0 退出 → 不做任何改动，直接返回 {"slice":"fix","ok":false,"commit":"<实际 HEAD>","failed":<它 JSON 的 failed>}。',
+    `然后运行 \`${startCmd('fix')}\` 记录起点（fix 不受单切片所有权限制：slices.json 若无 fix 条目，start 会拒绝，此时跳过 start${branch ? '；基点已由第一步校验' : ''}）。`,
     `finding 清单：${JSON.stringify(blocking)}`,
     // fix 在临时 worktree 里跑，timeline 记录进不了分支：record fix 由 finalize 合回后写
     `每条修复都要有先失败的测试；修完运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，把 JSON 原样返回。`,
@@ -223,7 +225,7 @@ if (blocking.length) {
 phase('Finalize')
 // fix 在临时 worktree 里提交：合回指令必须先于 final，否则 final 验的是没有修复的分支
 const mergeFix = fix && fix.commit
-  ? `再按第 1 项把 fix 的 commit 合回当前分支：${fix.commit}（冲突则 abort，返回 ok:false 且 failed 写「merge fix 冲突」，不再往下跑）；` +
+  ? `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge fix=${fix.commit}\` 合回 fix 的 commit（报 invalid choice（子命令不存在）→ 按第 1 项的回退 git merge --no-ff；冲突 → 返回 ok:false 且 failed 写「merge fix 冲突」，不再往下跑）；` +
     `\`python3 ${hooksDir}/timeline.py record fix --change-dir ${changeDir} --note "blocking=${blocking.length}"\`；`
   : ''
 // final-gate 同 integrator：抛错与未返回重派一次，仍为空记 blocked（infra），返回的 final 为 null

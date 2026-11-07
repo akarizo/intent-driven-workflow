@@ -46,6 +46,16 @@ This carve-out covers **only** per-task implementation commits inside that apply
 
 本 carve-out 只覆盖飞行 apply 工作流为每个执行体（含单片 wave 与 fix）产生的临时 worktree，不放松其它场景下「每 change 一间，禁止嵌套子 worktree」的规则，也不授权对 main 的 `push` 或 `merge`。
 
+## Submodule
+
+含 submodule 的仓库同样走飞行模式，规则如下：
+
+- **借出不克隆**：隔离 worktree 的子仓由 `slice-gate.py start` / `sub-sync` 从 change 家子仓借出 **linked worktree**，不 clone、不访问远端。
+- **gitlink 随切片提交**：子仓内先 `git -C <子仓路径>` 提交，再把 gitlink 并入同一个切片 commit；漏掉 gitlink 由 `G6 gitlink` 拦下。
+- **合回只经脚本**：切片与 fix 的合回只经 `slice-gate.py merge`，不手工 `git merge` 或解冲突。
+- **家子仓由合回推进**：家子仓的分支由合回推进；起飞前家子仓检出须等于 gitlink（preflight 校验）。
+- **不支持的情形**：嵌套 submodule、新增或删除 submodule 的切片不支持，这类改动走 `--gate=per-task`。
+
 ## Gates
 
 | Moment | Gate |

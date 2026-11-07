@@ -2437,7 +2437,126 @@ def changed_files(root, base):
     for line in porcelain.splitlines():
         if len(line) > 3:
             uncommitted.add(line[3:].split(" -> ")[-1].strip())
+    links = _gitlinks(root)
+    if links:  # gitlink 伪路径换成子仓内的真实文件（design D3）；无 gitlink 时与改前一致
+        if base and base != head:
+            _expand_committed(root, base, committed)
+        _expand_uncommitted(root, links, uncommitted)
     return committed, set(f for f in uncommitted if not is_bytecode(f))
+
+
+GITLINK_MODE = "160000"
+
+
+def _gitlinks(root):
+    """索引里的 gitlink（mode 160000）→ {路径: sha}。"""
+    out = {}
+    for e in _git_raw(root, ["ls-files", "-s", "-z"]).split("\0"):
+        meta, _, path = e.partition("\t")
+        f = meta.split()
+        if len(f) == 3 and f[0] == GITLINK_MODE:
+            out[path] = f[1]
+    return out
+
+
+def _sub_ready(root, p):
+    return os.path.exists(os.path.join(root, p, ".git"))
+
+
+def _sub_git(root, p, *args):
+    return subprocess.run(["git", "-C", os.path.join(root, p), *args], capture_output=True, text=True)
+
+
+def _sub_has(root, p, sha):
+    return _sub_git(root, p, "cat-file", "-e", sha + "^{commit}").returncode == 0
+
+
+def _sub_head(root, p):
+    r = _sub_git(root, p, "rev-parse", "HEAD")
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _recorded_gitlink(root, p):
+    """父仓 HEAD 记录的 gitlink；取不到（如新增 submodule）返回 None。"""
+    r = subprocess.run(["git", "rev-parse", "HEAD:" + p], cwd=root, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _sub_diff_names(root, p, old, new):
+    r = _sub_git(root, p, "diff", "--name-only", "-z", "--no-renames", old, new)
+    return set(p + "/" + x for x in r.stdout.split("\0") if x)
+
+
+def _gitlink_raw_diff(root, base):
+    """base..HEAD 里涉及 gitlink 的 raw 条目 → [(路径, 旧mode, 新mode, 旧sha, 新sha)]。"""
+    parts = _git_raw(root, ["diff", "--raw", "-z", "--no-renames", "--no-abbrev", "%s..HEAD" % base]).split("\0")
+    out = []
+    for meta, path in zip(parts[0::2], parts[1::2]):
+        f = meta.lstrip(":").split()
+        if len(f) >= 4 and GITLINK_MODE in (f[0], f[1]):
+            out.append((path, f[0], f[1], f[2], f[3]))
+    return out
+
+
+def _expand_committed(root, base, committed):
+    """已提交：两侧都是 gitlink、子仓已填充、两端提交都在子仓里 → P 换成子仓区间 diff；否则保留 P 交 G6 点名。"""
+    for p, om, nm, old, new in _gitlink_raw_diff(root, base):
+        if om == nm == GITLINK_MODE and _sub_ready(root, p) and _sub_has(root, p, old) and _sub_has(root, p, new):
+            committed.discard(p)
+            committed.update(_sub_diff_names(root, p, old, new))
+
+
+def _expand_uncommitted(root, links, uncommitted):
+    """未提交：子仓 status（含未跟踪）+ 子仓检出领先父仓 HEAD gitlink 的那一段。"""
+    for p in sorted(uncommitted & set(links)):
+        if not _sub_ready(root, p):
+            continue
+        uncommitted.discard(p)
+        raw = _sub_git(root, p, "status", "--porcelain", "-z", "--untracked-files=all").stdout
+        rename = False
+        for e in raw.split("\0"):
+            if rename:  # 改名 / 复制项后随原路径
+                rename = False
+                continue
+            if len(e) < 4:
+                continue
+            rename = e[0] in "RC"
+            uncommitted.add(p + "/" + e[3:])
+        head, rec = _sub_head(root, p), _recorded_gitlink(root, p)
+        if head and rec and head != rec and _sub_has(root, p, rec) and _sub_has(root, p, head):
+            uncommitted.update(_sub_diff_names(root, p, rec, head))
+
+
+def gitlink_violations(root):
+    """已填充子仓的检出 ≠ 父仓 HEAD 记录的 gitlink → G6 gitlink（这种子仓提交合回时会丢）。"""
+    out = []
+    for p in sorted(_gitlinks(root)):
+        if not _sub_ready(root, p):
+            continue
+        head, rec = _sub_head(root, p), _recorded_gitlink(root, p)
+        if head and head != rec:
+            out.append("G6 gitlink: %s 的检出 %s 未记录进父仓 HEAD（父仓记录 %s；git add %s 后并入本切片 commit）" % (
+                p, head[:10], rec[:10] if rec else "无", p))
+    return out
+
+
+def anchor_submodules(root, base, change_dir, slice_id):
+    """门禁绿：区间内 gitlink 有变化且已填充的子仓写 refs/flight-sub/<change>/<S> 防 gc；失败只返回 warning。"""
+    if not _gitlinks(root):
+        return []
+    name = os.path.basename(os.path.abspath(change_dir).rstrip(os.sep))
+    warnings = []
+    try:
+        entries = _gitlink_raw_diff(root, base)
+    except RuntimeError as e:
+        return ["子仓锚定失败：%s" % e]
+    for p, _, nm, _, new in entries:
+        if nm == GITLINK_MODE and _sub_ready(root, p):
+            ref = "refs/flight-sub/%s/%s" % (name, slice_id)
+            r = _sub_git(root, p, "update-ref", ref, new)
+            if r.returncode != 0:
+                warnings.append("子仓锚定失败：%s %s → %s：%s" % (p, ref, new[:10], r.stderr.strip()))
+    return warnings
 
 
 def added_lines(root, base):
@@ -2446,7 +2565,7 @@ def added_lines(root, base):
     注意：`+++ b/<path>` 也以 `+` 开头，必须先判文件头再判内容行。
     """
     try:
-        diff = git(root, "diff", "--unified=0", "%s..HEAD" % base)
+        diff = git(root, "diff", "--unified=0", "--submodule=diff", "%s..HEAD" % base)
     except RuntimeError:
         return
     rel, lineno = None, 0
@@ -2914,6 +3033,100 @@ def _ckpt_delete(root, ref):
     subprocess.run(["git", "update-ref", "-d", ref], cwd=root, capture_output=True, text=True)
 
 
+def _ckpt_delete_all(root, ref):
+    """父仓与各已填充子仓里的同名快照 ref 一并删掉（design D4）。"""
+    _ckpt_delete(root, ref)
+    for p in _gitlinks(root):
+        if _sub_ready(root, p):
+            _sub_git(root, p, "update-ref", "-d", ref)
+
+
+def _sub_owns(owns, p):
+    """owns 中落在子仓 P 里的条目，去掉 `P/` 前缀。"""
+    return [o[len(p) + 1:] for o in owns if o.startswith(p + "/")]
+
+
+def _need_subs(root, owns):
+    """owns 落在其中的 gitlink 路径集合（owns 可能是 glob，按前缀判断）。"""
+    return set(p for p in _gitlinks(root) if _sub_owns(owns, p))
+
+
+def _home_root(root, branch):
+    """检出 branch 的那个 worktree（change 家）的 realpath；找不到或 branch 为空 → None。"""
+    if not branch:
+        return None
+    p = subprocess.run(["git", "worktree", "list", "--porcelain"], cwd=root, capture_output=True, text=True)
+    if p.returncode != 0:
+        return None
+    for block in p.stdout.split("\n\n"):
+        lines = block.splitlines()
+        wt = next((x[len("worktree "):] for x in lines if x.startswith("worktree ")), None)
+        if wt and "branch refs/heads/%s" % branch in lines:
+            return os.path.realpath(wt)
+    return None
+
+
+def _first_line(text, default):
+    return (text.strip().splitlines() or [default])[0]
+
+
+def _sub_sync(root, branch, need):
+    """按父仓 HEAD 的 gitlink 从 change 家借出子仓 linked worktree（design D1）→ (synced, failed, warnings)。
+    已填充的子仓不动；P ∉ need 的失败只记 warning。"""
+    synced, failed, warnings = [], [], []
+    home = None
+    for p in sorted(_gitlinks(root)):
+        rec = _recorded_gitlink(root, p)
+        if _sub_ready(root, p):
+            head = _sub_head(root, p)
+            if head != rec:
+                warnings.append("%s 的检出 %s 与 gitlink %s 不一致（未改动）" % (
+                    p, (head or "?")[:10], (rec or "无")[:10]))
+            continue
+        home = home or _home_root(root, branch)
+        dest = os.path.join(root, p)
+        why = None
+        if home is None:
+            why = "定位不到 change 家（--expect-branch 未给，或没有 worktree 检出分支 %s）" % (branch or "?")
+        elif home == os.path.realpath(root):
+            why = "本 worktree 即 change 家且子仓未初始化：在 %s 运行 git submodule update --init %s" % (root, p)
+        elif not _sub_ready(home, p):
+            why = "change 家的子仓未初始化：在 %s 运行 git submodule update --init %s" % (home, p)
+        elif not rec or not _sub_has(home, p, rec):
+            why = "父仓 HEAD 的 gitlink %s 不在 %s 的对象库" % ((rec or "无")[:10], os.path.join(home, p))
+        elif os.path.exists(dest) and (not os.path.isdir(dest) or os.listdir(dest)):
+            why = "%s 已存在且非空" % dest
+        else:
+            r = _sub_git(home, p, "worktree", "add", "--detach", dest, rec)
+            if r.returncode != 0:
+                why = "git worktree add 失败：%s" % _first_line(r.stderr, "exit %d" % r.returncode)
+        if why:
+            (failed if p in need else warnings).append("G0 submodule: %s %s" % (p, why))
+            continue
+        synced.append(p)
+        if os.path.exists(os.path.join(dest, ".gitmodules")):
+            warnings.append("%s 含嵌套 submodule，未填充（本机制不支持嵌套）" % p)
+    return synced, failed, warnings
+
+
+def _sub_status_files(root, p, sub_owns):
+    """子仓工作区里匹配子仓 owns 的改动文件（子仓相对路径，排除字节码）。"""
+    raw = _sub_git(root, p, "status", "--porcelain", "-z", "-uall").stdout
+    files, skip = [], False
+    for e in raw.split("\0"):
+        if skip:
+            skip = False
+            continue
+        if len(e) < 4:
+            continue
+        if e[0] in "RC":
+            skip = True
+        f = e[3:]
+        if not is_bytecode(f) and any(glob_match(f, o) for o in sub_owns):
+            files.append(f)
+    return files
+
+
 def _gate_ref(change_dir, slice_id):
     return "refs/flight/%s/gate-%s" % (os.path.basename(os.path.abspath(change_dir).rstrip(os.sep)), slice_id)
 
@@ -2982,15 +3195,33 @@ def _checkpoint(root):
         if any(glob_match(path, o) for o in owns):
             files.append(path)
     head = git(root, "rev-parse", "HEAD")
-    if not files and head == marker.get("base"):
-        return
+    ref, msg = _ckpt_ref(change_dir, slice_id), "flight checkpoint %s" % slice_id
+    if files or head != marker.get("base"):
+        git(root, "update-ref", ref, _ckpt_commit(root, head, files, msg))
+    # 子仓段（design D4）：快照写在子仓自己的对象库与 ref 里，重派的隔离 worktree 借出同一子仓即可解析
+    for p in sorted(_gitlinks(root)):
+        sub_owns = _sub_owns(owns, p)
+        if not sub_owns or not _sub_ready(root, p):
+            continue
+        sub_files = _sub_status_files(root, p, sub_owns)
+        r = subprocess.run(["git", "rev-parse", "--verify", "-q", "%s:%s" % (marker.get("base"), p)], cwd=root,
+                           capture_output=True, text=True)
+        base_rec = r.stdout.strip() if r.returncode == 0 else None
+        sub_head = _sub_head(root, p)
+        if sub_head and (sub_files or sub_head != base_rec):
+            repo = os.path.join(root, p)
+            git(repo, "update-ref", ref, _ckpt_commit(repo, sub_head, sub_files, msg))
+
+
+def _ckpt_commit(repo, head, files, msg):
+    """用临时索引把 head 的树叠上 files 的工作区内容，生成以 head 为父的快照提交，返回 sha。父仓与子仓共用。"""
     fd, index = tempfile.mkstemp(prefix="flight-ckpt-", suffix=".index")
     os.close(fd)
     try:
         env = dict(os.environ, GIT_INDEX_FILE=index)
 
         def g(*a):
-            p = subprocess.run(["git", *a], cwd=root, capture_output=True, text=True, env=env)
+            p = subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, env=env)
             if p.returncode != 0:
                 raise RuntimeError("git %s: %s" % (" ".join(a), p.stderr.strip()))
             return p.stdout.strip()
@@ -2999,13 +3230,12 @@ def _checkpoint(root):
         if files:
             g("add", "-A", "--", *files)
         tree = g("write-tree")
-        sha = g("commit-tree", tree, "-p", head, "-m", "flight checkpoint %s" % slice_id)
+        return g("commit-tree", tree, "-p", head, "-m", msg)
     finally:
         try:
             os.remove(index)
         except OSError:
             pass
-    git(root, "update-ref", _ckpt_ref(change_dir, slice_id), sha)
 
 
 def cmd_checkpoint(args):
@@ -3026,35 +3256,51 @@ def cmd_checkpoint(args):
 
 
 def _ckpt_restore(root, ref, owns):
-    """把快照里相对 HEAD 有差异的 owns 文件放回工作区。返回 (restored, note)。"""
+    """把快照里相对 HEAD 有差异的 owns 文件放回工作区（父仓 + 各已填充子仓）。返回 (restored, note)。"""
+    restored, note = [], ""
     try:
         snap = git(root, "rev-parse", "--verify", "-q", ref + "^{commit}")
     except RuntimeError:
-        return [], "无快照 %s，未恢复" % ref
-    if not _is_ancestor(root, "HEAD", snap):
-        return [], "快照 %s 的祖先链不含当前 HEAD（基点不符），未恢复" % snap[:10]
+        snap, note = None, "无快照 %s，未恢复" % ref
+    if snap and not _is_ancestor(root, "HEAD", snap):
+        snap, note = None, "快照 %s 的祖先链不含当前 HEAD（基点不符），未恢复" % snap[:10]
+    if snap:
+        restored.extend(_restore_files(root, snap, owns, skip=(MARKER,)))
+    for p in sorted(_gitlinks(root)):
+        sub_owns = _sub_owns(owns, p)
+        if not sub_owns or not _sub_ready(root, p):
+            continue
+        r = _sub_git(root, p, "rev-parse", "--verify", "-q", ref + "^{commit}")
+        sub_snap = r.stdout.strip() if r.returncode == 0 else ""
+        if not sub_snap or not _is_ancestor(os.path.join(root, p), "HEAD", sub_snap):
+            continue
+        restored.extend(p + "/" + f for f in _restore_files(os.path.join(root, p), sub_snap, sub_owns))
+    return restored, ("" if restored else (note or "快照与 HEAD 在 owns 内无差异，未恢复"))
+
+
+def _restore_files(repo, snap, owns, skip=()):
+    """repo 里 HEAD..snap 有差异且匹配 owns 的文件：快照里有就检出，没有就删除。返回这些文件（repo 相对路径）。"""
     # -z：免 core.quotePath 把非 ASCII 路径转义成带引号的八进制串；不经 git() 的 strip，按 \0 切分
     # --no-renames：重命名的删除端以独立路径出现，走下面"快照中不存在就删除"分支
-    p = subprocess.run(["git", "diff", "--name-only", "-z", "--no-renames", "HEAD", snap], cwd=root,
+    p = subprocess.run(["git", "diff", "--name-only", "-z", "--no-renames", "HEAD", snap], cwd=repo,
                        capture_output=True, text=True)
     if p.returncode != 0:
         raise RuntimeError("git diff: %s" % p.stderr.strip())
-    names = [x for x in p.stdout.split("\0") if x]
-    restored = []
-    for f in names:
-        if f == MARKER or not any(glob_match(f, o) for o in owns):
+    out = []
+    for f in (x for x in p.stdout.split("\0") if x):
+        if f in skip or not any(glob_match(f, o) for o in owns):
             continue
-        exists = subprocess.run(["git", "cat-file", "-e", "%s:%s" % (snap, f)], cwd=root,
+        exists = subprocess.run(["git", "cat-file", "-e", "%s:%s" % (snap, f)], cwd=repo,
                                 capture_output=True, text=True).returncode == 0
         if exists:
-            git(root, "checkout", snap, "--", f)
+            git(repo, "checkout", snap, "--", f)
         else:
             try:
-                os.remove(os.path.join(root, f))
+                os.remove(os.path.join(repo, f))
             except OSError:
                 pass
-        restored.append(f)
-    return restored, ("" if restored else "快照与 HEAD 在 owns 内无差异，未恢复")
+        out.append(f)
+    return out
 
 
 def cmd_start(args):
@@ -3068,6 +3314,13 @@ def cmd_start(args):
             print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": [msg],
                               "warnings": [], "summary": "基点校验未通过"}, ensure_ascii=False))
             sys.exit(1)
+    owns = next((s.get("owns") or [] for s in data.get("slices") or [] if s["id"] == args.slice), [])
+    synced, failed, sub_warn = _sub_sync(root, args.expect_branch, _need_subs(root, owns))
+    if failed:
+        print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": failed,
+                          "warnings": sub_warn, "summary": "submodule 未就绪"}, ensure_ascii=False))
+        sys.exit(1)
+    subs = {"submodules": {"synced": synced, "warnings": sub_warn}} if synced or sub_warn else {}
     if args.resume_checkpoint:
         # 上一轮执行体门禁已绿却没返回：基点吻合就直接交出留存的结论，不再重做
         rec = _gate_load(root, _gate_ref(args.change_dir, args.slice))
@@ -3080,25 +3333,25 @@ def cmd_start(args):
     if existing and existing.get("slice") == args.slice:
         # 重试同一切片：区间起点与 red_count 都要保住，标记原样不动
         timeline_record(args.change_dir, "slice-start", "%s (resume)" % args.slice)
-        print(json.dumps(existing, ensure_ascii=False))
+        print(json.dumps(dict(existing, **subs), ensure_ascii=False))
         return
     ref = _ckpt_ref(args.change_dir, args.slice)
     ckpt, note = None, args.slice
     if args.resume_checkpoint:
-        owns = next((s.get("owns") or [] for s in data.get("slices") or [] if s["id"] == args.slice), [])
         restored, why = _ckpt_restore(root, ref, owns)
         ckpt = {"restored": restored, "note": why}
         note = "%s (checkpoint %d files)" % (args.slice, len(restored))
     else:
         # 首轮起跑：上一次飞行残留的快照不属于本轮，清掉免得被误恢复
-        _ckpt_delete(root, ref)
+        _ckpt_delete_all(root, ref)
         _ckpt_delete(root, _gate_ref(args.change_dir, args.slice))
     marker = {"slice": args.slice, "change_dir": os.path.abspath(args.change_dir),
               "base": args.base or git(root, "rev-parse", "HEAD"), "started": now_iso()}
     with open(os.path.join(root, MARKER), "w", encoding="utf-8") as f:
         json.dump(marker, f, ensure_ascii=False)
     timeline_record(args.change_dir, "slice-start", note)
-    print(json.dumps(dict(marker, checkpoint=ckpt) if ckpt is not None else marker, ensure_ascii=False))
+    print(json.dumps(dict(marker, checkpoint=ckpt, **subs) if ckpt is not None else dict(marker, **subs),
+                     ensure_ascii=False))
 
 
 def _read_marker(root):
@@ -3170,6 +3423,7 @@ def cmd_gate(args):
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
+    failed.extend(gitlink_violations(root))
     durations = {} if tiers is not None else None
     v7, _, _, w7 = scenario_status(root, data, {args.slice}, durations=durations)
     failed.extend(v7)
@@ -3190,6 +3444,7 @@ def cmd_gate(args):
         result["summary"] += "；" + _tier_note(ts)
         gate_note = "%s %s" % (args.slice, _tier_note(ts))
     if result["ok"]:
+        warnings.extend(anchor_submodules(root, base, args.change_dir, args.slice))
         err = _gate_save(root, args.change_dir, result)
         if err:
             warnings.append("门禁结论未能留存：%s" % err)
@@ -3202,7 +3457,7 @@ def cmd_gate(args):
                 os.remove(os.path.join(root, MARKER))
             except OSError:
                 pass
-            _ckpt_delete(root, _ckpt_ref(marker.get("change_dir") or args.change_dir, args.slice))
+            _ckpt_delete_all(root, _ckpt_ref(marker.get("change_dir") or args.change_dir, args.slice))
         else:
             # 记红次数：连续 2 次红执行体按纪律停下上报，stop-gate 据此不再强制续跑
             marker["red_count"] = int(marker.get("red_count") or 0) + 1
@@ -3854,6 +4109,171 @@ def _die_running_baseline(change_dir, bl, data):
     die("基线仍在跑（已 %s 分钟，上次全量约 %s）：等它结束再起飞" % (mins, est))
 
 
+def _preflight_subs(root, need):
+    """起飞前子仓就绪校验（design D6）：已填充、父仓 HEAD 的 gitlink 在子仓对象库、子仓检出 = gitlink。返回错误文案。"""
+    errs = []
+    for p in sorted(need):
+        rec = _recorded_gitlink(root, p)
+        short = (rec or "无")[:10]
+        if not _sub_ready(root, p):
+            errs.append("%s 未初始化（父仓 HEAD 的 gitlink %s）：在 %s 运行 git submodule update --init %s" % (
+                p, short, root, p))
+        elif not rec or not _sub_has(root, p, rec):
+            errs.append("%s 的对象库里没有父仓 HEAD 的 gitlink %s：在子仓 fetch 该提交，或修正父仓 gitlink" % (p, short))
+        else:
+            head = _sub_head(root, p)
+            if head != rec:
+                errs.append("%s 的检出 %s 与父仓 HEAD 的 gitlink %s 不一致：子仓改动先 git add %s 并提交，或在子仓检出 gitlink" % (
+                    p, (head or "?")[:10], short, p))
+    return errs
+
+
+def cmd_sub_sync(args):
+    """按父仓 HEAD 的 gitlink 填充本 worktree 的空子仓（fix 执行体等不经 start 的场景用）。退出 0 / 1。"""
+    root = toplevel()
+    need = _need_subs(root, _planned_owns(load_plan(args.change_dir))) if args.change_dir else set()
+    synced, failed, warnings = _sub_sync(root, args.expect_branch, need)
+    print(json.dumps({"ok": not failed, "synced": synced, "failed": failed, "warnings": warnings}, ensure_ascii=False))
+    sys.exit(1 if failed else 0)
+
+
+def _run_git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+
+
+def _in_merge(root):
+    return _run_git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+
+
+def _unmerged(root):
+    return [f for f in _run_git(root, "diff", "--name-only", "--diff-filter=U", "-z").stdout.split("\0") if f]
+
+
+def _theirs_links(root, mb, sha):
+    """mb→sha 一侧新 mode 为 160000 的路径（design D5）。"""
+    parts = _run_git(root, "diff", "--raw", "-z", "--no-renames", mb, sha).stdout.split("\0")
+    return sorted(parts[i + 1] for i in range(0, len(parts) - 1, 2)
+                  if parts[i].startswith(":") and parts[i][1:].split()[1:2] == [GITLINK_MODE])
+
+
+def _merge_rollback(root, sub_pre):
+    """回滚本片：已合过的子仓 reset --keep 回合前 HEAD，父仓 merge --abort。"""
+    for p, pre in sub_pre.items():
+        _sub_git(root, p, "reset", "-q", "--keep", pre)
+    if _in_merge(root):
+        _run_git(root, "merge", "--abort")
+
+
+def _merge_links(root, sid, sha, links):
+    """逐个钉 gitlink：快进直钉，分叉在家子仓内合并后再钉。成功返回 None，失败已回滚并返回 failed 文案。"""
+    sub_pre = {}
+    for p in links:
+        ours = _recorded_gitlink(root, p)
+        if not ours:
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 是新增 submodule，不支持（改走 --gate=per-task）" % (sid, p)
+        r = _run_git(root, "rev-parse", "%s:%s" % (sha, p))
+        theirs = r.stdout.strip()
+        if ours == theirs:
+            continue
+        if not _sub_ready(root, p):
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 子仓未填充：在 %s 运行 git submodule update --init %s" % (sid, p, root, p)
+        if r.returncode != 0 or not _sub_has(root, p, theirs):
+            _merge_rollback(root, sub_pre)
+            return "merge %s: %s 的对象库里没有被合入一侧的 gitlink %s" % (sid, p, theirs[:10] or "?")
+        subdir = os.path.join(root, p)
+        if _is_ancestor(subdir, ours, theirs):
+            target = theirs
+        elif _is_ancestor(subdir, theirs, ours):
+            target = ours
+        else:
+            pre = _sub_head(root, p)
+            if pre != ours:
+                _merge_rollback(root, sub_pre)
+                return "merge %s: %s 的检出 %s 与 gitlink %s 不一致" % (sid, p, (pre or "?")[:10], ours[:10])
+            m = _sub_git(root, p, "merge", "--no-ff", "--no-edit", "-m", "integrate: " + sid, theirs)
+            if m.returncode != 0:
+                files = _unmerged(subdir)
+                _sub_git(root, p, "merge", "--abort")
+                _merge_rollback(root, sub_pre)
+                return "merge %s: %s 子仓合并冲突（%s）" % (
+                    sid, p, ", ".join(files) or _first_line(m.stderr + m.stdout, "?"))
+            sub_pre[p] = pre
+            target = _sub_head(root, p)
+        _run_git(root, "update-index", "--cacheinfo", "%s,%s,%s" % (GITLINK_MODE, target, p))
+    return None
+
+
+def _merge_sync_checkout(root, links, warnings):
+    """合回后子仓检出对齐父仓 HEAD 的 gitlink：分支上快进，detached 直接检出，其余记 warning。"""
+    for p in links:
+        if not _sub_ready(root, p):
+            continue
+        target, head = _recorded_gitlink(root, p), _sub_head(root, p)
+        if not target or head == target:
+            continue
+        on_branch = _sub_git(root, p, "symbolic-ref", "-q", "HEAD").returncode == 0
+        if on_branch and head and _is_ancestor(os.path.join(root, p), head, target):
+            r = _sub_git(root, p, "merge", "-q", "--ff-only", target)
+        elif not on_branch:
+            r = _sub_git(root, p, "checkout", "-q", "--detach", target)
+        else:
+            warnings.append("merge: %s 的分支检出 %s 不是 gitlink %s 的祖先，未同步" % (p, (head or "?")[:10], target[:10]))
+            continue
+        if r.returncode != 0:
+            warnings.append("merge: %s 同步到 gitlink %s 失败：%s" % (p, target[:10], _first_line(r.stderr, "?")))
+
+
+def cmd_merge(args):
+    """integrator 合回：逐片 merge --no-ff，gitlink 快进直钉 / 分叉在家子仓内合并后钉（design D5）。退出 0 / 1。"""
+    pairs = []
+    for a in args.pairs:
+        sid, sep, sha = a.partition("=")
+        if not sep or not sid.strip() or not sha.strip():
+            die("merge 参数须形如 <S>=<sha>：%r" % a)
+        pairs.append((sid.strip(), sha.strip()))
+    root = toplevel()
+    merged, failed, warnings = [], [], []
+    for p in sorted(_gitlinks(root)):
+        if not _sub_ready(root, p):
+            continue
+        rec, head = _recorded_gitlink(root, p), _sub_head(root, p)
+        busy = "（合并中）" if _in_merge(os.path.join(root, p)) else ""
+        if head != rec or busy:
+            failed.append("merge: %s 的检出 %s%s 与 gitlink %s 不一致，先同步" % (
+                p, (head or "?")[:10], busy, (rec or "无")[:10]))
+    for sid, sha in ([] if failed else pairs):
+        r = _run_git(root, "merge", "--no-ff", "--no-commit", "-m", "integrate: " + sid, sha)
+        conflicted = set(_unmerged(root))
+        if r.returncode != 0 and not conflicted:
+            if _in_merge(root):
+                _run_git(root, "merge", "--abort")
+            failed.append("merge %s: %s" % (sid, _first_line(r.stderr + r.stdout, "?")))
+            break
+        mb = _run_git(root, "merge-base", "HEAD", sha).stdout.strip()
+        links = _theirs_links(root, mb, sha) if mb else []
+        if conflicted - set(links):
+            _run_git(root, "merge", "--abort")
+            failed.append("merge %s: 冲突文件 %s" % (sid, ", ".join(sorted(conflicted - set(links)))))
+            break
+        err = _merge_links(root, sid, sha, links)
+        if err:
+            failed.append(err)
+            break
+        if _in_merge(root):
+            c = _run_git(root, "commit", "-q", "-m", "integrate: " + sid)
+            if c.returncode != 0:
+                _merge_rollback(root, {})
+                failed.append("merge %s: 提交失败：%s" % (sid, _first_line(c.stderr + c.stdout, "?")))
+                break
+        _merge_sync_checkout(root, links, warnings)
+        merged.append(sid)
+    ok = not failed
+    print(json.dumps({"ok": ok, "merged": merged, "failed": failed, "warnings": warnings}, ensure_ascii=False))
+    sys.exit(0 if ok else 1)
+
+
 def cmd_preflight(args):
     """起飞前四项校验：计划合法、基线存在且绿、基线未过期、基线 commit 在当前分支历史。通过打印 waves。"""
     root = toplevel()
@@ -3861,6 +4281,9 @@ def cmd_preflight(args):
     errors, waves = lint_plan(data, args.change_dir, run_scope=True, phase="preflight")
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
+    sub_errs = _preflight_subs(root, _need_subs(root, _planned_owns(data)))
+    if sub_errs:
+        die("submodule 未就绪：\n  - " + "\n  - ".join(sub_errs))
     bl = load_baseline(args.change_dir)
     if isinstance(bl, dict) and bl.get("running") is True:
         _die_running_baseline(args.change_dir, bl, data)
@@ -4959,6 +5382,9 @@ def main():
                    help="重派：无同片标记时把 refs/flight/<change>/<S> 快照恢复为未提交改动（基点须在快照祖先链上）")
     p = sub.add_parser("scope-seed", help="安装器用：按历史 gate.test 决定是否种 <openspec 根>/gate-scope.json = {\"builtin\": true}；恒 exit 0")
     p.add_argument("--openspec-root", required=True)
+    p = sub.add_parser("sub-sync", help="按父仓 HEAD 的 gitlink 从 change 家借出空子仓；打印 {ok, synced, failed, warnings}，exit 0 / 1")
+    p.add_argument("--expect-branch", help="change 分支：检出它的 worktree 即 change 家")
+    p.add_argument("--change-dir", help="给了时全部切片 owns 落在其中的子仓未就绪即 failed，否则只记 warning")
     sub.add_parser("checkpoint", help="PostToolUse hook：stdin 载荷取 cwd，把本片 owns 内改动快照到 refs/flight/<change>/<S>；永远静默 exit 0")
     p = sub.add_parser("gate")
     p.add_argument("slice")
@@ -4972,13 +5398,16 @@ def main():
     p.add_argument("--red", action="store_true")
     p.add_argument("--failed")
     p.add_argument("--warnings")
+    p = sub.add_parser("merge", help="integrator 合回：逐片 merge --no-ff 并处理 gitlink；打印 {ok, merged, failed, warnings}，exit 0 / 1")
+    p.add_argument("pairs", nargs="+", metavar="S=sha")
     p = sub.add_parser("ship", help="draft / ready 裁决：读 gate-report.md + HEAD + review-findings.json；退出码 0 ready / 1 draft")
     p.add_argument("--change-dir", required=True)
     p.add_argument("--markdown", action="store_true", help="打印可贴入 PR 正文的段落而不是 JSON")
     args = ap.parse_args()
     {"lint": cmd_lint, "waves": cmd_lint, "start": cmd_start, "gate": cmd_gate, "record": cmd_record,
      "final": cmd_final, "baseline": cmd_baseline, "preflight": cmd_preflight, "ship": cmd_ship,
-     "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed}[args.cmd](args)
+     "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync,
+     "merge": cmd_merge}[args.cmd](args)
 
 
 if __name__ == "__main__":
