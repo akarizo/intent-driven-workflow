@@ -40,6 +40,8 @@ description: 飞行模式 apply：批准后从门禁 lint 直跑到 PR，中途�
    ```
    `lint` 拿到 stdout 的 waves JSON。**exit 非 0（规划红）→ 停下把 stderr 点名的规则原样报告，不进入实现**。
    `preflight` 校验 `gate-baseline.json`：**exit 非 0（缺基线 / 基线红 / 基线过期）→ 停下把 stderr 原样报告，不进入实现**；基线由 `/opsx-propose` 的 `baseline` 步骤生成，缺了回去补，不在这里手工造。
+   `preflight` 同时复核选测范围（与 lint 同一口径：按提供方重算，未声明判红、全选须逐项有理由；内建提供方在此给出 final 的精确预测）；baseline 开跑前也做同一复核，未过不写运行标记、不运行。
+   **final 开跑前复核**：final 在跑任何测试之前按提供方重算全选触发项（builtin 用内建规则，cmd 重跑命令），与 approve 提交时的 `gate.scope_full_reason` 对账——有未表态的全选触发项、提供方失败、或理由在批准后被改 → `G2 scope` 红、不跑测试，按「门禁红不收口」处理（回 propose 补理由并重新批准）；`final --full` 豁免（显式全量只会多跑）。
 
 4. **记录批准事件并提交飞行记录**
    ```bash

@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "change": "scope-guard-enforced",
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "scope": "printf '{\"full\": true, \"triggers\": [\"tests/conftest.py\"]}' > \"$GATE_SCOPE_OUT\"",
+    "scope_full_reason": {
+      "tests/conftest.py": "S1 改测试基座 tests/conftest.py，让 git_repo 默认带一份选测声明，否则既有用例会因「未声明即判红」整体失效。conftest.py 是全局文件，本 change 的 final 必然全量；而且本 change 改的就是被绝大多数用例加载的 slice-gate.py，即使走增量也近乎全选。本计划的 gate.scope 是对这一事实的静态声明：本 change 的 lint、baseline 跑在不认 builtin 的旧版 slice-gate 上。S4 落地 template/openspec/gate-scope.json = {\"builtin\": true} 之后，后续 change 由内建提供方保护。"
+    },
+    "full_suite_sec": 202.2
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "契约 v2：声明形态与提供方解析、未声明判红与建立声明例外、builtin 误用判红、GATE_SCOPE_PLANNED / GATE_SCOPE_CHANGE、scope-seed、审批页提供方状态、测试基座默认声明",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "template/.claude/hooks/spec_html.py",
+        "tests/conftest.py",
+        "tests/test_scope_contract_v2.py",
+        "tests/test_gate_scope_lint.py",
+        "tests/test_gate_checks_lint.py",
+        "tests/test_spec_html_scope.py",
+        "tests/test_slice_gate.py",
+        "tests/test_tiers_plan.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests",
+      "scenarios": [
+        "scope-provider-contract#undeclared-provider-is-red",
+        "scope-provider-contract#establishing-change-passes-only-with-reason",
+        "scope-provider-contract#builtin-declaration-reports-builtin",
+        "scope-provider-contract#builtin-with-unrecognized-gate-test-is-red",
+        "scope-provider-contract#malformed-v2-declaration-is-red",
+        "scope-provider-contract#cmd-provider-receives-planned-files-and-change",
+        "scope-provider-contract#spec-html-shows-provider-state",
+        "scope-provider-contract#scope-seed-decides-by-history"
+      ],
+      "packet": "slices/S1.md"
+    },
+    {
+      "id": "S2",
+      "title": "内建提供方与 final 精度：_full_triggers 单一出处、计划期预测（lint 池锚点 · preflight 新鲜锚点 · 待定项）、声明文件排除、shell 静态闭包",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_builtin_scope_precision.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_gate_scope_lint.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_final_tiers.py tests/test_final_deps.py tests/test_final_reuse.py tests/test_tier_file_incremental.py tests/test_slice_gate_baseline_preflight.py",
+      "scenarios": [
+        "builtin-scope-precision#planned-global-file-is-trigger",
+        "builtin-scope-precision#planned-unseen-non-python-file-is-trigger",
+        "builtin-scope-precision#preflight-reports-missing-anchor",
+        "builtin-scope-precision#non-pytest-runner-is-by-design",
+        "builtin-scope-precision#declaration-files-do-not-force-full",
+        "builtin-scope-precision#sourced-shell-file-selects-its-tests",
+        "builtin-scope-precision#shell-closure-resolves-common-forms",
+        "builtin-scope-precision#unresolvable-shell-reference-stays-full"
+      ],
+      "packet": "slices/S2.md"
+    },
+    {
+      "id": "S3",
+      "title": "运行期守卫：baseline / final 开跑前复核、理由以 approve 提交为准、--full 豁免",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_scope_runtime_guard.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_scope_runtime_guard.py tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py",
+      "scenarios": [
+        "scope-runtime-guard#baseline-refuses-unapproved-full",
+        "scope-runtime-guard#baseline-runs-when-full-is-approved",
+        "scope-runtime-guard#baseline-refuses-undeclared",
+        "scope-runtime-guard#final-refuses-unapproved-builtin-full",
+        "scope-runtime-guard#final-runs-approved-full",
+        "scope-runtime-guard#final-refuses-unapproved-cmd-full",
+        "scope-runtime-guard#manual-full-flag-is-exempt",
+        "scope-runtime-guard#reasons-edited-after-approval-are-red"
+      ],
+      "packet": "slices/S3.md"
+    },
+    {
+      "id": "S4",
+      "title": "安装器与文档：install.sh 调 scope-seed、本仓库声明 builtin、schema / 三个命令及同名 skill / README 同步契约 v2",
+      "owns": [
+        "install.sh",
+        "template/openspec/gate-scope.json",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/.claude/commands/opsx-apply.md",
+        "template/.claude/skills/openspec-apply-change/SKILL.md",
+        "template/.claude/commands/opsx-verify.md",
+        "template/.claude/skills/openspec-verify-change/SKILL.md",
+        "README.md",
+        "tests/test_install.py",
+        "tests/test_scope_docs.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_install.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_incremental_final_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_baseline_incremental_docs.py",
+      "scenarios": [
+        "install-scope-seed#fresh-install-seeds-builtin",
+        "install-scope-seed#upgrade-seeds-builtin-when-history-plain",
+        "install-scope-seed#upgrade-warns-when-history-opaque",
+        "install-scope-seed#existing-declaration-kept-and-printed",
+        "install-scope-seed#docs-describe-scope-contract-v2"
+      ],
+      "packet": "slices/S4.md"
+    }
+  ],
+  "scenario_tests": {
+    "scope-provider-contract#undeclared-provider-is-red": "tests/test_scope_contract_v2.py::test_undeclared_provider_is_red",
+    "scope-provider-contract#establishing-change-passes-only-with-reason": "tests/test_scope_contract_v2.py::test_establishing_change_passes_only_with_reason",
+    "scope-provider-contract#builtin-declaration-reports-builtin": "tests/test_scope_contract_v2.py::test_builtin_declaration_reports_builtin",
+    "scope-provider-contract#builtin-with-unrecognized-gate-test-is-red": "tests/test_scope_contract_v2.py::test_builtin_with_unrecognized_gate_test_is_red",
+    "scope-provider-contract#malformed-v2-declaration-is-red": "tests/test_scope_contract_v2.py::test_malformed_v2_declaration_is_red",
+    "scope-provider-contract#cmd-provider-receives-planned-files-and-change": "tests/test_scope_contract_v2.py::test_cmd_provider_receives_planned_files_and_change",
+    "scope-provider-contract#spec-html-shows-provider-state": "tests/test_spec_html_scope.py::test_spec_html_shows_provider_state",
+    "scope-provider-contract#scope-seed-decides-by-history": "tests/test_scope_contract_v2.py::test_scope_seed_decides_by_history",
+    "builtin-scope-precision#planned-global-file-is-trigger": "tests/test_builtin_scope_precision.py::test_planned_global_file_is_trigger",
+    "builtin-scope-precision#planned-unseen-non-python-file-is-trigger": "tests/test_builtin_scope_precision.py::test_planned_unseen_non_python_file_is_trigger",
+    "builtin-scope-precision#preflight-reports-missing-anchor": "tests/test_builtin_scope_precision.py::test_preflight_reports_missing_anchor",
+    "builtin-scope-precision#non-pytest-runner-is-by-design": "tests/test_builtin_scope_precision.py::test_non_pytest_runner_is_by_design",
+    "builtin-scope-precision#declaration-files-do-not-force-full": "tests/test_builtin_scope_precision.py::test_declaration_files_do_not_force_full",
+    "builtin-scope-precision#sourced-shell-file-selects-its-tests": "tests/test_builtin_scope_precision.py::test_sourced_shell_file_selects_its_tests",
+    "builtin-scope-precision#shell-closure-resolves-common-forms": "tests/test_builtin_scope_precision.py::test_shell_closure_resolves_common_forms",
+    "builtin-scope-precision#unresolvable-shell-reference-stays-full": "tests/test_builtin_scope_precision.py::test_unresolvable_shell_reference_stays_full",
+    "scope-runtime-guard#baseline-refuses-unapproved-full": "tests/test_scope_runtime_guard.py::test_baseline_refuses_unapproved_full",
+    "scope-runtime-guard#baseline-runs-when-full-is-approved": "tests/test_scope_runtime_guard.py::test_baseline_runs_when_full_is_approved",
+    "scope-runtime-guard#baseline-refuses-undeclared": "tests/test_scope_runtime_guard.py::test_baseline_refuses_undeclared",
+    "scope-runtime-guard#final-refuses-unapproved-builtin-full": "tests/test_scope_runtime_guard.py::test_final_refuses_unapproved_builtin_full",
+    "scope-runtime-guard#final-runs-approved-full": "tests/test_scope_runtime_guard.py::test_final_runs_approved_full",
+    "scope-runtime-guard#final-refuses-unapproved-cmd-full": "tests/test_scope_runtime_guard.py::test_final_refuses_unapproved_cmd_full",
+    "scope-runtime-guard#manual-full-flag-is-exempt": "tests/test_scope_runtime_guard.py::test_manual_full_flag_is_exempt",
+    "scope-runtime-guard#reasons-edited-after-approval-are-red": "tests/test_scope_runtime_guard.py::test_reasons_edited_after_approval_are_red",
+    "install-scope-seed#fresh-install-seeds-builtin": "tests/test_install.py::test_fresh_install_seeds_builtin",
+    "install-scope-seed#upgrade-seeds-builtin-when-history-plain": "tests/test_install.py::test_upgrade_seeds_builtin_when_history_plain",
+    "install-scope-seed#upgrade-warns-when-history-opaque": "tests/test_install.py::test_upgrade_warns_when_history_opaque",
+    "install-scope-seed#existing-declaration-kept-and-printed": "tests/test_install.py::test_existing_declaration_kept_and_printed",
+    "install-scope-seed#docs-describe-scope-contract-v2": "tests/test_scope_docs.py::test_docs_describe_scope_contract_v2"
+  }
+}

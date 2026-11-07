@@ -25,9 +25,10 @@ metadata:
    ```
    拿到 JSON：test/lint/typecheck 结果 + `scenarios{total, passed}` + `incremental`。
    **final 默认增量**：以锚点池（`<git common dir>/flight-anchors/`）里可用的锚点为基准，只重跑受影响的测试文件（依赖与改动相交的、改动里的测试文件、锚点里有失败用例的、盲文件），其余用例沿用锚点结论；重跑出的新失败（不在基线 `failed_nodes` 里）记 `G2 test`；跑完把锚点前移到本次。
-   - **自动全量**：没有可用锚点（池空 / `gate.test`、`gate.pytest` 或单元层指纹变了 / 锚点不是 HEAD 的祖先 / 依赖图没测到）、基线有预存红但缺 `failed_nodes`、`gate.test` 在 pytest 之后带白名单外的选项而 `gate.pytest` 没配或没覆盖它们（增量重跑无法等价复现）、改动含全局文件（任何 `conftest.py`、`pytest.ini` / `pyproject.toml` / `setup.cfg` / `tox.ini` / `setup.py` / `requirements*.txt` / 各类锁文件 / `.python-version`），或改动含从未被任何用例触及的非 `.py`、非文档文件 → 改跑全量，`incremental.full_why` 写明原因。
+   - **自动全量**：没有可用锚点（池空 / `gate.test`、`gate.pytest` 或单元层指纹变了 / 锚点不是 HEAD 的祖先 / 依赖图没测到）、基线有预存红但缺 `failed_nodes`、`gate.test` 在 pytest 之后带白名单外的选项而 `gate.pytest` 没配或没覆盖它们（增量重跑无法等价复现）、改动含全局文件（任何 `conftest.py`、`pytest.ini` / `pyproject.toml` / `setup.cfg` / `tox.ini` / `setup.py` / `requirements*.txt` / 各类锁文件 / `.python-version`），或改动含从未被任何用例触及的非 `.py`、非文档文件（选测 / 检查声明文件 `gate-scope.json`、`gate-checks.json` 与 git 顶层 `.claude/**` 除外；测试经 shell 脚本静态引用到的文件（shell 静态闭包）算作触及）→ 改跑全量，`incremental.full_why` 写明原因。
    - **分层文件按条目判定**：单元层指纹只取 `test-tiers.json` 的单元层；分层文件里区域条目与 `slow_allow` 的改动不让 final 全量——已选区域条目变了该区域必跑，`slow_allow` 增删的用例所在测试文件重跑。
    - **`--full`**：`slice-gate.py final --full` 强制全量。
+   - **开跑前复核**：final 在跑任何测试之前按选测提供方重算全选触发项（builtin 用内建规则，cmd 重跑命令），与 approve 提交时的 `gate.scope_full_reason` 对账；有未表态的全选触发项、提供方失败或理由在批准后被改 → `G2 scope` 红、不跑测试，JSON 带 `scope{kind, full, triggers, unapproved}`；未声明选测范围同 lint 判红；`--full` 豁免。
    - **同树沿用**：代码树、计划（`plan_sha` / `scenario_tests`）、各门禁命令（含 `gate.impacted`）都没变且上次 final 绿 → 直接沿用上次结论秒回，不跑任何测试或检查，`incremental.mode` 为 `reused`；上次红照常运行。
    - 配置了 `gate.impacted` 时，增量改由它运行，经 `GATE_DELTA_FILE` / `GATE_ANCHOR_COMMIT` 拿到改动清单与锚点（`incremental.source` 为 `impacted`）。
    配置了 `gate.checks` 时，final 在全量之后运行每个检查的 `final` 命令（G7 红时不跑），红记 `G9 check <name>`，完整输出在 `$GATE_CHECK_DIR/.gate-final.log`。

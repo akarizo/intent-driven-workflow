@@ -1,10 +1,10 @@
-"""审批页显示选测范围（scenario: gate-scope-report#spec-html-shows-scope-reasons、#spec-html-shows-repo-default-scope）。
-切片 S3 已解锁。"""
+"""审批页显示选测范围（scenario: gate-scope-report#spec-html-shows-scope-reasons、#spec-html-shows-repo-default-scope；
+scope-provider-contract#spec-html-shows-provider-state）。
+前两条由 change scope-fallback-guard 落地，最后一条由 change scope-guard-enforced 落地；来源措辞按契约 v2 为「仓库声明」。"""
 import json
 
 from conftest import write
 from test_spec_html import artifacts, render
-
 
 def _slices(change, gate):
     """单片 slices.json，gate 原样写入。"""
@@ -42,8 +42,31 @@ def test_spec_html_shows_repo_default_scope(tmp_path):
     # When: 运行 spec_html.py
     p = render(change, out)
 
-    # Then: HTML 含「选测范围」、仓库默认命令与「仓库默认」
+    # Then: HTML 含「选测范围」、仓库声明的命令与「仓库声明」
     assert p.returncode == 0, p.stderr
     html = out.read_text(encoding="utf-8")
-    for word in ("选测范围", "bash tools/scope.sh", "仓库默认"):
+    for word in ("选测范围", "bash tools/scope.sh", "仓库声明"):
         assert word in html, word
+
+
+def test_spec_html_shows_provider_state(tmp_path):
+    # Given: 三个 change：仓库声明 {"builtin": true}；仓库声明 {"cmd": "python3 tools/scope.py"}；没有任何声明
+    def change(name, decl):
+        base = tmp_path / name
+        c = artifacts(base / "openspec" / "changes" / "add-export")
+        if decl is not None:
+            write(base / "openspec" / "gate-scope.json", json.dumps(decl))
+        _slices(c, {"test": "pytest -q"})
+        return c, base / "spec.html"
+
+    cases = [change("b", {"builtin": True}), change("c", {"cmd": "python3 tools/scope.py"}), change("u", None)]
+
+    # When: 分别渲染 spec.html
+    runs = [render(c, out) for c, out in cases]
+
+    # Then: builtin 那份含「模板内建」；cmd 那份含命令原文与「仓库声明」；未声明那份含「未声明选测范围」
+    assert all(p.returncode == 0 for p in runs), [p.stderr for p in runs]
+    html = [out.read_text(encoding="utf-8") for _, out in cases]
+    assert "模板内建" in html[0]
+    assert "python3 tools/scope.py" in html[1] and "仓库声明" in html[1]
+    assert "未声明选测范围" in html[2]

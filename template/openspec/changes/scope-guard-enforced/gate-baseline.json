@@ -1,0 +1,83 @@
+{
+  "commit": "325adcf2d51c874114c6a65093913e735cefbd86",
+  "at": "2026-11-07T04:09:26Z",
+  "plan_sha": "61dae8a2eb2b65adb0a0e980051d0d1306671720",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 202.2
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_gate_scope_lint.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_final_tiers.py tests/test_final_deps.py tests/test_final_reuse.py tests/test_tier_file_incremental.py tests/test_slice_gate_baseline_preflight.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_scope_runtime_guard.py tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_final_incremental.py tests/test_final_impacted.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_install.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_incremental_final_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_baseline_incremental_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "scope-guard-enforced",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-builtin-scope-provider-and-shell-closure.md": "f0eab20109a5135d681517bd28c574d787ac9d9a",
+    "template/openspec/adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md": "6f165ef51bd1be971d075e7cfb38ef2bd7695e0f",
+    "template/openspec/superpower/2026-11-07-scope-guard-enforced-decisions.html": "718c7a4ec8f4e6e14677be6c97ff127af5070807",
+    "tests/final_helpers.py": "58a5d8f00036106262a391a9ffd65ac77338a9ec",
+    "tests/test_builtin_scope_precision.py": "f6c2364984a06bc99709a5f26f00ae3a7d1b5e22",
+    "tests/test_final_helpers.py": "91afac054c37e56672c69e789365e7938b72db33",
+    "tests/test_install.py": "c641d0a67379b7efcbe64a56896cd2a128a1c4b1",
+    "tests/test_scope_contract_v2.py": "0695c2eab74b7ff6c503bd33dc95e6d18fd85fc3",
+    "tests/test_scope_docs.py": "1b1119e12ae7df7d441d34dcef8a938ae8e6a23e",
+    "tests/test_scope_runtime_guard.py": "fda4a675611b5445b9aba61e3592c0773da1dc40",
+    "tests/test_spec_html_scope.py": "f05301831180d613c562fe508215cb8c76ae9a3d"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "scope-guard-enforced",
+      "commit": "325adcf2d51c",
+      "reason": "候选基线不是绿"
+    },
+    {
+      "change": "scope-fallback-guard",
+      "commit": "471aa98eb363",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/spec_html.py, template/.claude/skills/openspec-propose/SKILL.md, template/.claude/skills/openspec-verify-change/SKILL.md"
+    },
+    {
+      "change": "test-tiers-polyglot",
+      "commit": "7a38afcb0faf",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/spec_html.py, template/.claude/hooks/test-tiers.py, template/.claude/skills/openspec-propose/SKILL.md"
+    },
+    {
+      "change": "incremental-final",
+      "commit": "7a222e474fc2",
+      "reason": "有非测试文件改动：README.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md, template/.claude/hooks/slice-gate.py, template/.claude/hooks/spec_html.py"
+    },
+    {
+      "change": "test-tiers",
+      "commit": "a20e532c9d49",
+      "reason": "有非测试文件改动：README.md, install.sh, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/opsx-verify.md, template/.claude/commands/pr-ship.md, template/.claude/commands/test-tiers.md"
+    }
+  ]
+}

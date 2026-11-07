@@ -135,6 +135,7 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main
 - **保留（用户数据）**：`openspec/changes`、`openspec/specs`、`openspec/adr/*.md`、`openspec/superpower`、`openspec/config.yaml`、ADR 风格 `preferences.md`、`.claude/settings.json`（只补模板里你缺失的顶层键，hooks 按命令去重合并）、以及 CLAUDE.md marker 段以外的正文。
 - **一次性迁移**：把旧版散落在项目根的 `adr/*.md` 自动搬进 `openspec/adr/` 并删空根 `adr/`（同名冲突会跳过并提示人工核对）。
 - **只提示、不代删**：与本库开发工件同名的 `openspec/changes/*`、`openspec/adr/*`（多半是旧版安装器误拷）会被列出，由你确认后手动删除。
+- **选测声明（新装与升级都做）**：安装器调用模板自带的 `slice-gate.py scope-seed`——已有 `openspec/gate-scope.json` 保留并打印；没有历史 change 或历史 `gate.test` 全是可识别的普通测试命令 → 种 `{"builtin": true}`；否则不种，醒目提示本仓库自带选测、须实现只算范围的命令并写 `{"cmd": ...}`（在此之前新 change 的 lint 判「未声明选测范围」）；没有 python3 只打印手动声明指引。
 - **进行中的 change**：`slices.json` 现在必须显式写 `gate.test`（`slice-gate.py lint` 会拦），没写的补上再起飞。
 
 > `--upgrade` 会覆盖 `.claude/` 下的库文件，所以**别在 `.claude/skills/` 里直接改库代码**——你的个性化应放在项目自己的文件里。
@@ -180,6 +181,7 @@ your-project/
 │   └── claudemd-standard.md   # CLAUDE.md 层级规范（sync/distill 硬约束基线）
 ├── openspec/
 │   ├── config.yaml     # schema: intent-driven + 4 条 rules
+│   ├── gate-scope.json # 选测声明：scope-seed 按历史 gate.test 判定是否代种 {"builtin": true}
 │   ├── schemas/intent-driven/   # 离线 schema 副本
 │   ├── adr/.gitkeep    # ADR 落地点（分支上 DRAFT-*.md，合并时定号 NNNN-*.md，不可改 / supersede）
 │   └── superpower/.gitkeep      # 探索 / 头脑风暴设计稿落点
@@ -272,12 +274,13 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 
 **增量 final**：`gate.test` 是 pytest 时，每次全量运行顺带记录依赖图（以测试文件为单位），并写一条锚点进锚点池 `<git common dir>/flight-anchors/`（各 worktree 共用，只留最新若干条）。
 - **增量**：final 默认取可用锚点（命令 / 单元层指纹相同，命令指纹含 `gate.pytest`、依赖图测到、是 HEAD 的祖先），只重跑依赖与改动相交的测试文件、改动里的测试文件、锚点里有失败的与盲文件，其余沿用锚点结论；跑完锚点前移
-- **何时全量**：没有可用锚点 · 基线有预存红但缺 `failed_nodes` · `gate.test` 在 pytest 之后带白名单外的选项而 `gate.pytest` 没配或没覆盖它们 · 改动含全局文件（`conftest.py` / `pytest.ini` / `pyproject.toml` / 锁文件等）· 改动含从未被任何用例触及的非 `.py`、非文档文件；`incremental.full_why` 写明原因
+- **何时全量**：没有可用锚点 · 基线有预存红但缺 `failed_nodes` · `gate.test` 在 pytest 之后带白名单外的选项而 `gate.pytest` 没配或没覆盖它们 · 改动含全局文件（`conftest.py` / `pytest.ini` / `pyproject.toml` / 锁文件等）· 改动含从未被任何用例触及的非 `.py`、非文档文件（声明文件 `gate-scope.json` / `gate-checks.json` 与 `.claude/**` 除外；shell 脚本静态引用到的文件算作触及）；`incremental.full_why` 写明原因
 - **分层文件按条目判定**：`test-tiers.json` 只有单元层变了才全量；区域条目变了只让该区域必跑，`slow_allow` 增删只重跑该用例所在的测试文件
 - **`--full`**：`slice-gate.py final --full` 强制全量
 - **同树沿用**：代码树、计划与各门禁命令都没变且上次 final 绿 → 秒回，不跑任何测试或检查（`incremental.mode` 为 `reused`）
 - **`gate.impacted`**：可选；仓库已有选测命令时配上，增量 final 改由它运行
-- **`gate.scope` / `gate-scope.json`**：可选；仓库自带选测可能退化为全选时，配一条只算范围的命令（计划写 `gate.scope`，或 openspec 根 `gate-scope.json` 的 `{"cmd": ...}` 作仓库默认）；lint 与 preflight 在 git 顶层实跑（300 秒），命令往 `GATE_SCOPE_OUT` 写 `{full, triggers, count}`，失败即红；全选时须在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），审批页显示命令与理由；两字段不进 `plan_sha`
+- **选测范围声明（契约 v2）**：openspec 根 `gate-scope.json` 恰为 `{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测）二选一，计划里的 `gate.scope`（cmd）优先；未声明 → lint 判红，本 change 建立声明时按伪触发项 `scope:undeclared` 写理由；cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单）/ `GATE_SCOPE_CHANGE`（change 目录），命令往 `GATE_SCOPE_OUT` 写 `{full, triggers, count}`，失败即红；builtin 进程内预测 final 会不会全选，取不到锚点时列待定项；全选时须在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），审批页显示提供方、命令与理由；两字段不进 `plan_sha`
+- **开跑前复核**：baseline 开跑前、final 跑任何测试之前都按提供方重算选测范围；final 有未表态的全选触发项、提供方失败或理由在 approve 提交后被改 → `G2 scope` 红、不跑测试；`final --full` 豁免
 - **checks 的三个环境变量**：final 运行 `gate.checks` 的 `final` 命令时另注入 `GATE_FINAL_MODE`（`incremental` / `full`）· `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）· `GATE_ANCHOR_COMMIT`（锚点 commit，无锚点为空串）；`gate.impacted` 同样拿到
 
 **TDD 仍是硬约束**（详见 `.claude/skills/test-driven-development/SKILL.md`）：

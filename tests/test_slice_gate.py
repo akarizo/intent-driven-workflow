@@ -22,6 +22,12 @@ def slice_(sid, owns, deps=(), verify="true", scenarios=()):
 
 
 def write_plan(change_dir, data):
+    """写 slices.json。首次写、change 目录在 <根>/changes/ 下且根上没有选测声明时，补写 {"builtin": true}
+    （契约 v2 必有提供方）；不在 changes/ 下的不写，以免污染共享的临时根。测「未声明」的用例在写计划之后再删声明。"""
+    root = change_dir.parent.parent
+    if (change_dir.parent.name == "changes" and not (change_dir / "slices.json").exists()
+            and not (root / "gate-scope.json").exists()):
+        write(root / "gate-scope.json", '{"builtin": true}\n')
     write(change_dir / "slices.json", json.dumps(data, ensure_ascii=False, indent=1))
     return change_dir
 
@@ -543,7 +549,7 @@ def test_preflight_refuses_stale_baseline(git_repo):
 
 def test_lint_rejects_verify_embedding_typecheck(tmp_path):
     # Given: S1 的 verify 里嵌了 pnpm typecheck 的 grep
-    change = tmp_path / "c"
+    change = tmp_path / "openspec" / "changes" / "c"
     data = plan([slice_("S1", ["a/**"], verify="sh -c 'pnpm test && ! (pnpm -s typecheck | grep src/)'")])
     write_plan(change, data)
 

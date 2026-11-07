@@ -1,7 +1,9 @@
 """增量 final 测试共用的被测仓库与读取工具（incremental-final 各切片的测试共用，只读）。"""
 import json
+import os
 import shlex
 import sys
+import time
 
 from conftest import commit_all, git, run_hook, write
 
@@ -108,7 +110,11 @@ def final(repo, d, *args):
 
 
 def change_and_commit(repo, rel, text, msg="change"):
-    write(repo / rel, text)
+    """改写并提交。字节码缓存与 pytest 断言改写缓存只比较「修改时间（秒）+ 大小」，同一秒内的等长改写会命中旧缓存，
+    所以把修改时间推后 2 秒，让缓存必然失效（change scope-guard-enforced design D15）。"""
+    path = write(repo / rel, text)
+    later = time.time() + 2
+    os.utime(path, (later, later))
     return commit_all(repo, msg)
 
 
