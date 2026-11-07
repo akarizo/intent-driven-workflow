@@ -2437,7 +2437,126 @@ def changed_files(root, base):
     for line in porcelain.splitlines():
         if len(line) > 3:
             uncommitted.add(line[3:].split(" -> ")[-1].strip())
+    links = _gitlinks(root)
+    if links:  # gitlink 伪路径换成子仓内的真实文件（design D3）；无 gitlink 时与改前一致
+        if base and base != head:
+            _expand_committed(root, base, committed)
+        _expand_uncommitted(root, links, uncommitted)
     return committed, set(f for f in uncommitted if not is_bytecode(f))
+
+
+GITLINK_MODE = "160000"
+
+
+def _gitlinks(root):
+    """索引里的 gitlink（mode 160000）→ {路径: sha}。"""
+    out = {}
+    for e in _git_raw(root, ["ls-files", "-s", "-z"]).split("\0"):
+        meta, _, path = e.partition("\t")
+        f = meta.split()
+        if len(f) == 3 and f[0] == GITLINK_MODE:
+            out[path] = f[1]
+    return out
+
+
+def _sub_ready(root, p):
+    return os.path.exists(os.path.join(root, p, ".git"))
+
+
+def _sub_git(root, p, *args):
+    return subprocess.run(["git", "-C", os.path.join(root, p), *args], capture_output=True, text=True)
+
+
+def _sub_has(root, p, sha):
+    return _sub_git(root, p, "cat-file", "-e", sha + "^{commit}").returncode == 0
+
+
+def _sub_head(root, p):
+    r = _sub_git(root, p, "rev-parse", "HEAD")
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _recorded_gitlink(root, p):
+    """父仓 HEAD 记录的 gitlink；取不到（如新增 submodule）返回 None。"""
+    r = subprocess.run(["git", "rev-parse", "HEAD:" + p], cwd=root, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _sub_diff_names(root, p, old, new):
+    r = _sub_git(root, p, "diff", "--name-only", "-z", "--no-renames", old, new)
+    return set(p + "/" + x for x in r.stdout.split("\0") if x)
+
+
+def _gitlink_raw_diff(root, base):
+    """base..HEAD 里涉及 gitlink 的 raw 条目 → [(路径, 旧mode, 新mode, 旧sha, 新sha)]。"""
+    parts = _git_raw(root, ["diff", "--raw", "-z", "--no-renames", "--no-abbrev", "%s..HEAD" % base]).split("\0")
+    out = []
+    for meta, path in zip(parts[0::2], parts[1::2]):
+        f = meta.lstrip(":").split()
+        if len(f) >= 4 and GITLINK_MODE in (f[0], f[1]):
+            out.append((path, f[0], f[1], f[2], f[3]))
+    return out
+
+
+def _expand_committed(root, base, committed):
+    """已提交：两侧都是 gitlink、子仓已填充、两端提交都在子仓里 → P 换成子仓区间 diff；否则保留 P 交 G6 点名。"""
+    for p, om, nm, old, new in _gitlink_raw_diff(root, base):
+        if om == nm == GITLINK_MODE and _sub_ready(root, p) and _sub_has(root, p, old) and _sub_has(root, p, new):
+            committed.discard(p)
+            committed.update(_sub_diff_names(root, p, old, new))
+
+
+def _expand_uncommitted(root, links, uncommitted):
+    """未提交：子仓 status（含未跟踪）+ 子仓检出领先父仓 HEAD gitlink 的那一段。"""
+    for p in sorted(uncommitted & set(links)):
+        if not _sub_ready(root, p):
+            continue
+        uncommitted.discard(p)
+        raw = _sub_git(root, p, "status", "--porcelain", "-z", "--untracked-files=all").stdout
+        rename = False
+        for e in raw.split("\0"):
+            if rename:  # 改名 / 复制项后随原路径
+                rename = False
+                continue
+            if len(e) < 4:
+                continue
+            rename = e[0] in "RC"
+            uncommitted.add(p + "/" + e[3:])
+        head, rec = _sub_head(root, p), _recorded_gitlink(root, p)
+        if head and rec and head != rec and _sub_has(root, p, rec) and _sub_has(root, p, head):
+            uncommitted.update(_sub_diff_names(root, p, rec, head))
+
+
+def gitlink_violations(root):
+    """已填充子仓的检出 ≠ 父仓 HEAD 记录的 gitlink → G6 gitlink（这种子仓提交合回时会丢）。"""
+    out = []
+    for p in sorted(_gitlinks(root)):
+        if not _sub_ready(root, p):
+            continue
+        head, rec = _sub_head(root, p), _recorded_gitlink(root, p)
+        if head and head != rec:
+            out.append("G6 gitlink: %s 的检出 %s 未记录进父仓 HEAD（父仓记录 %s；git add %s 后并入本切片 commit）" % (
+                p, head[:10], rec[:10] if rec else "无", p))
+    return out
+
+
+def anchor_submodules(root, base, change_dir, slice_id):
+    """门禁绿：区间内 gitlink 有变化且已填充的子仓写 refs/flight-sub/<change>/<S> 防 gc；失败只返回 warning。"""
+    if not _gitlinks(root):
+        return []
+    name = os.path.basename(os.path.abspath(change_dir).rstrip(os.sep))
+    warnings = []
+    try:
+        entries = _gitlink_raw_diff(root, base)
+    except RuntimeError as e:
+        return ["子仓锚定失败：%s" % e]
+    for p, _, nm, _, new in entries:
+        if nm == GITLINK_MODE and _sub_ready(root, p):
+            ref = "refs/flight-sub/%s/%s" % (name, slice_id)
+            r = _sub_git(root, p, "update-ref", ref, new)
+            if r.returncode != 0:
+                warnings.append("子仓锚定失败：%s %s → %s：%s" % (p, ref, new[:10], r.stderr.strip()))
+    return warnings
 
 
 def added_lines(root, base):
@@ -2446,7 +2565,7 @@ def added_lines(root, base):
     注意：`+++ b/<path>` 也以 `+` 开头，必须先判文件头再判内容行。
     """
     try:
-        diff = git(root, "diff", "--unified=0", "%s..HEAD" % base)
+        diff = git(root, "diff", "--unified=0", "--submodule=diff", "%s..HEAD" % base)
     except RuntimeError:
         return
     rel, lineno = None, 0
@@ -3170,6 +3289,7 @@ def cmd_gate(args):
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
+    failed.extend(gitlink_violations(root))
     durations = {} if tiers is not None else None
     v7, _, _, w7 = scenario_status(root, data, {args.slice}, durations=durations)
     failed.extend(v7)
@@ -3190,6 +3310,7 @@ def cmd_gate(args):
         result["summary"] += "；" + _tier_note(ts)
         gate_note = "%s %s" % (args.slice, _tier_note(ts))
     if result["ok"]:
+        warnings.extend(anchor_submodules(root, base, args.change_dir, args.slice))
         err = _gate_save(root, args.change_dir, result)
         if err:
             warnings.append("门禁结论未能留存：%s" % err)
