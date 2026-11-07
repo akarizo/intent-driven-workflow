@@ -53,6 +53,7 @@ log_mv()   { printf '%s[move]%s    %s\n' "$C_BLUE"   "$C_RESET" "$1"; }
 log_skip() { printf '%s[skip]%s    %s\n' "$C_DIM"    "$C_RESET" "$1"; }
 log_app()  { printf '%s[append]%s  %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
 log_info() { printf '%s[info]%s    %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
+log_scope() { printf '%s[scope]%s   %s\n' "$C_BLUE"  "$C_RESET" "$1"; }
 log_err()  { printf '%s[err]%s     %s\n' "$C_RED"    "$C_RESET" "$1" >&2; }
 
 # ---------------------------------------------------------------------------
@@ -400,6 +401,24 @@ else
   printf '\n# 飞行起飞记录（apply 起飞到收口之间的每机瞬态，收口即删，不入库）\nchanges/*/.flight\n' >> "$OPENSPEC_GITIGNORE"
   log_app "openspec/.gitignore (追加 changes/*/.flight)"
 fi
+# openspec/gate-scope.json：选测声明不在种子清单里（升级不能给自带选测的仓库种 builtin），
+#   新装与升级都交给模板自带的 slice-gate.py scope-seed 按历史 gate.test 判定（识别逻辑单一出处）
+if [[ "${PYTHON_OK:-0}" == 1 ]]; then
+  SCOPE_OUT=$(python3 "$TEMPLATE_SRC/.claude/hooks/slice-gate.py" scope-seed --openspec-root "$TARGET/openspec" 2>&1) || true
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && log_scope "$line"
+  done <<< "$SCOPE_OUT"
+  case "$(printf '%s\n' "$SCOPE_OUT" | head -n 1)" in
+    *已种*) ADD_COUNT=$((ADD_COUNT+1)) ;;
+    *未种*)
+      log_scope "⚠ 本仓库自带选测：须实现一条只算范围的命令（报告写到 \$GATE_SCOPE_OUT），写进 openspec/gate-scope.json 的 cmd"
+      log_scope "⚠ 在此之前，新 change 的 lint 会判「未声明选测范围」（伪触发项 scope:undeclared，final 全量）" ;;
+  esac
+else
+  log_scope "未检测到 python3，未种 openspec/gate-scope.json；请手动声明选测范围："
+  log_scope "  gate.test 是普通测试命令（pytest / npm test / go test ./... / cargo test）→ 写 {\"builtin\": true}"
+  log_scope "  仓库自带选测 → 写 {\"cmd\": \"<只算范围的命令>\"}（报告写到 \$GATE_SCOPE_OUT）"
+fi
 # openspec/schemas/：库自有 schema，升级时刷新；同时迁移根 adr/
 if [[ "$UPGRADE" == 1 ]]; then
   copy_tree "$TEMPLATE_SRC/openspec/schemas" "$TARGET/openspec/schemas" 1
@@ -498,6 +517,8 @@ cat <<EOF
   - HTML 审批面板：propose/continue 后自动出 (worktree 内) openspec/changes/<change>/spec.html
   - 落点收敛：每 change 产物落其 worktree；ADR → openspec/adr/；探索设计稿 → openspec/superpower/；项目根仅 .claude/ + openspec/ + CLAUDE.md (+ 已忽略的 .worktrees/)
   - 已装项目升级：./install.sh --upgrade（刷新库文件 + 自动迁移 adr，用户数据不动）
+  - 选测声明 openspec/gate-scope.json（契约 v2）：{"builtin": true}（模板内建，按依赖图算范围）或 {"cmd": "<只算范围的命令>"}（仓库自带选测）
+    二选一；未声明 → lint 判红、final 全量（scope:undeclared）；安装 / 升级时由 slice-gate.py scope-seed 按历史 gate.test 判定是否代种
   - apply 默认走飞行模式（.claude/workflows/opsx-apply.js + slice-gate.py 门禁）：把测试命令（如 pytest/npm test）
     加进 .claude/settings.json 的 allow 规则，避免 Workflow 并行跑切片时被权限提示逐个暂停
 EOF

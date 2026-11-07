@@ -333,10 +333,10 @@ def test_fresh_install_ships_only_seeds(tmp_path):
     # When: 运行 install.sh <目录>
     p, _ = run_install_stubbed(tmp_path, target, claude=False)
 
-    # Then: 以 0 退出；openspec/ 里的文件恰为种子清单加上模板 openspec/schemas/ 下的全部文件
+    # Then: 以 0 退出；openspec/ 里的文件恰为种子清单、scope-seed 种下的 gate-scope.json，加上模板 openspec/schemas/ 下的全部文件
     assert p.returncode == 0, p.stderr
     schemas = {"schemas/" + rel for rel in _files_under(TEMPLATE_OPENSPEC / "schemas")}
-    assert _files_under(target / "openspec") == OPENSPEC_SEEDS | schemas
+    assert _files_under(target / "openspec") == OPENSPEC_SEEDS | {"gate-scope.json"} | schemas
 
 
 def test_upgrade_adds_no_dev_artifacts(tmp_path):
@@ -503,10 +503,6 @@ def test_upgrade_lists_mod_leftovers(tmp_path):
 # ---------------------------------------------------------------- change scope-guard-enforced · scenario: install-scope-seed#*
 # 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。
 
-import pytest  # noqa: E402
-
-PENDING_S4 = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S4 未实现")
-
 
 def _decl_of(target):
     """目标项目 openspec/gate-scope.json 解析后的对象；没有 → None。"""
@@ -532,7 +528,6 @@ def _installed_without_decl(tmp_path):
     return target
 
 
-@PENDING_S4
 def test_fresh_install_seeds_builtin(tmp_path):
     # Given: 一个空目录
     target = tmp_path / "proj"
@@ -546,7 +541,6 @@ def test_fresh_install_seeds_builtin(tmp_path):
     assert "gate-scope.json" in p.stdout, p.stdout
 
 
-@PENDING_S4
 def test_upgrade_seeds_builtin_when_history_plain(tmp_path):
     # Given: 已安装但没有选测声明的项目，openspec/changes/x/slices.json 的 gate.test 是 pytest 命令
     target = _installed_without_decl(tmp_path)
@@ -560,7 +554,6 @@ def test_upgrade_seeds_builtin_when_history_plain(tmp_path):
     assert _decl_of(target) == {"builtin": True}
 
 
-@PENDING_S4
 def test_upgrade_warns_when_history_opaque(tmp_path):
     # Given: 已安装但没有选测声明的项目，archive 下有一条历史 change 的 gate.test 是包装脚本
     target = _installed_without_decl(tmp_path)
@@ -575,7 +568,6 @@ def test_upgrade_warns_when_history_opaque(tmp_path):
     assert "自带选测" in p.stdout and "gate-scope.json" in p.stdout, p.stdout
 
 
-@PENDING_S4
 def test_existing_declaration_kept_and_printed(tmp_path):
     # Given: 已安装的项目，openspec/gate-scope.json 是 {"cmd": "my-scope"}
     target = _installed_without_decl(tmp_path)

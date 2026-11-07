@@ -299,16 +299,30 @@ artifacts:
       `slice-gate.py lint` 校验）；增量 final 改由它运行、不用内建选测，库经
       `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）/
       `GATE_ANCHOR_COMMIT`（锚点 commit）交给它改动清单与锚点。
-      `gate.scope`（可选）：仓库自带选测（按改动选测试范围、可能退化为全选）时，
-      配一条只算范围、不跑测试的命令（非空字符串）；计划没写时取 openspec 根目录下
-      `gate-scope.json`（仓库默认，只含 `{"cmd": "<命令>"}`）。契约：库在 git 顶层
-      经 shell 运行它，上限 300 秒；环境变量 `GATE_SCOPE_OUT` 指向一个文件，命令往里写
-      `{"full": <bool>, "triggers": [<触发项>], "count": <用例数，可选>}`
-      （`full` 为真时 `triggers` 非空）。`slice-gate.py lint` 与 preflight 实跑它
-      （waves 不跑），失败（非 0、超时、无文件、非 JSON、形状不符）即红。
+      选测范围声明（契约 v2）：openspec 根目录下 `gate-scope.json` 恰为
+      `{"builtin": true}`（模板内建选测）或 `{"cmd": "<只算范围的命令>"}`（仓库
+      自带选测）二选一；`gate.scope`（可选，非空字符串）是计划级的 cmd。提供方
+      优先级：`gate.scope` > `gate-scope.json` > 未声明。未声明 → lint 判红
+      （「未声明选测范围」）；本 change 的 owns 正是建立 `gate-scope.json` 时，按
+      伪触发项 `scope:undeclared` 视作全选，须在 `gate.scope_full_reason` 为它写
+      理由。`{"builtin": true}` 只配可识别的 `gate.test`（pytest 命令 /
+      `python3 <路径>/test-tiers.py run unit` / `npm test` / `go test ./...` /
+      `cargo test`），认不出即红，包装脚本类的仓库改用 cmd。内建提供方按 owns
+      进程内预测 final 会不会全选（与 final 同一套触发项规则）；计划期取不到依赖图
+      锚点时不报「没见过」类触发项，把 owns 内现存的非 Python、非文档、非声明文件
+      列为待定项（可预写理由，不算多余），精确预测在 preflight。cmd 契约：库在 git
+      顶层经 shell 运行它，上限 300 秒；环境变量 `GATE_SCOPE_OUT` 指向一个文件，
+      命令往里写 `{"full": <bool>, "triggers": [<触发项>], "count": <用例数，可选>}`
+      （`full` 为真时 `triggers` 非空）；另给 `GATE_SCOPE_PLANNED`（计划 owns
+      清单文件，一行一条）与 `GATE_SCOPE_CHANGE`（change 目录相对 git 顶层的路径）。
+      `slice-gate.py lint` 与 preflight 实跑提供方（waves 不跑），失败（非 0、超时、
+      无文件、非 JSON、形状不符）即红。开跑前复核：baseline 开跑前做同一复核，
+      未过不运行；final 在跑任何测试之前重算全选触发项，有未表态的 → `G2 scope`
+      红、不跑测试（`final --full` 豁免）。
       `gate.scope_full_reason`（可选）：`{<触发项>: <理由>}`；选测退化为全选
-      （`full` 为真）时必须逐个触发项写理由，键须等于 `triggers`；未全选或没有
-      选测命令时不得写。`gate.scope` 与 `gate.scope_full_reason` 不进 `plan_sha`
+      （`full` 为真）时必须逐个触发项写理由，键须等于 `triggers`；未全选时不得写。
+      理由以 approve 提交时的版本为准，批准后再改 → final 复核红，重新批准即重新
+      绑定。`gate.scope` 与 `gate.scope_full_reason` 不进 `plan_sha`
       （改理由不让基线过期）。
       测试分层：openspec 根目录下有 `test-tiers.json`（单元层 `unit` +
       集成区域 `regions`，由 `/test-tiers` 生成）时，`gate.test` 必须等于
