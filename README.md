@@ -247,6 +247,8 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
   → 转 /pr-ship
 ```
 
+**含 submodule 的仓库**同样走飞行模式，机制见 `openspec-git-discipline` skill 的 Submodule 小节。
+
 **机械门禁**（`slice-gate.py`，零 token 判定）：
 
 | 阶段 | 检查 |
