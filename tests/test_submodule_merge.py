@@ -4,13 +4,9 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, run_hook, write
 from submodule_helpers import (BRANCH, SUB, SUB_BRANCH, commit_parent, commit_sub, g, git_rc, iso, make_super,
                                run_executor, start)
-
-PENDING = pytest.mark.xfail(strict=True, reason="change submodule-aware-flight S3 未实现")
 
 
 def merge(cwd, *pairs):
@@ -22,7 +18,6 @@ def _in_merge(repo):
     return git_rc(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD") == 0
 
 
-@PENDING
 def test_merge_parallel_submodule_slices(tmp_path):
     # Given: 同一 wave 的 S1、S2 各在自己的隔离 worktree 里改子仓（文件不相交）、各自提交 gitlink，门禁都绿
     env = make_super(tmp_path)
@@ -46,7 +41,6 @@ def test_merge_parallel_submodule_slices(tmp_path):
     assert [g(env.home, "log", "-1", "--format=%s", r) for r in ("HEAD~1", "HEAD")] == ["integrate: S1", "integrate: S2"]
 
 
-@PENDING
 def test_merge_rolls_back_on_submodule_conflict(tmp_path):
     # Given: S1 正常改子仓 lib1.py；S2 在另一个隔离 worktree 里把同一个 lib1.py 改成不同内容（人为制造子仓内容冲突）
     env = make_super(tmp_path)
@@ -78,7 +72,6 @@ def _side(repo, name, path, text):
     return sha
 
 
-@PENDING
 def test_merge_plain_repo_equals_no_ff(git_repo):
     # Given: 没有 submodule 的仓库；两个从 main 分叉的旁支提交分别新增 a.txt、b.txt
     a = _side(git_repo, "a", "a.txt", "a\n")
@@ -96,7 +89,6 @@ def test_merge_plain_repo_equals_no_ff(git_repo):
     assert (git_repo / "a.txt").is_file() and (git_repo / "b.txt").is_file()
 
 
-@PENDING
 def test_merge_aborts_on_file_conflict(git_repo):
     # Given: 没有 submodule 的仓库；两个旁支把 README.md 改成不同内容
     a = _side(git_repo, "a", "README.md", "# a\n")
@@ -113,7 +105,6 @@ def test_merge_aborts_on_file_conflict(git_repo):
     assert git(git_repo, "log", "-1", "--format=%s") == "integrate: S1"
 
 
-@PENDING
 def test_next_wave_populates_from_merged_gitlink(tmp_path):
     # Given: wave 1 的 S1、S2 已由 merge 合回家里（父仓 gitlink = 家子仓里的合并提交）
     env = make_super(tmp_path)
