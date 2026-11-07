@@ -63,6 +63,26 @@ def test_merge_rolls_back_on_submodule_conflict(tmp_path):
     assert g(env.home, "log", "-1", "--format=%s") == "integrate: S1"
 
 
+def test_merge_refuses_fork_when_sub_checkout_stale(tmp_path):
+    # Given: S1、S2 并行改子仓；家子仓里有未跟踪的 lib1.py，S1 合回后检出同步（ff-only）会失败，子仓 HEAD 停在旧提交
+    env = make_super(tmp_path)
+    r1, r2 = run_executor(env, "S1", "lib1"), run_executor(env, "S2", "lib2")
+    sub = env.home / SUB
+    stale = g(sub, "rev-parse", "HEAD")
+    write(sub / "lib1.py", "# untracked\n")
+
+    # When: 在家里运行 merge S1=<C1> S2=<C2>
+    p, out = merge(env.home, "S1=" + r1.commit, "S2=" + r2.commit)
+
+    # Then: 退出 1、merged 为 [S1]，failed 首项点名 S2、mods/sub 与“不一致”；父仓 gitlink 仍是 S1 的子仓提交，子仓没有新合并提交，不在合并中
+    assert p.returncode == 1, (p.stdout, p.stderr)
+    assert out["ok"] is False and out["merged"] == ["S1"], out
+    assert "S2" in out["failed"][0] and SUB in out["failed"][0] and "不一致" in out["failed"][0], out["failed"]
+    assert g(env.home, "rev-parse", "HEAD:" + SUB) == r1.sub_commit
+    assert g(sub, "rev-parse", "HEAD") == stale
+    assert not _in_merge(env.home) and not _in_merge(sub)
+
+
 def _side(repo, name, path, text):
     """从 main 拉一个旁支提交（改 path），回到 main，返回旁支 commit。"""
     git(repo, "switch", "-q", "-c", name)
