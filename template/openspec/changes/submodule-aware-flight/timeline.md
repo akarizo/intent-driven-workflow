@@ -17,3 +17,6 @@
 2026-11-07T09:13:54Z	final	同树沿用 417cd291fd ok
 2026-11-07T09:13:56Z	apply-done	blocked=0 blocking=1
 2026-11-07T09:14:53Z	ship	ready
+2026-11-07T09:15:32Z	ship	ready
+2026-11-07T09:16:01Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/11
+2026-11-07T09:22:59Z	ship	ready
