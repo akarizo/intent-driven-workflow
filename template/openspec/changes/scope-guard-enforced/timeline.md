@@ -17,3 +17,8 @@
 2026-11-07T05:29:42Z	apply-done	blocked=0 blocking=0
 2026-11-07T05:30:04Z	ship	ready
 2026-11-07T05:30:08Z	ship	ready
+2026-11-07T05:30:29Z	ship	ready
+2026-11-07T05:30:45Z	ship	ready
+2026-11-07T05:30:56Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/10
+2026-11-07T05:46:39Z	final	增量（锚点 10004f0150，重跑 29 个文件 / 沿用 176 个用例） ok
+2026-11-07T05:48:06Z	ship	ready
