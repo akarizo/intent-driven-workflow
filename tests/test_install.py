@@ -498,3 +498,95 @@ def test_upgrade_lists_mod_leftovers(tmp_path):
     assert ".claude/hooks/ledger.py" in out and ".claude/hooks/plan_fp.py" in out, out
     assert "手动删除" in out, out
     assert all(f.exists() for f in leftovers)
+
+
+# ---------------------------------------------------------------- change scope-guard-enforced · scenario: install-scope-seed#*
+# 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。
+
+import pytest  # noqa: E402
+
+PENDING_S4 = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S4 未实现")
+
+
+def _decl_of(target):
+    """目标项目 openspec/gate-scope.json 解析后的对象；没有 → None。"""
+    path = target / "openspec" / "gate-scope.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _history(target, rel, test_cmd):
+    """在 openspec/<rel>/slices.json 留一条历史 change，只含 gate.test。"""
+    path = target / "openspec" / rel / "slices.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"gate": {"test": test_cmd}}), encoding="utf-8")
+
+
+def _installed_without_decl(tmp_path):
+    """装好的项目，并删掉其选测声明（模拟老版本装出来的项目）。"""
+    target = tmp_path / "proj"
+    first, _ = run_install_stubbed(tmp_path, target, claude=False)
+    assert first.returncode == 0, first.stderr
+    decl = target / "openspec" / "gate-scope.json"
+    if decl.exists():
+        decl.unlink()
+    return target
+
+
+@PENDING_S4
+def test_fresh_install_seeds_builtin(tmp_path):
+    # Given: 一个空目录
+    target = tmp_path / "proj"
+
+    # When: 运行 install.sh <目录>
+    p, _ = run_install_stubbed(tmp_path, target, claude=False)
+
+    # Then: 以 0 退出；openspec/gate-scope.json 等于 {"builtin": true}；stdout 提到 gate-scope.json
+    assert p.returncode == 0, p.stderr
+    assert _decl_of(target) == {"builtin": True}
+    assert "gate-scope.json" in p.stdout, p.stdout
+
+
+@PENDING_S4
+def test_upgrade_seeds_builtin_when_history_plain(tmp_path):
+    # Given: 已安装但没有选测声明的项目，openspec/changes/x/slices.json 的 gate.test 是 pytest 命令
+    target = _installed_without_decl(tmp_path)
+    _history(target, "changes/x", "python3 -m pytest -q tests")
+
+    # When: 运行 install.sh --upgrade <项目>
+    p, _ = run_install_stubbed(tmp_path, target, "--upgrade", claude=False)
+
+    # Then: 以 0 退出；openspec/gate-scope.json 等于 {"builtin": true}
+    assert p.returncode == 0, p.stderr
+    assert _decl_of(target) == {"builtin": True}
+
+
+@PENDING_S4
+def test_upgrade_warns_when_history_opaque(tmp_path):
+    # Given: 已安装但没有选测声明的项目，archive 下有一条历史 change 的 gate.test 是包装脚本
+    target = _installed_without_decl(tmp_path)
+    _history(target, "changes/archive/x", "bash openspec/changes/x/verify/full_suite.sh")
+
+    # When: 运行 install.sh --upgrade <项目>
+    p, _ = run_install_stubbed(tmp_path, target, "--upgrade", claude=False)
+
+    # Then: 以 0 退出；没有 openspec/gate-scope.json；stdout 含「自带选测」与 gate-scope.json
+    assert p.returncode == 0, p.stderr
+    assert _decl_of(target) is None
+    assert "自带选测" in p.stdout and "gate-scope.json" in p.stdout, p.stdout
+
+
+@PENDING_S4
+def test_existing_declaration_kept_and_printed(tmp_path):
+    # Given: 已安装的项目，openspec/gate-scope.json 是 {"cmd": "my-scope"}
+    target = _installed_without_decl(tmp_path)
+    decl = target / "openspec" / "gate-scope.json"
+    decl.write_text(json.dumps({"cmd": "my-scope"}), encoding="utf-8")
+    before = decl.read_text(encoding="utf-8")
+
+    # When: 运行 install.sh --upgrade <项目>
+    p, _ = run_install_stubbed(tmp_path, target, "--upgrade", claude=False)
+
+    # Then: 以 0 退出；文件内容不变；stdout 含 my-scope
+    assert p.returncode == 0, p.stderr
+    assert decl.read_text(encoding="utf-8") == before
+    assert "my-scope" in p.stdout, p.stdout

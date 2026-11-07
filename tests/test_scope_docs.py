@@ -48,3 +48,36 @@ def test_docs_describe_scope_contract():
         for word in ("gate.scope", "gate-scope.json", "GATE_SCOPE_OUT", "gate.scope_full_reason"):
             assert word in text, (rel, word)
     assert "gate.scope" in read("README.md")
+
+
+# ---------------------------------------------------------------- change scope-guard-enforced · scenario: install-scope-seed#docs-describe-scope-contract-v2
+# 骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。
+
+import pytest  # noqa: E402
+
+PENDING_S4 = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S4 未实现")
+
+
+@PENDING_S4
+def test_docs_describe_scope_contract_v2():
+    # Given: 本 change 的文档改动已完成
+    contract = {rel: read(rel) for rel in ("template/openspec/schemas/intent-driven/schema.yaml",
+                                           "template/.claude/commands/opsx-propose.md",
+                                           "template/.claude/skills/openspec-propose/SKILL.md")}
+    guard = {rel: read(rel) for rel in ("template/.claude/commands/opsx-apply.md",
+                                        "template/.claude/skills/openspec-apply-change/SKILL.md",
+                                        "template/.claude/commands/opsx-verify.md",
+                                        "template/.claude/skills/openspec-verify-change/SKILL.md")}
+    readme = read("README.md")
+
+    # When: 检查 schema、三个命令与各自同名 skill、README
+
+    # Then: schema 与 /opsx-propose 命令、同名 skill 含 builtin 声明、两个新环境变量与 scope:undeclared；
+    #       /opsx-apply、/opsx-verify 命令与同名 skill 含「开跑前复核」；README 含 builtin 声明、GATE_SCOPE_PLANNED、开跑前复核、scope-seed
+    for rel, text in contract.items():
+        for word in ('{"builtin": true}', "GATE_SCOPE_PLANNED", "GATE_SCOPE_CHANGE", "scope:undeclared"):
+            assert word in text, (rel, word)
+    for rel, text in guard.items():
+        assert "开跑前复核" in text, rel
+    for word in ('{"builtin": true}', "GATE_SCOPE_PLANNED", "开跑前复核", "scope-seed"):
+        assert word in readme, word

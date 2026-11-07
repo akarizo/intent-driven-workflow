@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>新装与升级都不再出现「没人知情的全量」· 模板侧方案决策页</title>
+<style>
+  :root { --fg:#1f2328; --mute:#59636e; --line:#d1d9e0; --bg:#f6f8fa; --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color:var(--fg); background:#fff; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 140px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .meta { color: var(--mute); font-size: 13px; }
+  .lead { background: var(--bg); border-left: 4px solid var(--acc); padding: 12px 16px; margin: 16px 0; }
+  .lead.warn { border-left-color: var(--warn); background: #fffbea; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff2f5; padding: 1px 5px; border-radius: 4px; }
+  .tag { display:inline-block; font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background:#fff; white-space: nowrap; }
+  .tag.ok { color: var(--ok); border-color: #aceebb; background:#dafbe1; }
+  .tag.bad { color: var(--bad); border-color: #ffcecb; background:#ffebe9; }
+  .tag.warn { color: var(--warn); border-color: #f5e0a0; background:#fff8c5; }
+  .tag.acc { color: var(--acc); border-color: #b6d7ff; background:#ddf4ff; }
+  .note { color: var(--mute); font-size: 12.5px; }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; font-size: 13px; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box.file { border-color: #9cc8f5; background: #eef6ff; }
+  .box.new { border-color: #8fd6a2; background: #effbf2; }
+  .box.keep { border-color: #d1d9e0; background: #f6f8fa; }
+  .box.full { border-color: #ffb3ad; background: #fff1f0; }
+  .box.gate { border-color: #f5c38f; background: #fff6ec; }
+  .box.human { border-color: #b6a6f5; background: #f5f0ff; }
+  .flow { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+  .row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: stretch; }
+  .row .stage { font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: flex-end; color: var(--mute); text-align: right; }
+  .row .cells { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+  .row .cells .box { flex: 1 1 200px; }
+  .down { text-align: center; color: var(--mute); font-size: 18px; line-height: 1; margin-left: 160px; }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
+  .chain .box { padding: 6px 10px; }
+  .chain .lbl { color: var(--mute); font-size: 12px; }
+  .q { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .q h3 { margin-top: 0; }
+  .q .why { color: var(--mute); font-size: 13px; margin: 0 0 8px; }
+  .opt { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 6px 0; cursor: pointer; }
+  .opt:hover { border-color: var(--acc); }
+  .opt input { margin-right: 8px; }
+  .opt .d { color: var(--mute); font-size: 12.5px; margin-left: 24px; display: block; }
+  .opt.rec { border-color: #b6d7ff; }
+  textarea.memo { width: 100%; min-height: 38px; margin-top: 6px; font: 13px/1.5 -apple-system, "PingFang SC", sans-serif; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.97); border-top: 1px solid var(--line); padding: 10px 24px; display: flex; gap: 10px; align-items: center; justify-content: center; z-index: 9; }
+  .bar button { font-size: 14px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--acc); background: var(--acc); color: #fff; cursor: pointer; }
+  .bar button.sec { background: #fff; color: var(--acc); }
+  .bar .st { color: var(--mute); font-size: 13px; min-width: 160px; }
+  #out { width: 100%; min-height: 220px; font: 12px/1.5 ui-monospace, Menlo, monospace; margin-top: 8px; display: none; }
+  ol.steps li, ul.inv li { margin: 6px 0; }
+  .two { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .toc { font-size: 13px; color: var(--mute); }
+  .toc a { color: var(--acc); text-decoration: none; margin-right: 12px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>新装与升级都不再出现「没人知情的全量」· 模板侧方案决策页</h1>
+<div class="meta">2026-11-07 · 触发：afa change <code>export-xlsx-aparam-override</code> 的 baseline 跑了全量 683.8 s，到跑完才被发现 · 要求：<b>新装 + 升级都不再犯，目标是可靠的模板工作流</b> · 本页只做只读推演，<b>没有改动任何代码</b></div>
+<div class="toc" style="margin-top:8px">
+  <a href="#s1">1 失败链</a><a href="#s2">2 修复后的保证</a><a href="#s3">3 全景</a><a href="#s4">4 两类提供方</a><a href="#s5">5 内建精度</a><a href="#s6">6 安装器</a><a href="#s7">7 afa 怎么办</a><a href="#s8">8 待你拍板</a><a href="#s9">9 切片与验证</a><a href="#s10">10 风险与回退</a>
+</div>
+
+<div class="lead">
+  <b>结论：</b>afa 选测器退化只是起因。真正让它「没人知情」的是模板：装上模板后，<b>任何仓库</b>都可能静默跑全量。模板侧一共有 5 个断点，前 4 个属于「看不见」，第 5 个是模板内建增量自己也会犯同类错。<br>
+  <b>推荐：</b>在本仓库开一个 change <code>scope-guard-enforced</code>，分四片修：契约 v2 · 内建提供方与精度 · 运行期守卫 · 安装器与文档。修完后，新装和升级都由安装器种好声明，再由 lint 和运行期守卫兜底。afa 侧另开一个接入 change，和模板 change 并行推进。
+</div>
+
+<h2 id="s1">1 · 失败链：5 个断点（都已在代码里定位）</h2>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:22%">断点</th><th style="width:30%">现状（代码位置）</th><th style="width:22%">这次的后果</th><th>修法</th></tr>
+  <tr><td>1</td><td><b>安装器不种选测声明</b></td><td><code>install.sh:382</code> 只种 <code>.gitignore</code> / <code>config.yaml</code> / 三个 <code>.gitkeep</code>，新装和 <code>--upgrade</code> 后都没有 <code>gate-scope.json</code></td><td>afa 升级到带契约的版本后，契约从来没有打开过</td><td>新装种内建声明；升级时按现有 gate.test 判定（§6）</td></tr>
+  <tr><td>2</td><td><b>没有声明时 lint 静默跳过</b></td><td><code>slice-gate.py:1566</code> <code>if errors or not (run_scope and cmd): return errors, None</code></td><td>lint 绿、审批页上什么都没有</td><td>「没有提供方」本身也是一个状态，必须红或表态（Q2）</td></tr>
+  <tr><td>3</td><td><b>契约看不到切片计划改的文件</b></td><td><code>slice-gate.py:1511</code> 只给 <code>GATE_SCOPE_OUT</code></td><td>即使打开契约，S2、S3 要改的 bin 也要到 final 才进 diff</td><td>新增 <code>GATE_SCOPE_PLANNED</code>（各片 owns 的并集）和 <code>GATE_SCOPE_CHANGE</code></td></tr>
+  <tr><td>4</td><td><b>baseline / final 开跑前不复核范围</b></td><td><code>slice-gate.py:3416</code> 写完运行标记直接跑 gate.test</td><td>lint 被跳过或计划后来改了，baseline 照样跑全量</td><td>开跑前复核：出现未表态的全选就不跑、判红（Q4）</td></tr>
+  <tr><td>5</td><td><b>模板内建增量自己也会退回全量</b></td><td><code>slice-gate.py:4294-4306</code> 规则「Δ 含依赖图没见过的非 Python 文件 → 全量」：bash 子进程 <code>source</code> 的文件没有被实测到；<code>.claude/**</code>、<code>openspec/gate-scope.json</code> 等工作流自己的文件也算进去</td><td>新装仓库改一个被 source 的 <code>_common.sh</code>，final 就全量，和 afa 的 bin 是同一类问题</td><td>shell 静态闭包并入依赖；工作流自有路径不触发全量（Q6）</td></tr>
+</table>
+<p class="note">第 5 个断点是从代码推出来的：审计钩子只在 Python 进程里生效，bash 读文件看不见。propose 期会先写场景测试验红，作为实证。</p>
+
+<h2 id="s2">2 · 修复后的保证（装了模板的任何仓库都满足）</h2>
+<ul class="inv">
+  <li><b>I1 计划期必有范围报告</b>：每个 change 在 propose lint 和 preflight 时都会拿到一份范围报告，覆盖 baseline 与 final，包括切片计划要改的文件。</li>
+  <li><b>I2 全选必须逐项表态</b>：报告全选时，每个触发项都要写理由，并显示在审批页。「没有提供方」也是一个必须表态的状态，不再静默。</li>
+  <li><b>I3 运行期机械复核</b>：baseline 与 final 开跑前，出现未表态的全选就不跑、判红。批准后再改的理由不算数，以 approve 提交里的为准；模型自己补理由绕不过去。</li>
+  <li><b>I4 工作流自己的文件不导致全量</b>：分层文件、选测声明、<code>.claude/**</code>、change 工件都不会单独触发全量。</li>
+  <li><b>I5 新装与升级都满足 I1–I4</b>：安装器负责种声明，lint 和运行期守卫负责兜底。</li>
+</ul>
+
+<h2 id="s3">3 · 全景</h2>
+<div class="flow">
+  <div class="row"><div class="stage">安装器</div><div class="cells">
+    <div class="box new"><h4>新装</h4>种 <code>openspec/gate-scope.json</code> = <code>{"builtin": true}</code></div>
+    <div class="box new"><h4>升级</h4>缺声明时判定：现有 gate.test 全部可识别 → 补种 builtin；否则不种，并在安装摘要醒目提示接入 cmd</div>
+    <div class="box keep"><h4>已有声明</h4>不动（用户数据），只校验形状并打印</div>
+  </div></div>
+  <div class="down">↓</div>
+  <div class="row"><div class="stage">propose · lint</div><div class="cells">
+    <div class="box file"><h4>提供方解析</h4><code>gate.scope</code> &gt; <code>gate-scope.json</code>（builtin | cmd）&gt; 未声明</div>
+    <div class="box new"><h4>运行提供方</h4><code>GATE_SCOPE_OUT</code> + <code>GATE_SCOPE_PLANNED</code> + <code>GATE_SCOPE_CHANGE</code> → <code>{full, triggers, count}</code></div>
+    <div class="box gate"><h4>表态核对</h4>全选或未声明时，<code>gate.scope_full_reason</code> 须逐项写理由，否则红</div>
+  </div></div>
+  <div class="down">↓</div>
+  <div class="row"><div class="stage">baseline</div><div class="cells">
+    <div class="box new"><h4>开跑前复核 <span class="tag ok">新</span></h4>未表态的全选 → 不跑 gate.test，基线红</div>
+  </div></div>
+  <div class="down">↓</div>
+  <div class="row"><div class="stage">审批 · 起飞</div><div class="cells">
+    <div class="box human"><h4>spec.html</h4>显示提供方类型、来源、触发项 → 理由；人看着决定起不起飞</div>
+    <div class="box gate"><h4>preflight</h4>复核；内建提供方用刚跑完的基线锚点精确预测 final</div>
+  </div></div>
+  <div class="down">↓</div>
+  <div class="row"><div class="stage">final</div><div class="cells">
+    <div class="box new"><h4>开跑前复核 <span class="tag ok">新</span></h4>内建：<code>_full_why</code>；cmd：重跑提供方。未表态 → 不跑、红</div>
+    <div class="box new"><h4>理由防篡改 <span class="tag ok">新</span></h4>理由须与 approve 提交里的 <code>scope_full_reason</code> 一致</div>
+  </div></div>
+</div>
+
+<h2 id="s4">4 · 两类提供方</h2>
+<table>
+  <tr><th style="width:14%"></th><th style="width:43%">builtin（模板内建）</th><th>cmd（仓库自带选测）</th></tr>
+  <tr><td>适用</td><td>gate.test 是可识别的普通测试命令：pytest 前缀、<code>test-tiers.py run unit</code>、<code>npm test</code>、<code>go test</code>、<code>cargo test</code></td><td>gate.test 自带选测（如 afa testgate），或是认不出的包装脚本。包装脚本如果恒跑全部，就写一个恒报 <code>{"full": false}</code> 的命令，显式声明</td></tr>
+  <tr><td>baseline</td><td>跑 gate.test 全部。这是设计，不算退化；审批页会注明，并且照旧可以复用基线池</td><td>由仓库命令报告</td></tr>
+  <tr><td>final</td><td>预测内建增量会不会退化：全局文件；依赖图没见过的非 Python 文件（扣掉工作流路径，并上 shell 闭包）；gate.test 无法等价复现；依赖图测不到。<br>非 pytest 运行器和部件形态的 final 本来就恒全量，属于设计边界，只在审批页注明，不要求写理由</td><td>由仓库命令报告（命令会拿到 PLANNED）</td></tr>
+  <tr><td>谁实现</td><td>模板：<code>slice-gate.py</code> 内置，不起子进程</td><td>仓库：遵守契约 v2</td></tr>
+  <tr><td>误用防护</td><td>builtin 配上认不出的 gate.test → 红（Q3）：防止 afa 这类仓库误声明 builtin 后变成假安全</td><td>命令非 0、超时、报告不合法 → 红（沿用现行）</td></tr>
+</table>
+
+<h2 id="s5">5 · 内建精度（断点 5）</h2>
+<div class="two">
+  <div class="box new"><h4>工作流自有路径不触发全量</h4>
+    <ul>
+      <li><code>.claude/**</code> 和 <code>openspec/**</code>（选测声明、检查默认、分层文件、schemas、各 change 工件）改动时，不再命中「依赖图没见过的非 Python 文件 → 全量」。</li>
+      <li>如果有测试在运行时真读了这些文件，照常按依赖选中这些测试。产品代码的测试不会依赖 Claude Code 配置，所以排除是安全的。</li>
+    </ul></div>
+  <div class="box new"><h4>shell 静态闭包并入依赖</h4>
+    <ul>
+      <li>实测依赖里出现的 shell 脚本，静态解析其中的 <code>source</code> / <code>.</code> / 字面路径，认得 <code>$(dirname "${BASH_SOURCE[0]}")</code> 等写法。</li>
+      <li>文件名含变量时，按整个目录的同后缀文件处理。</li>
+      <li>解析结果传递并入该测试文件的依赖，用于增量选中和全量判定。</li>
+      <li>解析不了 → 不补，退回原规则（全量），这种情况在计划期就会被点名。</li>
+    </ul></div>
+</div>
+<div class="chain">
+  <div class="box full">改 <code>lib/_common.sh</code></div><span class="lbl">← 被 source</span>
+  <div class="box keep"><code>scripts/run.sh</code><br><span class="note">子进程 argv，已经能实测到</span></div><span class="lbl">← 被执行</span>
+  <div class="box new"><code>tests/test_run.py</code><br><span class="note">只重跑它，不再全量</span></div>
+</div>
+
+<h2 id="s6">6 · 安装器行为（新装 + 升级）</h2>
+<table>
+  <tr><th style="width:34%">场景</th><th style="width:14%">现在</th><th>修复后</th></tr>
+  <tr><td>新装（空仓库，或已有项目第一次装）</td><td><span class="tag bad">不种声明</span></td><td>种 <code>{"builtin": true}</code>。首个 change 写出的 gate.test 如果认不出，lint 会红，并提示改成 cmd（Q3）</td></tr>
+  <tr><td>升级：现有 change（含 archive）的 gate.test 全部可识别</td><td><span class="tag bad">不种</span></td><td>补种 builtin；只补缺失的文件，不覆盖</td></tr>
+  <tr><td>升级：有认不出的 gate.test，例如 afa 的 <code>bash openspec/changes/…/verify/full_suite.sh</code></td><td><span class="tag bad">不种</span></td><td>不种，安装摘要醒目提示：本仓库自带选测，须接入 cmd 提供方。之后按 Q2 的规则处理</td></tr>
+  <tr><td>已有 <code>gate-scope.json</code></td><td>不动</td><td>不动（用户数据），只校验形状并打印出来</td></tr>
+</table>
+<p class="note">约束：安装器不能交互（ADR <code>DRAFT-installer-versioned-with-template</code> 决策 2：stdin 接 /dev/null，新增参数只能是可选的），所以只能自动判定加打印。判定依据是仓库自己的 <code>slices.json</code> 历史，不靠猜。</p>
+
+<h2 id="s7">7 · afa 怎么办（升级场景的真实样本）</h2>
+<ul>
+  <li><b>升级后</b>：afa 的 gate.test 认不出，所以不会被种 builtin，必须接入 cmd 提供方。在接入之前，按 Q2-A 新 change 会被卡住。</li>
+  <li><b>接入 change</b>：沿用上一份 afa 方案，按契约 v2 调整。S3 的范围命令要读取 <code>GATE_SCOPE_PLANNED</code>；登记表按条目比对和 bin 引用索引仍在 afa 侧做，这两项决定 afa 实际能少跑多少。</li>
+  <li><b>顺序（Q9-A）</b>：模板 change 和 afa 接入 change 并行推进，两者都合入后再升级 afa，这样 afa 不会被硬红卡住。在飞的 <code>export-xlsx-aparam-override</code> 照常跑完：它的 worktree 用的是自己分支里的旧 <code>.claude</code>，不受影响。</li>
+  <li>上一份 afa 决策页（<code>afa/.worktrees/tiering-registry-entry-impact/openspec/superpower/2026-11-07-tiering-scope-no-false-full/plan.html</code>）的 Q1–Q9 仍然有效，Q10 并入本页。</li>
+</ul>
+
+<h2 id="s8">8 · 待你拍板（已预选推荐项，改完点底部「导出结果」）</h2>
+
+<div class="q" data-q="Q1" data-title="范围">
+  <h3>Q1 · 修复范围</h3>
+  <label class="opt rec"><input type="radio" name="Q1" value="A" checked>A · 模板根治（本仓库 change），afa 接入作为伴随 change（推荐）<span class="d">新装和升级由模板保证；afa 少跑多少靠它自己的选测收窄</span></label>
+  <label class="opt"><input type="radio" name="Q1" value="B">B · 只做模板<span class="d">afa 升级后会被卡住或要逐个 change 写理由，直到它接入</span></label>
+  <label class="opt"><input type="radio" name="Q1" value="C">C · 只做 afa（不满足本次要求，仅作对照）<span class="d">别的仓库新装或升级照样会静默全量</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q2" data-title="未声明提供方">
+  <h3>Q2 · 没有提供方（未声明）时怎么办</h3>
+  <p class="why">A 更严，但升级后、接入前的仓库会被卡住；本 change 自己建立声明时可以放行，避免先有鸡还是先有蛋的死锁。B 不卡人，但理由是模型写的，要靠人在审批页看出问题。</p>
+  <label class="opt rec"><input type="radio" name="Q2" value="A" checked>A · 硬红（推荐）<span class="d">例外只有一种：本 change 自己创建或修改了 <code>gate-scope.json</code>，或者声明的命令脚本就在本 change 的 owns 里。这时允许带理由通过，审批页标出「本 change 建立仓库选测声明」，final 前实跑核对</span></label>
+  <label class="opt"><input type="radio" name="Q2" value="B">B · 不阻断<span class="d">每个 change 须为伪触发项「未声明选测范围」写理由，显示在审批页</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q3" data-title="builtin 误用">
+  <h3>Q3 · 声明 builtin，但 gate.test 认不出</h3>
+  <label class="opt rec"><input type="radio" name="Q3" value="A" checked>A · 红，要求改成 cmd 提供方（推荐）<span class="d">包装脚本如果恒跑全部，就写一个恒报 <code>{"full": false}</code> 的命令显式声明</span></label>
+  <label class="opt"><input type="radio" name="Q3" value="B">B · 只在审批页提示<span class="d">afa 这类仓库误声明 builtin 后，baseline 退化仍然看不见</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q4" data-title="运行期守卫">
+  <h3>Q4 · baseline / final 开跑前复核</h3>
+  <p class="why">preflight 已经用新鲜基线做过精确复核，所以 final 再触发的情况很少。真触发时，说明计划期的预测错了，这时应该先停下，而不是先付出全量的代价。</p>
+  <label class="opt rec"><input type="radio" name="Q4" value="A" checked>A · 未表态的全选 → 不跑、判红（推荐）<span class="d">飞行中途只在这种例外情况停下；红了照「门禁红不收口」处理</span></label>
+  <label class="opt"><input type="radio" name="Q4" value="B">B · 只警告，记入飞行记录和 PR<span class="d">不打断飞行，但全量的代价已经付了</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q5" data-title="理由防篡改">
+  <h3>Q5 · 批准后的理由防篡改</h3>
+  <p class="why">现在 <code>scope_full_reason</code> 不进 plan_sha（ADR 决策 7），批准后改了也没有人知道。</p>
+  <label class="opt rec"><input type="radio" name="Q5" value="A" checked>A · final 前和 approve 提交里的 <code>scope_full_reason</code> 比对，不一致 → 红（推荐）<span class="d">用 git 历史作证据，不用新增存储</span></label>
+  <label class="opt"><input type="radio" name="Q5" value="B">B · 不做</label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q6" data-title="内建精度">
+  <h3>Q6 · 模板内建增量的精度（断点 5）</h3>
+  <label class="opt rec"><input type="radio" name="Q6" value="A" checked>A · 工作流路径排除 + shell 静态闭包（推荐）<span class="d">新装仓库改脚本库、改工作流配置，都不会再退回全量</span></label>
+  <label class="opt"><input type="radio" name="Q6" value="B">B · 只排除工作流路径<span class="d">被 source 的 shell 文件仍会全量，但计划期会被点名</span></label>
+  <label class="opt"><input type="radio" name="Q6" value="C">C · 都不做，只靠表态<span class="d">能看见，但新装仓库仍会跑全量</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q7" data-title="升级判定">
+  <h3>Q7 · 升级时缺声明，怎么判定</h3>
+  <label class="opt rec"><input type="radio" name="Q7" value="A" checked>A · 看现有 change 的 gate.test：全部可识别才补种 builtin，否则不种并醒目提示（推荐）<span class="d">依据是仓库自己的 slices.json 历史</span></label>
+  <label class="opt"><input type="radio" name="Q7" value="B">B · 一律补种 builtin<span class="d">afa 会被种成 builtin，再被 Q3 判红，效果相同，但提示不如 A 直接</span></label>
+  <label class="opt"><input type="radio" name="Q7" value="C">C · 一律不种<span class="d">所有已装仓库都要手工声明</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<div class="q" data-q="Q8" data-title="组织">
+  <h3>Q8 · 模板侧怎么组织</h3>
+  <label class="opt rec"><input type="radio" name="Q8" value="A" checked>A · 一个 change <code>scope-guard-enforced</code>，分四片（推荐）<span class="d">契约 v2、运行期守卫、安装器和内建精度互相依赖，放在一起审才看得出是否闭环</span></label>
+  <label class="opt"><input type="radio" name="Q8" value="B">B · 拆成两个 change：「契约 + 守卫 + 安装器」和「内建精度」<span class="d">PR 更小；前者合入后，新装仓库在 shell 场景仍会全量，但能看见</span></label>
+  <textarea class="memo" placeholder="补充说明（可空，也可以改名）"></textarea>
+</div>
+
+<div class="q" data-q="Q9" data-title="顺序">
+  <h3>Q9 · 模板 change 与 afa 的先后</h3>
+  <label class="opt rec"><input type="radio" name="Q9" value="A" checked>A · 两边并行，都合入后再升级 afa（推荐）<span class="d">afa 接入 change 先按契约 v2 实现，不会被硬红卡住</span></label>
+  <label class="opt"><input type="radio" name="Q9" value="B">B · 先合模板、立即升级 afa<span class="d">afa 接入合入之前，新的 afa change 会被卡住（Q2-A）或要逐个写理由（Q2-B）</span></label>
+  <textarea class="memo" placeholder="补充说明（可空）"></textarea>
+</div>
+
+<h3>导出结果</h3>
+<p class="note">点底部「导出结果」后，结果会复制到剪贴板（同时显示在下面的文本框里）。直接粘贴回对话即可。</p>
+<textarea id="out" readonly></textarea>
+
+<h2 id="s9">9 · 切片草案与验证（按推荐项）</h2>
+<table>
+  <tr><th style="width:8%">片</th><th style="width:42%">做什么</th><th style="width:12%">依赖</th><th>场景（先写骨架、验红）</th></tr>
+  <tr><td>S1</td><td>契约 v2：提供方解析（builtin / cmd / 未声明）、PLANNED / CHANGE 环境变量、未声明规则和放行例外、builtin 误用判红、spec.html 渲染提供方类型与状态</td><td>—</td><td>未声明 → 红；本 change 建立声明 → 带理由通过；builtin 配认不出的 gate.test → 红；cmd 能读到 PLANNED（内容 = owns 并集，glob 原样）；审批页显示提供方</td></tr>
+  <tr><td>S2</td><td>内建提供方与精度：builtin 预测（复用 <code>_full_why</code>，Δ ∪ 计划文件）、工作流路径排除、shell 静态闭包并入 <code>_full_why</code> / <code>_final_select</code></td><td>S1</td><td>owns 含 <code>pyproject.toml</code> → 计划期点名；改被 source 的 sh → 只重跑相关测试；改 <code>gate-scope.json</code> / <code>.claude/settings.json</code> → 不全量；文件名含变量的调用 → 整目录；解析不了 → 照旧全量并被点名</td></tr>
+  <tr><td>S3</td><td>运行期守卫：baseline / final 开跑前复核；final 前和 approve 提交比对理由</td><td>S1、S2</td><td>未表态全选 → 不跑 gate.test（用会写标记文件的假 gate.test 证明没跑）；已表态 → 照跑；批准后改理由 → 红</td></tr>
+  <tr><td>S4</td><td>安装器和文档：新装种 builtin；升级判定并补种或提示；摘要打印声明；propose / apply 命令与同名 skill 同步改；README；两份 ADR（部分 supersede 现行决策）</td><td>S1</td><td>新装 → <code>{"builtin": true}</code>；升级 + 可识别 gate.test → 补种；升级 + 包装脚本 gate.test → 不种并提示；已有声明 → 不动；pipe 模式透传同样行为</td></tr>
+</table>
+<p><b>要 supersede 的 ADR 决策（ADR 不可改，只能 supersede）：</b><code>DRAFT-repo-selector-reports-scope-at-plan-time</code> 的决策 1（可选 → 必有）、2（环境变量）、3（时机加 baseline / final）、5（未声明的处理）、7（理由以 approve 提交为准）；<code>DRAFT-final-incremental-by-dependency-anchor</code> 决策 4 中「依赖图没见过的非 Python 文件」一条（扣掉工作流路径，并上 shell 闭包）。</p>
+<p><b>收口必过：</b><code>python3 -m pytest -q tests</code> 全绿；<code>cd template &amp;&amp; openspec schema validate intent-driven</code> 绿；<code>.claude/hooks/*.py</code> 能 compileall；独立评审的 CRITICAL / HIGH 闭环；打印飞行记录。</p>
+
+<h3>批准后的步骤</h3>
+<ol class="steps">
+  <li>你导出本页选择 → 我在本仓库跑 <code>/opsx-propose scope-guard-enforced</code>：worktree <code>.worktrees/scope-guard-enforced</code> → 5 份工件、spec.html、场景骨架逐条验红（断点 5 用测试实证）→ 验证：slice-gate lint 绿，schema validate 绿。</li>
+  <li>你审 spec.html → 你运行 <code>/opsx-apply</code>（takeoff-gate 只认你的消息）→ 飞行 S1 → S2 / S4 → S3 → final → PR。</li>
+  <li>并行（Q9-A）：在 afa 会话里推进 afa 接入 change，我按你的选择给出提示词。</li>
+  <li>两边都合入后：在 afa 执行 <code>./install.sh --upgrade</code> → 验证：afa 的下一个 propose lint 用的是它自己的 cmd 提供方，报告覆盖计划文件。</li>
+</ol>
+
+<h2 id="s10">10 · 风险与回退</h2>
+<table>
+  <tr><th style="width:30%">风险</th><th>缓解</th><th style="width:22%">残余</th></tr>
+  <tr><td>Q2-A 卡住升级后尚未接入的仓库</td><td>本 change 建立声明时放行；Q9-A 先接入再升级；安装摘要写清怎么接</td><td>别的已装仓库升级后，要先写一个提供方（恒全量的包装可以一行写完）</td></tr>
+  <tr><td>builtin 判定靠「gate.test 可识别」，带选测插件的 pytest（如 <code>--testmon</code>）会被当成普通命令</td><td>文档写明：builtin 等于承诺 gate.test 不自带选测；声明显示在审批页</td><td>接受</td></tr>
+  <tr><td>shell 静态解析认不全</td><td>只会少补依赖，最坏情况退回原规则（全量），并在计划期被点名</td><td>多跑，但不会漏选</td></tr>
+  <tr><td>每次 lint / preflight / baseline / final 多跑一次范围计算</td><td>builtin 在进程内算，近乎零成本；cmd 只算范围，不跑测试，afa 量级约 10 s</td><td>—</td></tr>
+  <tr><td>飞行中途因 Q4 停下</td><td>只有计划期预测错了才会发生；preflight 已用新鲜基线精确复核</td><td>罕见</td></tr>
+</table>
+<p><b>回退：</b>revert 本 change，回到「契约可选、没声明就静默」的现状。仓库也可以删掉 <code>gate-scope.json</code>，但在 Q2-A 下删掉就会红，这是有意的：回退必须显式（铁律 10）。</p>
+
+</main>
+
+<div class="bar">
+  <span class="st" id="st">已预选推荐项</span>
+  <button id="btn-export">导出结果（复制）</button>
+  <button class="sec" id="btn-dl">下载 JSON</button>
+</div>
+
+<script>
+(function () {
+  function labelOf(input) {
+    var t = input.parentNode.childNodes, s = '';
+    for (var k = 0; k < t.length; k++) {
+      if (t[k].nodeType === 3) s += t[k].textContent;
+      if (t[k].nodeType === 1 && t[k].tagName === 'CODE') s += t[k].textContent;
+    }
+    return s.trim();
+  }
+  function collect() {
+    var answers = {}, notes = {}, lines = [];
+    document.querySelectorAll('.q').forEach(function (q) {
+      var id = q.getAttribute('data-q'), title = q.getAttribute('data-title');
+      var picked = Array.prototype.slice.call(q.querySelectorAll('input:checked'));
+      answers[id] = picked.length ? picked[0].value : null;
+      var memo = ((q.querySelector('textarea.memo') || {}).value || '').trim();
+      if (memo) notes[id] = memo;
+      lines.push('- ' + id + ' ' + title + '：' + (picked.length ? picked.map(labelOf).join(' + ') : '（未选）') + (memo ? '｜备注：' + memo : ''));
+    });
+    var payload = { page: 'scope-guard-enforced-decisions.html', date: '2026-11-07', answers: answers, notes: notes };
+    return { text: '决策页导出（scope-guard-enforced）\n' + lines.join('\n') + '\n\n```json\n' + JSON.stringify(payload, null, 2) + '\n```', payload: payload };
+  }
+  var out = document.getElementById('out'), st = document.getElementById('st');
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var r = collect();
+    out.style.display = 'block';
+    out.value = r.text;
+    out.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(r.text).then(function () { st.textContent = '已复制到剪贴板'; }, function () { out.select(); st.textContent = '复制失败：已选中文本框，请手动复制'; });
+    } else { out.select(); st.textContent = '请手动复制文本框内容'; }
+  });
+  document.getElementById('btn-dl').addEventListener('click', function () {
+    var r = collect();
+    var blob = new Blob([JSON.stringify(r.payload, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'scope-guard-enforced-decisions.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    st.textContent = '已下载 JSON';
+  });
+  document.querySelectorAll('.q input').forEach(function (i) { i.addEventListener('change', function () { st.textContent = '有改动，记得导出'; }); });
+})();
+</script>
+</body>
+</html>
