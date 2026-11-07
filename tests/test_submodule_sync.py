@@ -6,20 +6,15 @@
 护栏 start-skips-populate-when-base-check-fails 在 base 上已成立（G0 基点校验先于一切），不带 xfail。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from submodule_helpers import (BRANCH, CHANGE, SUB, commit_parent, commit_sub, g, iso, make_super, run_executor, start,
                                write_impl)
-
-PENDING = pytest.mark.xfail(strict=True, reason="change submodule-aware-flight S2 未实现")
 
 
 def _populated(path):
     return (path / SUB / ".git").exists()
 
 
-@PENDING
 def test_start_populates_isolated_submodule(tmp_path):
     # Given: 从主 checkout 建出的隔离 worktree（HEAD = change 分支 tip），其中 mods/sub 是空目录；家里子仓的 gitlink 是本地未 push 的提交
     env = make_super(tmp_path)
@@ -36,7 +31,6 @@ def test_start_populates_isolated_submodule(tmp_path):
     assert str((path / SUB).resolve()) in g(env.home / SUB, "worktree", "list", "--porcelain")
 
 
-@PENDING
 def test_executor_commit_visible_at_home(tmp_path):
     # Given: 隔离 worktree 已 start（子仓已填充）
     env = make_super(tmp_path)
@@ -50,7 +44,6 @@ def test_executor_commit_visible_at_home(tmp_path):
     assert g(env.home / SUB, "cat-file", "-t", sha) == "commit"
 
 
-@PENDING
 def test_start_refuses_when_home_submodule_missing(tmp_path):
     # Given: change 家里的子仓被 deinit（未初始化），隔离 worktree 的子仓同样为空
     env = make_super(tmp_path)
@@ -85,7 +78,6 @@ def test_start_skips_populate_when_base_check_fails(tmp_path):
     assert not _populated(path)
 
 
-@PENDING
 def test_retry_after_cherry_pick_populates_new_gitlink(tmp_path):
     # Given: 上一轮执行体在隔离 worktree A 里提交了子仓 s1 与父仓 C1（gitlink → s1）；重派开了新的隔离 worktree B
     env = make_super(tmp_path)
@@ -103,7 +95,6 @@ def test_retry_after_cherry_pick_populates_new_gitlink(tmp_path):
     assert (path / SUB / "lib1.py").is_file()
 
 
-@PENDING
 def test_checkpoint_covers_submodule(tmp_path):
     # Given: 隔离 worktree A 已 start S1，子仓里写了 owns 内的 lib1.py 但未提交；PostToolUse 快照 hook 跑过一次；执行体随后未返回
     env = make_super(tmp_path)
@@ -123,7 +114,6 @@ def test_checkpoint_covers_submodule(tmp_path):
     assert "半成品" in (b / SUB / "lib1.py").read_text(encoding="utf-8")
 
 
-@PENDING
 def test_preflight_refuses_unsynced_home_submodule(tmp_path):
     # Given: change 家里子仓多了一个本地提交，但父仓 gitlink 没跟上（子仓 HEAD ≠ gitlink）；计划的切片 owns 落在 mods/sub 里
     env = make_super(tmp_path)
@@ -138,7 +128,6 @@ def test_preflight_refuses_unsynced_home_submodule(tmp_path):
     assert "缺基线" not in p.stderr
 
 
-@PENDING
 def test_sub_sync_cli_for_fix(tmp_path):
     # Given: 一个隔离 worktree（fix 执行体用；slices.json 没有 fix 条目，不能靠 start 填充）
     env = make_super(tmp_path)
