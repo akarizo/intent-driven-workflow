@@ -16,3 +16,4 @@
 2026-11-07T09:13:53Z	review	findings=3 blocking=1 deferred=2
 2026-11-07T09:13:54Z	final	同树沿用 417cd291fd ok
 2026-11-07T09:13:56Z	apply-done	blocked=0 blocking=1
+2026-11-07T09:14:53Z	ship	ready

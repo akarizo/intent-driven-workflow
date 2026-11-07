@@ -1,0 +1,141 @@
+{
+  "change": "submodule-aware-flight",
+  "run_id": [
+    "wf_554217d2-8a3",
+    "wf_d9624f88-136"
+  ],
+  "blocked": [
+    {
+      "slice": "wave2",
+      "kind": "infra",
+      "reason": "S2: slice-gate.py 当前分支没有 merge 子命令（可用: lint, waves, final, baseline, preflight, start, scope-seed, checkpoint, gate, record, ship），无法按 integrator 第 1 项合回 afdda79；未手工 git merge，未执行 record / _interfaces.md / timeline",
+      "resolution": "已接续：integrator 经回退 git merge --no-ff 合回 S2（ec294e0），record 写回门禁结论"
+    },
+    {
+      "slice": "S3",
+      "kind": "gate",
+      "reason": "首轮基点不含 S2（规划自举缺陷：S4 deps=[] 先合回，wave 2 integrator 找不到 merge 子命令），G1/G7 连续 2 次红",
+      "resolution": "已接续：S2 合回后单独重跑 waves [[\"S3\"]]（wf_d9624f88-136），S3 门禁绿（e0c75cb → 584df2c）"
+    }
+  ],
+  "blocking": [],
+  "fixed": [
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/agents/integrator.md",
+      "line": 18,
+      "summary": "自举风险（本次飞行内会触发，是否真的会断还需进一步确认）：S4 的 deps 是 []，已在 wave 1 合回分支（e72277c），但 slice-gate.py 目前只有 lint/waves/final/baseline/preflight/start/scope-seed/checkpoint/gate/record/ship 这些子命令，没有 merge 和 sub-sync，要等 S3（wave 3）、S2（wave 2）落地才有。本次 Workflow 用 useAgentTypes=false 运行，每个 agent 都在运行时去 Read 分支上的 template/.claude/agents/integrator.md。所以 wave 2 合回 S2 时，integrator 读到的是新的第 1 项（运行 `slice-gate.py merge <S>=<sha>`、不要手工 merge），而 merge 子命令还不存在，argparse 会报 invalid choice 并以 exit 2 退出。integrator 只能返回 ok:false，S2 合不回，S3 随之 blocked，整次飞行塌掉。同样，一个 hooks 未同步升级的下游仓库，装上新 agent 定义后也会失去合回能力，违反铁律 10「回退必存在」",
+      "fix": "二选一：① 改规划，把 S4 的 deps 改为 [\"S3\"]，让 S4 在 merge/sub-sync 落地之后再合回（本次飞行可由主会话在 wave 2 前确认 integrator 的处置）；② 在 integrator.md 第 1 项补回退：`slice-gate.py merge` 报 invalid choice（子命令不存在）时，按 prompt 顺序逐片 `git merge --no-ff <sha> -m \"integrate: <S>\"`，冲突时 `git merge --abort` 并返回 ok:false。只有这种情况允许直接用 git merge，脚本存在时仍禁止手工 merge",
+      "status": "fixed",
+      "fix_commit": "b41807f8ab7e1d82af9b0792ff272ba22a061b19",
+      "fix_note": "integrator.md 第 1 项补回退（merge 子命令不存在时逐片 git merge --no-ff），opsx-apply.js 合回 prompt 同步；本次 S2 正是经此回退合回（ec294e0）",
+      "run_id": "wf_554217d2-8a3"
+    },
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4191,
+      "summary": "子仓分叉合并前，没有确认子仓 HEAD 等于 ours（HEAD:P）。开跑前的复核只做一次。前一片的 _merge_sync_checkout 如果只记了 warning（例如 ff-only 因子仓工作树脏而失败），后一片就会在过期的子仓 HEAD 上执行 `merge theirs`。合出来的提交不含前一片的子仓提交，却被 update-index 钉成新的 gitlink，于是前一片的子仓改动从父仓里静默消失，而结果仍是 ok:true，只附一条 warning。",
+      "fix": "在 else 分支执行子仓 merge 之前，先判断 `_sub_head(root, p) != ours`；不等就 `_merge_rollback(root, sub_pre)`，并返回 `merge <S>: <P> 的检出与 gitlink 不一致`。也可以改成：_merge_sync_checkout 一旦失败就当作本片失败，停止后续片。",
+      "status": "fixed",
+      "fix_commit": "417cd291fd8888f3af1a77b33a44de757fde7d49",
+      "fix_note": "_merge_links 子仓分叉合并前校验检出等于 gitlink，不一致回滚本片；新增先失败测试 test_merge_refuses_fork_when_sub_checkout_stale；final ok scenario 22/22",
+      "run_id": "wf_d9624f88-136"
+    }
+  ],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2568,
+      "summary": "`--submodule=diff` 遇到新增 submodule（旧 mode 000000）时，会把子仓全部文件当新增行输出。已实测：输出 `Submodule mods/sub 0000000...9d935b7 (new submodule)`，紧接 `+++ b/mods/sub/v.py` 和 `+# ceiling: x`。结果是 G8 扫遍整个新引入的（可能是第三方 vendored）子仓，与 changed_files / spec 的处理方式对不上：新增或删除 submodule 时应保留伪路径交 G6 点名，不该展开。第三方代码里只要有一行不完整的 ceiling 标记，就会出现执行体修不了的 G8 误红。",
+      "fix": "G8 的展开范围与 _expand_committed 对齐，只认两侧都是 160000、_sub_ready 且两端 sha 都 _sub_has 的 gitlink。做法一：用 _gitlink_raw_diff 先算出可展开集合 E，added_lines 遇到 rel 落在某个 gitlink P/ 下、但 P 不在 E 里时跳过。做法二：父仓 diff 改用默认 `--submodule=short`，再对 E 中每个 P 单独跑 `git -C P diff --unified=0 old new`，路径加 `P/` 前缀。补一条新增 submodule 不触发 G8 的用例。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3313,
+      "summary": "anchor_submodules 的锚定失败 warning 是在 result['summary'] 算好之后才追加进 warnings 的。warnings 与 result 是同一个列表，所以 JSON 里会出现这条 warning，但 summary 里的「N 项警告」计数没有算上它，前后不一致。",
+      "fix": "把 anchor_submodules 挪到构造 result 之前（以 `not failed` 为条件）；或者追加后按 len(warnings) 重新生成 summary。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2511,
+      "summary": "父仓的 committed 来自 `diff --name-only`（2433 行）、uncommitted 来自 `status --porcelain`，两者都不带 -z，受 core.quotepath 影响。_gitlinks / _gitlink_raw_diff 用的是 -z 原样路径。子仓路径含非 ASCII 字符时，前者给出带引号的转义路径，`uncommitted & set(links)` 和 `committed.discard(p)` 都对不上，展开被悄悄跳过，伪路径留在集合里，G6 照旧误报。",
+      "fix": "展开相关的比较统一用 -z 口径：父仓 status / name-only 改用 `-z`（或加 `-c core.quotepath=off`）。如果想不动既有解析，至少在 _expand_* 里把 links 的路径按同样规则加引号后再比较。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_submodule_gate.py",
+      "line": 53,
+      "summary": "_expand_uncommitted 里按子仓 `status --porcelain -z` 展开（含未跟踪文件、R/C 改名项跳过原路径）的这条分支，四条 scenario 用例都没有直接覆盖。test_gate_flags_unrecorded_gitlink 只间接走到 rec..head 那段 diff，改名解析或未跟踪展开写错了也不会被发现。",
+      "fix": "在 test_slice_gate 或新测试里补一条非 scenario 单测：子仓里留一个未跟踪的 owns 外文件、做一次 git mv 改名，断言 changed_files 返回 `mods/sub/<新路径>`，不含原路径，也不含 `mods/sub` 伪路径。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 228,
+      "summary": "finalize 合回 fix 失败时，prompt 要求 failed 一律写「merge fix 冲突」，把 merge 脚本 JSON 里的 failed 丢掉了（例如 G0 submodule、gitlink 分叉无法合并、检出同步失败等非冲突原因）。这与 spec 的 Rule「merge 退出非 0 时，integrator 把它的 failed 原样作为返回值」矛盾，也与 integrator.md 第 1 项「把它 JSON 的 failed 原样返回」冲突：同一个 agent 收到两条相反的指令。失败原因被抹平，人工排查拿不到线索",
+      "fix": "改为「退出非 0 → 返回 ok:false，failed 取它 JSON 的 failed 原样（可在每条前加 `merge fix: ` 前缀），不再往下跑」。现有测试只断言 `merge fix=` 出现在 `slice-gate.py final` 之前，不受影响"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 61,
+      "summary": "回退段声称「语义与脚本逐项一致」，但 Workflow 路径的评审已改为 `git show --submodule=diff <commit>`，回退段只写「评审用 code-reviewer」，没提用 --submodule=diff 读 diff。回退路径的评审员可能用普通 `git show`，只看到 gitlink 的 SHA 变化，看不到子仓内的实际改动。openspec-apply-change/SKILL.md 同一段同样缺这一点",
+      "fix": "在两处回退段的「评审用 `code-reviewer`」后补「（审 `git show --submodule=diff <commit>`）」，两处措辞保持一致，以通过 test_command_skill_sync 对拍"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3092,
+      "summary": "_sub_sync 对所有 gitlink 都尝试从家借出（只对 P ∉ need 的失败降为 warning），不碰子仓的切片在隔离 worktree 起跑时也会把全部已初始化子仓填充进来。这样多了不必要的检出耗时，而且这些隔离 worktree 之后用 `git worktree remove` 删不掉（design 第 150 行只讨论了 G0 失败不填充的情况）。这与切片包第 3 步『逐个 P』的字面一致，属于设计取舍，需进一步确认是否有意为之",
+      "fix": "若无意填充无关子仓，就在未填充分支里加一条 `if p not in need: continue`（成功与失败都跳过），只借出 need 内的子仓；若有意为之，就在 design 风险段补一句：无关子仓同样会被填充，清扫时要用 --force"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3113,
+      "summary": "父仓 HEAD 取不到 gitlink 时（rec 为 None，例如索引里新增了 submodule 但还没提交），会和『sha 不在家的对象库』走同一分支，文案拼成『父仓 HEAD 的 gitlink 无 不在 <home>/<P> 的对象库』，读起来不通，也没给修法",
+      "fix": "把 `not rec` 拆成单独分支，文案改为『父仓 HEAD 无 <P> 的 gitlink（新增 submodule 未提交？）：先在家提交 gitlink』；_preflight_subs 第 4121 行同理"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3106,
+      "summary": "`home = home or _home_root(root, branch)` 在 home 为 None 时每处理一个未填充子仓都会重新跑一次 `git worktree list`，结果不会变，属于冗余子进程",
+      "fix": "在循环外先置一个哨兵（如 `home = _UNSET`），第一次用到时才算，结果为 None 也缓存下来；或者在循环外直接算一次"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4264,
+      "summary": "父仓 commit 失败（例如 pre-commit 或 commit-msg hook 拒绝）时，回滚调用的是 `_merge_rollback(root, {})`。_merge_links 内部 sub_pre 记下的、本片已在子仓做出的合并提交不会被 reset。父仓 abort 之后，子仓 HEAD 停在新合并提交上，与 HEAD:P 不一致，违反「合回失败全回滚」。",
+      "fix": "让 _merge_links 成功时返回 sub_pre（失败时仍返回文案），cmd_merge 在 commit 失败分支调用 `_merge_rollback(root, sub_pre)`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4174,
+      "summary": "凡是 `rev-parse HEAD:P` 失败都归为「新增 submodule」。ours 一侧删掉了 submodule、theirs 一侧改了它时，也会报这条「新增 submodule，不支持」，文案有误导。",
+      "fix": "用 `rev-parse <mb>:P` 区分：mb 里存在而 HEAD 里没有的，报为 ours 一侧已删除该 submodule（修改与删除冲突）；只有 mb 里也不存在时才报新增。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "417cd291fd8888f3af1a77b33a44de757fde7d49",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 22/22；增量：重跑 42 个文件（407 个用例）/ 沿用 110 个，锚点 9f0dd125fe。修复 HIGH：slice-gate.py _merge_links 在子仓分叉合并前校验 _sub_head(root,p)==ours，不一致则 _merge_rollback 并返回「merge <S>: <P> 的检出 <head> 与 gitlink <ours> 不一致」；新增先失败测试 tests/test_submodule_merge.py::test_merge_refuses_fork_when_sub_checkout_stale（家子仓有未跟踪 lib1.py 使 S1 的 ff-only 同步失败，修复前 S2 返回 ok:true 并静默丢掉 S1 的子仓提交）。start fix 因 slices.json 无 fix 条目被拒（rc=2），按指示跳过；G0 基点校验与 sub-sync 均通过。未改既有骨架断言。"
+  },
+  "final": {
+    "slice": "final",
+    "ok": true,
+    "commit": "4ee36fd201c9bef4529dcfea8552dcb49df74bdc",
+    "failed": [],
+    "summary": "final 通过：scenario 22/22；fix 已合回；apply-done 已记录；飞行记录已提交",
+    "warnings": []
+  }
+}
