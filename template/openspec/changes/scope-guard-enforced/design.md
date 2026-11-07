@@ -198,7 +198,7 @@ sequenceDiagram
 
 **D9 final 开跑前复核**
 - 位置：`cmd_final` 算出 `why` 之后、运行任何测试之前；G7 红时本来就不跑测试，也就不复核。
-- 内建：`why` 非空且不是 `--full` 时，取 `_full_triggers`，`未批准 = 触发项 − 已批准键`。
+- 内建：`why` 非空且不是 `--full` 时，取 `_full_triggers`，`未批准 = 触发项 − 已批准键`。设计边界（非 pytest 运行器 / 部件形态，与 D5 同一谓词 `_builtin_by_design`）不参与全选复核：计划期不准写理由，final 也不要求。
 - cmd：重跑提供方（环境同 D4），全选时 `未批准 = triggers − 已批准键`；提供方失败也判红。
 - 未声明：同 D2。
 - 不通过 → `failed.append("G2 scope：…")`，跳过测试运行，final 红，结果带 `scope` 段 `{kind, full, triggers, unapproved}`。

@@ -6,6 +6,7 @@
 护栏 baseline-runs-when-full-is-approved、final-runs-approved-full、manual-full-flag-is-exempt 在 base 上已成立，不带 xfail。
 「测试是否运行」用仓库外的标记文件判定：gate.test / tests/test_mark.py 在设了 SCOPE_GUARD_MARK 时写出它。"""
 import json
+import os
 import re
 
 from conftest import commit_all, run_hook, write
@@ -201,3 +202,25 @@ def test_reasons_edited_after_approval_are_red(git_repo, tmp_path):
     assert out["ok"] is False, out
     assert any(f.startswith("G2 scope") and "批准后被修改" in f for f in out["failed"]), out["failed"]
     assert not mark.exists()
+
+
+def test_final_builtin_by_design_runner_is_not_rechecked(git_repo, tmp_path):
+    # Given: 仓库声明 builtin，计划 gate.test = npm test（设计边界：final 恒全量，lint 不准写理由）；
+    #        PATH 上的 npm 替身一运行就写出标记
+    write(git_repo / "openspec" / "gate-scope.json", json.dumps({"builtin": True}))
+    d = _marker_plan(git_repo, {"test": "npm test"})
+    bindir = tmp_path / "bin"
+    write(bindir / "npm", '#!/bin/sh\ntouch "$SCOPE_GUARD_MARK"\n')
+    (bindir / "npm").chmod(0o755)
+    mark = tmp_path / "ran.marker"
+    env = {"SCOPE_GUARD_MARK": str(mark), "PATH": "%s:%s" % (bindir, os.environ.get("PATH", ""))}
+    lint = run_hook("slice-gate", "lint", "--change-dir", str(d), cwd=git_repo, env=env)
+
+    # When: 运行 final
+    p = run_hook("slice-gate", "final", "--change-dir", str(d), cwd=git_repo, env=env)
+    out = gate_json(p)
+
+    # Then: lint 绿；final 没有 G2 scope 失败项，测试被运行
+    assert lint.returncode == 0, lint.stderr
+    assert not any(f.startswith("G2 scope") for f in out["failed"]), out["failed"]
+    assert mark.exists()

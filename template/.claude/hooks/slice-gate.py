@@ -1551,6 +1551,11 @@ def _establishes_decl(data, change_dir):
     return any(glob_match(rel, o) for o in _planned_owns(data))
 
 
+def _builtin_by_design(gate, tiers):
+    """内建提供方的设计边界：非 pytest 运行器或部件形态，final 恒全量，计划期与 final 复核都不要求理由（design D5 / D9）。"""
+    return (gate.get("test") or "").strip() in PLAIN_TEST_CMDS or tiers_is_parts(tiers)
+
+
 def _builtin_report(root, change_dir, data, phase):
     """模板内建提供方的报告（进程内，不起子进程；design D5）；phase ∈ lint / preflight / baseline / final。
     root 为 git 顶层，不在 git 仓库里为 None。→ {"full", "triggers", "pending", "notes"}：
@@ -1568,7 +1573,7 @@ def _builtin_report(root, change_dir, data, phase):
         trig.extend(o for o in owns if _global_file(o))
         return report()
     tiers, _ = _load_tiers(change_dir)
-    if (gate.get("test") or "").strip() in PLAIN_TEST_CMDS or tiers_is_parts(tiers):
+    if _builtin_by_design(gate, tiers):
         notes.append("final 恒全量（设计边界）")
         return report()
     try:
@@ -4567,7 +4572,7 @@ def _final_scope_guard(root, change_dir, data, why, triggers):
         else:
             failed.append(_g2_scope("scope: " + _undeclared_msg(change_dir)))
     elif kind == "builtin":
-        if why:
+        if why and not _builtin_by_design(gate, _load_tiers(change_dir)[0]):
             full, trig = True, list(dict.fromkeys(triggers()))
     else:
         errs, report = _run_scope(provider["cmd"], root, _planned_owns(data), _change_rel(root, change_dir))
