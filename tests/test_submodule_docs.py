@@ -4,12 +4,8 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
 import re
 
-import pytest
-
 from conftest import ROOT
 from test_agents_workflow import REVIEW_HIGH, TAIL_REPLIES, fallback_section, flight_args, gate_json, run_workflow
-
-PENDING = pytest.mark.xfail(strict=True, reason="change submodule-aware-flight S4 未实现")
 
 CLAUDE = ROOT / "template" / ".claude"
 
@@ -23,7 +19,6 @@ def _calls(tmp_path, replies):
     return out, {c["opts"]["label"]: c for c in out["calls"]}
 
 
-@PENDING
 def test_integrator_merges_via_script(tmp_path):
     # Given: waves [[S1, S2], [S3]] 门禁全绿（commit 为 a…a / b…b / c…c）；S1 评审给出 1 条 HIGH，fix 返回 commit 9…9
     replies = [["^S1$", gate_json("S1", commit="a" * 40)], ["^S2$", gate_json("S2", commit="b" * 40)],
@@ -38,7 +33,6 @@ def test_integrator_merges_via_script(tmp_path):
     assert ("slice-gate.py merge fix=" + "9" * 40) in fin and fin.index("merge fix=") < fin.index("slice-gate.py final"), fin
 
 
-@PENDING
 def test_fix_prompt_syncs_submodules(tmp_path):
     # Given: 同上，S1 评审给出 1 条 HIGH，触发 fix
     replies = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")],
@@ -54,7 +48,6 @@ def test_fix_prompt_syncs_submodules(tmp_path):
     assert fix.index("merge-base --is-ancestor") < m.start() < fix.index("slice-gate.py start fix")
 
 
-@PENDING
 def test_reviewer_reads_submodule_diff(tmp_path):
     # Given: waves [[S1, S2], [S3]] 门禁全绿，S1 的 commit 为 a…a
     replies = [["^S1$", gate_json("S1", commit="a" * 40)], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")]]
@@ -66,7 +59,6 @@ def test_reviewer_reads_submodule_diff(tmp_path):
     assert ("git show --submodule=diff " + "a" * 40) in calls["review:S1"]["prompt"]
 
 
-@PENDING
 def test_agent_docs_describe_submodule_discipline():
     # Given: slice-executor.md 与 integrator.md
     executor, integrator = read("agents/slice-executor.md"), read("agents/integrator.md")
@@ -80,7 +72,6 @@ def test_agent_docs_describe_submodule_discipline():
     assert "git -C" in rules and "gitlink" in rules and "submodule" in rules, rules
 
 
-@PENDING
 def test_apply_docs_mirror_submodule():
     # Given: opsx-apply.md、openspec-apply-change/SKILL.md 与 openspec-git-discipline/SKILL.md
     cmd, skill = read("commands/opsx-apply.md"), read("skills/openspec-apply-change/SKILL.md")

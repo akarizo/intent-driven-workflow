@@ -174,6 +174,8 @@ slice-gate.py lint（校验 slices.json：片数 1–9 / DAG 深度 ≤ 3 / 同 
   → session-decompose.py 收口分解（各 agent 实际模型）→ timeline.py report 打印飞行记录 → 转 /pr-ship
 ```
 
+**含 submodule 的仓库**同样走飞行模式，机制见 `openspec-git-discipline` skill 的 Submodule 小节。
+
 **Workflow 前置条件**：需要付费计划（Pro 要在 `/config` 里手动打开 Workflow）；把 `slice-gate.py` 与测试命令加进项目 `.claude/settings.json` 的 allow 规则，否则每个切片起步都会被权限提示打断并行。
 
 **模型路由（铁律，按角色显式声明）**：slice-executor 与 code-reviewer 用会话主模型 `<main>`（effort high），integrator / final-gate 用 sonnet（effort low），渲染 / 分解 / 时间线是零 token 脚本。`<main>` 由 `.claude/hooks/session-model.py` 读会话转录判定（stdout `opus|sonnet|haiku|fable`，exit 3 = 判定不出），**禁模型自述**；判定不出不起飞（需 `--model=<alias>` 显式指定）。`/opsx-apply` 以 `args.models` 显式传入，脚本缺参拒绝起飞；收口 `session-decompose.py --expect-models` 机械对账各 agent 实际模型，不符即非 0（按 draft PR 处置）。解析顺序自 v2.1.251 起为「调用参数 > frontmatter > `CLAUDE_CODE_SUBAGENT_MODEL` > 主会话」，派发时留空 `model` 就会落到 env 默认值。
