@@ -2,16 +2,11 @@
 #builtin-declaration-reports-builtin、#builtin-with-unrecognized-gate-test-is-red、#malformed-v2-declaration-is-red、
 #cmd-provider-receives-planned-files-and-change、#scope-seed-decides-by-history，共 7 条；#spec-html-shows-provider-state 在
 tests/test_spec_html_scope.py）。
-骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。
 各用例显式写或删 openspec/gate-scope.json，不依赖测试基座 git_repo 的默认声明。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from test_slice_gate import plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S1 未实现")
 
 PY = "python3 -m pytest -q tests"
 
@@ -65,7 +60,6 @@ def _scope_lines(stderr):
     return out
 
 
-@PENDING
 def test_undeclared_provider_is_red(git_repo):
     # Given: openspec 根没有 gate-scope.json，计划没写 gate.scope，唯一切片的 owns 是 a/**
     d = _change(git_repo)
@@ -80,7 +74,6 @@ def test_undeclared_provider_is_red(git_repo):
     assert hits and "builtin" in hits[0] and "cmd" in hits[0], p.stderr
 
 
-@PENDING
 def test_establishing_change_passes_only_with_reason(git_repo):
     # Given: 没有任何选测声明；切片 owns 含 openspec/gate-scope.json（本 change 建立声明）
     d = _change(git_repo, owns=("a/**", "openspec/gate-scope.json"))
@@ -100,7 +93,6 @@ def test_establishing_change_passes_only_with_reason(git_repo):
     assert any("本 change 建立仓库选测声明" in l for l in _scope_lines(second.stderr)), second.stderr
 
 
-@PENDING
 def test_builtin_declaration_reports_builtin(git_repo):
     # Given: 仓库声明 {"builtin": true}，gate.test 是 pytest 命令，切片 owns 只有 a/**
     d = _change(git_repo, test=PY)
@@ -114,7 +106,6 @@ def test_builtin_declaration_reports_builtin(git_repo):
     assert any("模板内建" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@PENDING
 def test_builtin_with_unrecognized_gate_test_is_red(git_repo):
     # Given: 仓库声明 {"builtin": true}，gate.test 是包装脚本 bash scripts/test.sh
     d = _change(git_repo, test="bash scripts/test.sh")
@@ -128,7 +119,6 @@ def test_builtin_with_unrecognized_gate_test_is_red(git_repo):
     assert any("认不出" in l and "cmd" in l for l in _scope_lines(p.stderr)), p.stderr
 
 
-@PENDING
 def test_malformed_v2_declaration_is_red(git_repo):
     # Given: 三种不合法的 v2 声明，各自应点名的问题；以及合法的 {"builtin": true}
     cases = [({"builtin": True, "cmd": "x"}, "只能取其一"),
@@ -150,7 +140,6 @@ def test_malformed_v2_declaration_is_red(git_repo):
     assert ok.returncode == 0, ok.stderr
 
 
-@PENDING
 def test_cmd_provider_receives_planned_files_and_change(git_repo):
     # Given: 计划 gate.scope 是替身提供方；切片 owns 是 bin/x.sh 与 src/**；change 目录是 openspec/changes/c
     write(git_repo / "tools" / "planned.py", PLANNED_TOOL)
@@ -166,7 +155,6 @@ def test_cmd_provider_receives_planned_files_and_change(git_repo):
     assert got == {"planned:bin/x.sh", "planned:src/**", "change:openspec/changes/c"}, p.stderr
 
 
-@PENDING
 def test_scope_seed_decides_by_history(tmp_path):
     # Given: 三个 openspec 根：A 的历史 gate.test 只有 pytest；B 另有一条包装脚本（在 archive 下）；C 已有 {"cmd": "mine"}
     def root(name, tests, existing=None):

@@ -1,15 +1,10 @@
 """审批页显示选测范围（scenario: gate-scope-report#spec-html-shows-scope-reasons、#spec-html-shows-repo-default-scope；
 scope-provider-contract#spec-html-shows-provider-state）。
-前两条已由 change scope-fallback-guard 解锁；最后一条是 change scope-guard-enforced 的 strict xfail 骨架，切片 S1 实现后去掉标记。"""
+前两条由 change scope-fallback-guard 落地，最后一条由 change scope-guard-enforced 落地；来源措辞按契约 v2 为「仓库声明」。"""
 import json
-
-import pytest
 
 from conftest import write
 from test_spec_html import artifacts, render
-
-PENDING_S1 = pytest.mark.xfail(strict=True, reason="change scope-guard-enforced S1 未实现")
-
 
 def _slices(change, gate):
     """单片 slices.json，gate 原样写入。"""
@@ -47,14 +42,13 @@ def test_spec_html_shows_repo_default_scope(tmp_path):
     # When: 运行 spec_html.py
     p = render(change, out)
 
-    # Then: HTML 含「选测范围」、仓库默认命令与「仓库默认」
+    # Then: HTML 含「选测范围」、仓库声明的命令与「仓库声明」
     assert p.returncode == 0, p.stderr
     html = out.read_text(encoding="utf-8")
-    for word in ("选测范围", "bash tools/scope.sh", "仓库默认"):
+    for word in ("选测范围", "bash tools/scope.sh", "仓库声明"):
         assert word in html, word
 
 
-@PENDING_S1
 def test_spec_html_shows_provider_state(tmp_path):
     # Given: 三个 change：仓库声明 {"builtin": true}；仓库声明 {"cmd": "python3 tools/scope.py"}；没有任何声明
     def change(name, decl):
