@@ -20,4 +20,5 @@
 - 命令与同名 skill 同改，禁漂移；`python3 -m pytest -q tests` 全绿；`cd template && openspec schema validate intent-driven` 绿；`.claude/hooks/*.py` 可 compileall。
 - 回复与文档禁日文假名 / 韩文谚文。
 - change 工件落 `template/openspec/changes/<name>/`，实现在 `.worktrees/<name>/`；PR 前预合并 main。
+- **切片 owns 含钉文档的旧测试**：改命令计数 / 文档措辞前先 grep `tests/` 找钉住它的断言，并入同片 owns（过渡，防线见 `docs/superpowers/backlog/2026-11-09-slice-owns-pinned-tests.md`）。
 
