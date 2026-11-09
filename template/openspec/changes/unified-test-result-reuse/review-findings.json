@@ -1,0 +1,209 @@
+{
+  "change": "unified-test-result-reuse",
+  "blocked": [],
+  "blocking": [],
+  "fixed": [
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3999,
+      "summary": "本 change 旧基线的识别靠 `cands[0].get(\"snapshot\") is old.get(\"snapshot\")`。S3 把锚点包装 dict `{\"via\",\"pick\"|\"skip\"}` 排进了候选列表，这个包装没有 snapshot 键。旧基线缺 snapshot 时（结束快照失败时 4176-4184 行写 `snapshot: None`，或旧格式基线），旧基线不会进候选，cands[0] 是锚点包装，于是 `None is None` 成立，`own` 被误设成锚点候选。锚点命中后 `src is own` 为真，4086 行 `prev = old.get(\"verify\")` 拿到旧基线的 verify 记录，再用锚点的 Δ（anchor commit→HEAD）调 `_verify_rerun` 判断要不要重跑。旧基线 commit 到锚点 commit 之间改过的文件不在这个 Δ 里，所以 exit 0 的旧 verify 会被当成 reused 沿用，过期结论被判成绿。设计 D7 写的是「经锚点（任意来源）时 verify 全部重跑」，这里违背了它。",
+      "fix": "`own` 不要再用 snapshot 身份推断，直接在候选构造处判定。例如改成 `own = cands[0] if cands and cands[0] is not acand and old is not None and isinstance(old.get(\"snapshot\"), dict) and cands[0].get(\"snapshot\") is old.get(\"snapshot\") else None`；更稳的做法是让 `_baseline_candidates` 同时返回本 change 候选的引用。另补一个测试：旧基线 snapshot 为 null、经锚点命中时，verify 全部重跑，没有一条带 reused。",
+      "fixed_by": "9a14b07064834d58a0ad5595ef53fb42db0ca06c",
+      "regression_test": "tests/test_baseline_anchor_reuse.py::test_anchor_hit_with_snapshotless_own_baseline_reruns_all_verify"
+    }
+  ],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3795,
+      "summary": "S1.md 第 3 条要求 baseline / final 调 run_test_gate 时都经 extra_env 传 GATE_PHASE / GATE_CHANGE，但有几处没传：final 的区域运行（3795 行 run_test_gate(rcmd, root, deps=...)）、baseline 的区域运行（4038 行），以及部件形态的单元 / 区域运行（1242、1365 行）。区域命令一样可能是包装脚本，到这里拿不到 GATE_CHANGE，只能继续把 change 名写死，与 spec「包装脚本不必写死 change 名」的目的不符。",
+      "fix": "这四处都加 extra_env=_gate_test_env(phase, change_dir)：final 用 genv；baseline 用 _gate_test_env(\"baseline\", args.change_dir)；部件路径要把 phase / change_dir 传进 _final_parts / _baseline_parts，1242 行与已有的 {FLIGHT_JUNIT, FLIGHT_TIER_TOP} 合并成一个 dict。再补一条测试：区域命令用包装脚本记录这两个变量，断言 baseline 与 final 都能拿到。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1000,
+      "summary": "只转发两个契约变量其实不够，要「需进一步确认」目标项目的包装脚本怎么重建环境。插件运行时还要从环境读 FLIGHT_GUARD_OK（169 行）、FLIGHT_DEPS_OUT（287 行）、FLIGHT_ROOT（199 行）和 FLIGHT_GUARD_JUNIT。包装脚本若按白名单重建子进程环境（design D2 正推荐白名单做缓存键），即使照契约转发了 FLIGHT_PLUGIN_PATH / FLIGHT_PYTEST_ARGS，guard 也不写标记、deps 也不写开跑记录，最后会被判成 plugins-dropped，提示「包装脚本没把 -p 参数传给 pytest」——-p 明明已经转发了，诊断是错的。",
+      "fix": "二选一。(a) 让插件在环境变量缺失时按自身 __file__ 所在目录找 guard.ok / deps.jsonl，FLIGHT_ROOT 写进插件目录里的一个小配置文件，这样两个契约变量就够用；(b) 契约变量（或 RUNNER_FIX 文案与 S5 契约文档）明确写「FLIGHT_ 前缀的变量须全部透传」，并在 DEPS_KIND_WHY[\"plugins-dropped\"] 里点出这种可能。选 (a) 的话加一条测试：包装脚本用 env -i，只带 PATH 与两个契约变量。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1027,
+      "summary": "guard 标记已写、依赖图却没有开跑记录时，deps_kind 判成 incomplete，但 deps_why 仍是 DEPS_NO_OUTPUT「没有依赖图输出（不是 pytest？）」。design D4 明确否决这句误导性文字；而且这种情况不在 spec 对 incomplete 的定义（有开始没结束 / 已损坏）之内。",
+      "fix": "这个分支另给一句带修法的 why，例如「防护插件已加载但依赖图插件没写记录（-p flight_deps 或 FLIGHT_DEPS_OUT 没转发）：」+ RUNNER_FIX；或者在 spec 里补上这一子情况的归类。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3749,
+      "summary": "增量带分层时，tres[\"inherited\"] 在区域运行之前就算好了。之后 3815–3821 行用区域整跑的结局替换了锚点里的区域文件条目，这些条目已经不是沿用的，却仍被计入 inherited，结果文件的 inherited 偏大。另外生成器每次迭代都重建一遍 set(rerun)。",
+      "fix": "把 inherited 挪到写结果文件时再算：维护一个本次实际重跑过的文件集合（rerun ∪ 各区域 rfiles），inherited = sum(1 for n in anchor_part[\"nodes\"] if 文件不在该集合)；集合在循环外建好。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4942,
+      "summary": "nodes 为 null 时（全量依赖图未测 / impacted / 增量依赖图未测且有区域运行），failed_nodes 退化成 [] 或只含本次重跑的失败，看上去像「没有失败」。执行体已申报这一点，complete 也为假，但检查若只读 failed_nodes 会把红的运行当成绿。",
+      "fix": "S5 契约文档写明 failed_nodes 只在 nodes 非 null 时可信；或者在 spec 里允许 nodes 为 null 时 failed_nodes 也为 null，避免空数组的歧义。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3803,
+      "summary": "锚点的 deps_kind 只取 gate.test 主运行的类别：final 的区域运行依赖图未测时只把 measured 置假，deps_kind 仍是 None（或增量路径上的值）。baseline 那边取的是 deps_un[0]（含区域），两边口径不一致。",
+      "fix": "区域 rg[\"deps\"] 为 None 时，若 anchor_part[\"deps_kind\"] 还是 None，就置为 rg[\"deps_kind\"]，与 baseline 的取首个类别一致。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1160,
+      "summary": "_nodes_verdict 只拿依赖图 nodes 里的 FAILED/ERROR 去差分，tg[\"failed\"] 里 junit 的失败清单完全没用上。L1171 的 ceiling 注释写明：带 --continue-on-collection-errors 时 exit 1 仍算可度量，但收集失败的文件不进依赖图。于是一个新增的收集错误加上基线已有的红用例，会让 fails 只剩已知红，结果判绿并只出警告，等于把红判成绿。_diff_verdict 走 junit 能看到这类失败。这条需进一步确认：junit 计数和汇总行要对得上，tg[\"failed\"] 才会是非 None。",
+      "fix": "在 fails 算完之后加一道交叉校验：如果 tg[\"failed\"] 里有用例在依赖图 nodes 里找不到对应 nodeid（或 junit 失败数多于 len(fails)），直接判红，原因写依赖图漏了失败用例、无法按 nodeid 差分。另补一条单测：nodes 形式的基线遇上新增收集错误，必须判红。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3809,
+      "summary": "D6 Rule 里有两条没有任何测试：一是增量 final 写锚点时 hops 取来源 +1，二是旧条目缺 hops 时 final-incremental 视为 K、其余视为 0（_anchor_hops）。test_anchor_hops 只覆盖池里 hops 被手工设满后走全量、并写出 hops=0 这一种情况。要是 +1 这行被删或写错，链长永远不涨，上限就不会触发，现有测试还是全绿。",
+      "fix": "补两条单测：(1) baseline 后改一次非测试文件、跑一次增量 final，断言 latest_anchor 的 hops == 1，再跑一次断言等于 2；(2) 往池里写一条缺 hops、source=final-incremental 的锚点，断言 _pick_anchor 跳过它，再写一条 source=baseline 的缺 hops 锚点，断言它照常可用。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 120,
+      "summary": "跨切片口径漂移。S2 把 declared_global 和 hops_cap 做成了 _full_why / _full_triggers 的参数，要调用方自己传，_full_why 本身不去读 _scope_extras。flight-doctor 的 forecast 调 _full_why 时两个都没传，结果是：Δ 命中项目声明的 global 时，forecast 预告增量，final 实际跑全量；锚点链耗尽时，forecast 写「没有可用锚点」，final 写「锚点链已达上限 K 代」。这和 design D12「复用判定逻辑、不会与门禁漂移」的承诺相反。",
+      "fix": "forecast 里改为 extras = sg._scope_extras(change_dir)，再传 declared_global=extras[\"global\"]、hops_cap=sg._hops_cap(root, akey, tkey, pick, hops)。也可以给 slice-gate 加一个薄封装，按 change_dir 自己取 extras 再调 _full_why，让 final、内建预测、forecast 三处都只走这一个入口，把「单一出处」做实。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1679,
+      "summary": "_builtin_report 在非 preflight 阶段直接取 _anchor_candidates(limit=1) 当锚点，没按 hops 过滤。最新的锚点就算链已耗尽，计划期预测也不会出 final:anchor-hops，和 final 实际选锚点的口径不一致（preflight 那支已经过滤了）。",
+      "fix": "非 preflight 分支取候选时同样用 _anchor_hops(c, extras[\"anchor_max_hops\"]) < K 过滤；或者至少在 notes 里注明计划期不判链长。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5089,
+      "summary": "_hops_cap 只看「pick 为 None，且有任意候选因链长被滤掉」。可能出现这种情况：一部分候选被链长滤掉，另一部分是因为 _delta 返回 None 才不可用，这时原因一律写成「锚点链已达上限」，把另一类原因盖住了。另外它会再读一遍锚点池，属于重复 I/O。",
+      "fix": "让 _pick_anchor 顺带返回或记录「因 hops 滤掉的数量」和「因 Δ 不可算滤掉的数量」，只在全部候选都是因 hops 被滤掉时才返回 max_hops；这样也省掉第二次 _anchor_candidates。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1163,
+      "summary": "rc 非 0 但依赖图里一条 FAILED/ERROR 都没有时（not fails 分支），报错文字是「exit 1（新增 0 条失败）」，后面跟着空列表。判红的方向没错，但 exit 码是写死的 1，原因也说不清，排查的人会被误导。",
+      "fix": "not fails 单独走一个分支，原因写成「exit %d，依赖图无失败用例结论，无法按 nodeid 差分」，并带上 _tail(tg[\"out\"])。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 121,
+      "summary": "forecast 调 `_full_why` 时没传 `declared_global` 和 `hops_cap`。真实 final（slice-gate.py:3694）两个都传。S4 写的时候 S2 还没合入，可以理解；但 d72b33d 把 S4 集成到 S2 之上后，预告和真实 final 对不上了：(1) Δ 命中 gate-scope.json 的 `global` glob 时，forecast 报 incremental，final 实际跑全量；(2) 锚点因 hops 达上限被滤掉时，forecast 报「没有可用锚点」，没报「锚点链已达上限 K 代」。spec test-cost-visibility 的 Rule 明确把「锚点链耗尽」列为 final.why 要写的原因。",
+      "fix": "在 `hasattr(sg, \"_scope_extras\")` 分支里一次取出 `extras`，用 `hasattr(sg, \"_hops_cap\")` 判断后算 `hcap = sg._hops_cap(root, akey, tkey, pick, hops)`，再调 `_full_why(..., declared_global=extras[\"global\"], hops_cap=hcap)`。用 try/except TypeError 或探测签名，兼容没有这两个参数的旧 slice-gate。同时把 `_interfaces.md`「S4 提供」的函数清单补上 `_hops_cap`，再补一条 forecast 在 hops 达上限时报「锚点链已达上限」的测试。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_flight_doctor_surfaces.py",
+      "line": 31,
+      "summary": "spec-html-shows-cost-forecast 只断言出现了「测试成本预告」标题。render_forecast 走占位分支（子进程失败、超时、非 JSON）时也会输出这个标题，所以 forecast 真坏了，这个测试照样通过。",
+      "fix": "再断言不含「预告不可用」，或断言表格里有 baseline/final 两行（比如 `<code>full</code>` 或 `<code>incremental</code>`）。另外单独写一个测试覆盖占位分支：把 flight-doctor 换成坏的，断言占位文字出现，并且 spec_html 退出码为 0。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 209,
+      "summary": "cost 只从全量标记前面的 `exit N, Xs` 取秒数。final 的全量备注格式是 `全量（<why>） <tier_note> ok`，秒数在标记后面，而且不是 `exit N, Xs` 格式，所以 final.full_sec 永远是 0。spec 要求统计「能读到的全量秒数之和」，final 这部分实际一次都没读到。",
+      "fix": "final 事件改成在标记后面按 `_tier_note` 的输出格式取秒数（或按 slice-gate 写的总秒数字段取）。如果认定 final 没有可靠秒数，就在 cost_text 和 JSON 里明确标「final 秒数不可得」，不要输出看起来可信的 0.0。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 86,
+      "summary": "`_baseline_part` 不管 mode 是什么，都拿 `reuse_skipped[0].reason` 当 why。基线是 incremental 时，这条其实是某个被拒候选的拒绝理由，显示成增量的原因会误导人；mode 缺失时又直接默认成 full，没有核对 spec 枚举（full/incremental/pending/missing）。",
+      "fix": "只在 mode == \"full\" 时用 reuse_skipped 的理由当 why；incremental 时改用 `incremental.source` / `from.change@commit` 拼原因。mode 不在枚举里时报 unknown，并在 why 里写出原值。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5564,
+      "summary": "D10 的过滤用的是排除法：本 change 目录里，非测试文件只要不在 `_test_gate_files`（gate.test / gate.pytest 直接引用 + `_shell_closure`）里，就一律从测试结论的 Δ 中去掉。`_sh_refs` 的注释写明这是启发式，并说「漏解析的引用照旧触发全量」。到了 D10 这个用法里，漏解析的方向反了：漏掉的引用会被静默丢弃，不再触发全量。几类典型漏解析：gate.test 的包装脚本 `source \"$ENV_FILE\"`；目录含未解析的 `$VAR`；`python3 verify/run.py` 再 import 同目录的 helper（闭包只追 shell）。这些文件改动后，本 change 旧基线的测试结论照样被复用。spec 的措辞是「门禁脚本只计 gate.test 闭包里的那些」，例子是「只被 gate.lint 引用的」；实现把本 change 目录里所有非计划文件都当成可丢弃，范围比 spec 宽。",
+      "fix": "改成肯定式识别：只丢掉那些能确定被 gate.lint / gate.typecheck / verify / checks（各自的静态闭包）引用、且不在 gate.test 闭包里的文件，其余未知文件仍留在 tdelta 里（安全方向）。至少要在 gate.test 闭包里出现无法解析的引用（含 `$` 的目录、非 shell 解释器脚本）时退回不过滤。补一个反例测试：gate.test 包装脚本 source 了一个无法静态解析的文件，改动后基线走全量。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3995,
+      "summary": "`_baseline_anchor` 在候选循环之前就算好了。即使本 change 旧基线（cands[0]）马上命中，也要先付出 `_pick_anchor` 对最多 10 个锚点逐个做 `_delta`（git diff + ls-tree）的开销，再加上 `_hops_cap` / `_anchor_candidates` 重复读锚点池。最常见的 own 命中路径因此多了一批无用的 git 调用。",
+      "fix": "把锚点候选改成惰性求值：own 候选没命中时再调 `_baseline_anchor`。例如 `_baseline_candidates` 接收一个 callable，或者在循环里遇到占位项时再展开。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4756,
+      "summary": "`_try_anchor` 用 `why, _ = _full_why(...)` 丢掉了第二个返回值 warnings（「Δ 中 N 个 .py 文件未被任何用例加载」）。final 的增量路径会把这条警告带进报告，基线经锚点时则静默丢弃。这类 .py 改动按增量处理且没有补跑任何用例，人看不到提示。",
+      "fix": "把 warnings 放进 hit（例如 `hit[\"_warns\"]`），在 cmd_baseline 里并进 `warnings`，和 final 口径保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4031,
+      "summary": "本 change 旧基线按部件复用时，旧基线可能是锚点形态的预存红（`failed: None`、`failed_form: \"nodes\"`、`failed_nodes` 非空）。这时只沿用了 test 段，「预存红 N 条」警告只检查 `failed` 列表，所以不会打印，和全量 / 经锚点两条路径的留痕不一致。",
+      "fix": "警告条件同时看 `failed_nodes`：`n = ct.get(\"failed\") if isinstance(ct.get(\"failed\"), list) else (ct.get(\"failed_nodes\") if ct.get(\"failed_form\") == \"nodes\" else None)`，非空时追加同口径的警告。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_baseline_component_reuse.py",
+      "line": 49,
+      "summary": "lint-only 用例只断言 `mode == incremental` 和 lint 没有 reused 标记，没有断言 `incremental.source == \"own\"`。眼下锚点路径会因为 lint.sh（非 .py、依赖图没见过）触发全量，基线池候选也会因为非测试改动被拒，所以这个用例碰巧只能经 D10 通过。以后锚点或基线池规则一变，用例可能从别的路径变绿，测不出 D10 本身。",
+      "fix": "补一条断言 `assert out[\"incremental\"][\"source\"] == \"own\"`，或者像兄弟用例那样断言 gate.test 计数文件只有一行，把被测路径钉死在 D10。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 35,
+      "summary": "契约文档说 GATE_TEST_RESULT 在 final 时的值是结果文件绝对路径、baseline 阶段为空，和实现对不上：(1) final 里有几种情况是空串，包括选测复核未过 (sfail)、结果目录不可用 (rdir=None)、_write_test_result 写入失败、tres 为 None，见 slice-gate.py 3712-3722、3884-3889、4861 的 `final_ctx.get(\"result\") or \"\"`；(2) baseline 和其余阶段是用 env.pop 删掉了这个变量（未设置），不是空值 (slice-gate.py:4858)。这份文档是项目接入的唯一依据，照它写的检查会直接 open(\"\")，或者在 set -u 的 shell 里引用未设置的变量而失败",
+      "fix": "在第 3 节「何时有」补上：final 时值也可能是空串（本次没写出结果文件，例如复核未过或写入失败），检查须先判非空、文件存在，否则跳过或降级；baseline 阶段改写为「不设置该变量」，并提示 shell 检查用 ${GATE_TEST_RESULT:-} 取值"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 56,
+      "summary": "「白名单」一词在同一份文档里有两种相反的用法：第 1 节（第 15 行）说重建环境的白名单要放行 FLIGHT_ 前缀，第 4 节说缓存键要剔除 FLIGHT_/GATE_，并建议改用白名单（只列真正影响结果的变量）。如果项目的环境透传和缓存键共用一张白名单，就会读到互相矛盾的要求",
+      "fix": "两处分别写成「环境透传白名单」和「缓存键白名单」，并加一句：两者是不同的清单，FLIGHT_/GATE_ 变量要透传给被测进程，但不能进缓存键"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 78,
+      "summary": "cost 的说明写的是只分「必要 / 可避免」两类，但 flight-doctor.py 的 COST_CLASSES 认不出原因时还会归为「未分类」（_interfaces.md 的 cost --json 里 class 也含「未分类」）。文档和实际输出不一致；openspec-apply-change/SKILL.md 的同一句也有同样问题",
+      "fix": "命令和 skill 两处同步改为「（必要 / 可避免 / 未分类）」"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 21,
+      "summary": "示例包装脚本里有 `unset PYTEST_ADDOPTS`。去插件重跑（_plain）时门禁不导出 FLIGHT_PYTEST_ARGS，--junitxml 只放在 PYTEST_ADDOPTS 里 (slice-gate.py:984)，所以这个分支下照示例写的包装脚本不会产出 junit。测试一旦有失败 (rc=1)，run_test_gate 就判「没有 junit 输出（不是 pytest？）」，拿不到预存红清单。第 14 行「两者都为空 → 什么也不加，与不转发一致」也没有提到这个副作用",
+      "fix": "示例改成不整体 unset PYTEST_ADDOPTS，而是只剔除项目自己不要的选项；或者在第 14 行补一句：去插件重跑时 --junitxml 只在 PYTEST_ADDOPTS 里，包装脚本若清掉它，失败会判不出来"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "9a14b07064834d58a0ad5595ef53fb42db0ca06c",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 29/29；增量：重跑 57 个文件（461 个用例）/ 沿用 111 个，锚点 4c91dc6a31。修复 HIGH（slice-gate.py own 判定）：own 现在排除 acand，并要求旧基线 snapshot 为 dict，这样锚点包装和池候选都不会再因 None is None 被误判为本 change 候选。新增测试 tests/test_baseline_anchor_reuse.py::test_anchor_hit_with_snapshotless_own_baseline_reruns_all_verify：修复前为红（S1 verify 被标成 reused），修复后为绿。全量 572 passed，compileall 通过。fix 没有 slices.json 条目，start 拒绝后按指示跳过；基点已经校验（HEAD 等于 worktree-unified-test-result-reuse 的最新 commit）。"
+  },
+  "final": {
+    "slice": "final",
+    "ok": true,
+    "commit": "e425ccc8ff3ea23b3ca8e2d4264a5442589efad5",
+    "failed": [],
+    "summary": "final 通过：scenario 29/29；增量重跑 57 个文件（461 个用例）、沿用 111 个；已合回 fix，已记 fix、review、apply-done 事件，并提交飞行记录。",
+    "warnings": []
+  }
+}

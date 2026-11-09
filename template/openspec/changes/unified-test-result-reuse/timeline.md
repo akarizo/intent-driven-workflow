@@ -13,3 +13,5 @@
 2026-11-09T14:20:52Z	review	findings=26 blocking=1 deferred=25
 2026-11-09T14:20:52Z	final	同树沿用 9a14b07064 ok
 2026-11-09T14:20:54Z	apply-done	blocked=0 blocking=1
+2026-11-09T14:21:27Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-09T14:21:57Z	ship	ready
