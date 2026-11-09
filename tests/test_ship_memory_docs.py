@@ -2,11 +2,9 @@
 #claudemd-commit-bounded-recurring-errors、#pr-ship-sediments-before-commit、#pr-ship-reruns-final-after-sediment、
 #pr-ship-lists-alignment-items-in-pr，共 5 条）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
-import pytest
 
 from conftest import ROOT
 
-PENDING = pytest.mark.xfail(strict=True, reason="change post-ship-hygiene S3 未实现")
 CLAUDE = ROOT / "template" / ".claude"
 CMD = CLAUDE / "commands"
 
@@ -20,7 +18,6 @@ def ship_and_2b():
     return text, text[text.index("2b. **"):text.index("3. **")]
 
 
-@PENDING
 def test_claudemd_commit_auto_records():
     # Given: claudemd-commit.md 与 claudemd-standard.md
     text = read(CMD / "claudemd-commit.md")
@@ -40,7 +37,6 @@ def test_claudemd_commit_auto_records():
     assert len(row) == 1 and "自动录入" in row[0], row
 
 
-@PENDING
 def test_claudemd_commit_bounded_recurring_errors():
     # Given: claudemd-commit.md
     text = read(CMD / "claudemd-commit.md")
@@ -56,7 +52,6 @@ def test_claudemd_commit_bounded_recurring_errors():
     assert "C 类" in step3 and "废除" in step3
 
 
-@PENDING
 def test_pr_ship_sediments_before_commit():
     # Given: pr-ship.md
     text, s2b = ship_and_2b()
@@ -73,7 +68,6 @@ def test_pr_ship_sediments_before_commit():
     assert "全程不问询" in guard
 
 
-@PENDING
 def test_pr_ship_reruns_final_after_sediment():
     # Given: pr-ship.md 的 step 2b
     text, s2b = ship_and_2b()
@@ -87,7 +81,6 @@ def test_pr_ship_reruns_final_after_sediment():
     assert i_final < i_ship
 
 
-@PENDING
 def test_pr_ship_lists_alignment_items_in_pr():
     # Given: pr-ship.md
     text = read(CMD / "pr-ship.md")
