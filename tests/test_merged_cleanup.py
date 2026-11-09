@@ -406,3 +406,26 @@ def test_plan_refuses_outside_main_worktree(w):
         assert r.returncode == 2 and out["ok"] is False, r.stdout
         assert any(x.startswith("not-main-worktree") for x in out["reasons"]), out
     assert wt.is_dir() and has_ref(w.main, "refs/heads/worktree-a")
+
+def test_plan_in_project_that_is_a_submodule(w):
+    # Given: 本项目（origin.git）作为父仓 parent 的 submodule proj 检出（gitdir 在 parent/.git/modules/proj）；
+    #        proj 有分支 worktree-x，父仓有分支 worktree-parent-only
+    parent = w.tmp / "parent"
+    parent.mkdir()
+    g(parent, "init", "-q", "-b", "main")
+    ident(parent)
+    commit(parent, {"p.txt": "p\n"}, "init")
+    g(parent, "submodule", "add", "-q", str(w.origin), "proj")
+    g(parent, "commit", "-q", "-m", "add proj")
+    g(parent, "branch", "worktree-parent-only")
+    proj = parent / "proj"
+    g(proj, "branch", "worktree-x")
+
+    # When: 在 parent/proj 里运行 plan --target main
+    r = run(proj, "plan", "--target", "main")
+    out = json.loads(r.stdout)
+
+    # Then: 只处理 proj 自己：列出 worktree-x，不出现父仓的 worktree-parent-only
+    assert r.returncode == 0 and out["ok"] is True, r.stdout + r.stderr
+    names = [i["name"] for i in out["items"]]
+    assert "worktree-x" in names and "worktree-parent-only" not in names, out["items"]

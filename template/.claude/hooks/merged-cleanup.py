@@ -59,7 +59,11 @@ def main_root(cwd):
     if gd != cd:
         raise Refuse("not-main-worktree: 当前在 linked worktree（git-dir %s），请到主 worktree %s 运行"
                      % (gd, os.path.dirname(cd)))
-    return os.path.dirname(cd)
+    # 不用 dirname(common-dir)：项目本身是 submodule / separate-git-dir 时它指向父仓的 .git/modules
+    top = out(cwd, "rev-parse", "--show-toplevel")
+    if not top:
+        raise Refuse("not-main-worktree: 取不到工作树根（bare 仓？）")
+    return real(top)
 
 
 def resolve_target(root, remote, target):

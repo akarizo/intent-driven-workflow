@@ -11,8 +11,11 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 1. **定位主 worktree 根**
 
    ```bash
-   git rev-parse --path-format=absolute --git-common-dir   # 其父目录 = 主 worktree 根
+   git rev-parse --path-format=absolute --git-dir --git-common-dir   # 两者相同 = 当前就在主 worktree
+   git rev-parse --show-toplevel                                     # 主 worktree 根
    ```
+
+   不要拿 `--git-common-dir` 的父目录当根：项目本身是 submodule（或用了 `--separate-git-dir`）时，它指向父仓的 `.git/modules`。
 
    之后所有命令都在主 worktree 根运行。当前会话 CWD 若在某个 worktree 里，先切到主仓库根；禁止 `cd` 进待删的 worktree（CWD 卡死）。
 
