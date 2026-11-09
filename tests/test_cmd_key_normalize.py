@@ -1,12 +1,9 @@
 """cmd_key 归一 change 名并覆盖 shell 闭包（scenario: baseline-anchor-reuse#cmd-key-normalizes-change-name）。"""
-import pytest
-
 from conftest import load_hook, write
 
 FULL = '#!/usr/bin/env bash\nsource "$(dirname "${BASH_SOURCE[0]}")/_common.sh"\nexec run-suite --change %s\n'
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：cmd_key 不归一文件内容里的 change 名、不含 shell 闭包")
 def test_cmd_key_normalizes_change_name(git_repo, monkeypatch):
     # Given: change alpha 与 beta 各有 verify/full.sh，内容只差 change 名，都 source 同目录的 _common.sh
     sg = load_hook("slice-gate")

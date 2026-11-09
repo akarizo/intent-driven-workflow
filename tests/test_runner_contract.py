@@ -1,8 +1,6 @@
 """运行器契约：导出 FLIGHT_PLUGIN_PATH / FLIGHT_PYTEST_ARGS；依赖图未测的原因分类（scenario: flight-runner-contract#*）。"""
 import json
 
-import pytest
-
 from final_helpers import PY, baseline, latest_anchor, make_repo
 
 # 重建环境、只经契约变量接入插件的包装脚本
@@ -25,7 +23,6 @@ def _bl(d):
     return json.loads((d / "gate-baseline.json").read_text(encoding="utf-8"))
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：未导出 FLIGHT_PLUGIN_PATH / FLIGHT_PYTEST_ARGS")
 def test_wrapper_forwarding_contract_measures_deps(git_repo):
     # Given: gate.test 是清空 PYTEST_ADDOPTS 与 PYTHONPATH、只经契约变量接入插件的包装脚本
     d = make_repo(git_repo, extra={"tools/gate.sh": FORWARDING}, gate_extra={"test": "bash tools/gate.sh"})
@@ -39,7 +36,6 @@ def test_wrapper_forwarding_contract_measures_deps(git_repo):
     assert latest_anchor(git_repo)["measured"] is True
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：依赖图未测不分类，没有 deps_unmeasured")
 def test_wrapper_dropping_plugins_classified(git_repo):
     # Given: gate.test 是只转发 --junitxml、丢掉 -p 参数的包装脚本
     d = make_repo(git_repo, extra={"tools/gate.sh": DROPPING}, gate_extra={"test": "bash tools/gate.sh"})
@@ -53,7 +49,6 @@ def test_wrapper_dropping_plugins_classified(git_repo):
     assert "FLIGHT_PYTEST_ARGS" in (um.get("why") or ""), um
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：依赖图未测不分类，没有 deps_unmeasured")
 def test_non_pytest_gate_classified(git_repo):
     # Given: gate.test 是 true（不是 pytest）
     d = make_repo(git_repo, gate_extra={"test": "true"})
