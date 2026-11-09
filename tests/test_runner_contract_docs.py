@@ -1,6 +1,5 @@
 """运行器契约文档与规划指引（scenario: flight-runner-contract#contract-doc-shipped-with-template / propose-guidance-forwards-contract；
 test-cost-visibility#apply-and-propose-docs-print-forecast）。"""
-import pytest
 
 from conftest import ROOT
 
@@ -14,7 +13,6 @@ def _read(p):
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现：没有 flight-runner-contract.md")
 def test_contract_doc_shipped_with_template():
     # Given: 模板仓库
     # When: 读 template/.claude/flight-runner-contract.md
@@ -27,7 +25,6 @@ def test_contract_doc_shipped_with_template():
     assert any("FLIGHT_" in l and "GATE_" in l and "缓存键" in l and "剔除" in l for l in text.splitlines()), text[:500]
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现：propose 指引没有转发契约的要求")
 def test_propose_guidance_forwards_contract():
     # Given: 模板仓库
     # When: 读 opsx-propose.md 与 openspec-propose/SKILL.md
@@ -38,7 +35,6 @@ def test_propose_guidance_forwards_contract():
     assert any("FLIGHT_PLUGIN_PATH" in l and "$GATE_CHANGE" in l and "不写死" in l for l in common), lines
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现：apply / propose 文档没有 forecast 调用")
 def test_apply_and_propose_docs_print_forecast():
     # Given: 模板仓库
     # When: 读 opsx-apply.md、opsx-propose.md 与两者的同名 skill
