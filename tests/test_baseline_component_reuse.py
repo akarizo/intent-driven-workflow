@@ -2,8 +2,6 @@
 （scenario: baseline-anchor-reuse#red-baseline-test-part-reused / lint-only-gate-script-change-keeps-test-reuse）。"""
 import json
 
-import pytest
-
 from conftest import commit_all
 from final_helpers import PY, baseline, change_and_commit, make_repo
 
@@ -15,7 +13,6 @@ def set_verify(d, cmd):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：红基线整份不复用（候选基线不是绿）")
 def test_red_baseline_test_part_reused(git_repo, tmp_path):
     # Given: gate.test 每跑一次就往仓库外的计数文件追加一行；第一次基线因 S1 的 verify 为 false 而红
     counter = tmp_path / "runs.log"
@@ -38,7 +35,6 @@ def test_red_baseline_test_part_reused(git_repo, tmp_path):
     assert counter.read_text(encoding="utf-8").splitlines() == ["run"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：本 change 门禁脚本一律计入测试结论的 Δ")
 def test_lint_only_gate_script_change_keeps_test_reuse(git_repo):
     # Given: change c 有全绿全量基线；gate.lint 是本 change 的 verify/lint.sh，gate.test 不引用它；之后只改了 lint.sh
     lint_rel = "openspec/changes/c/verify/lint.sh"

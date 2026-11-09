@@ -6,6 +6,7 @@ preflight-skips-content-check-after-approve、preflight-old-baseline-compatible�
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -127,6 +128,13 @@ def read_bl(d):
 
 def read_plan(d):
     return json.loads((d / "slices.json").read_text(encoding="utf-8"))
+
+
+def drop_anchors(git_repo):
+    """清空锚点池：基线候选里没有锚点（unified-test-result-reuse 之后锚点排在基线池之前），用来测「只有旧基线 / 基线池」时的行为。"""
+    common = git(git_repo, "rev-parse", "--git-common-dir")
+    shutil.rmtree(os.path.join(common if os.path.isabs(common) else str(git_repo / common), "flight-anchors"),
+                  ignore_errors=True)
 
 
 def clear(*paths):
@@ -321,10 +329,11 @@ def test_incremental_noop_when_only_plan_changed(git_repo):
 
 
 def test_full_when_non_test_file_changed(git_repo):
-    # Given: change c 已有一次全量绿基线；之后改了 src/mod.py
+    # Given: change c 已有一次全量绿基线；之后改了 src/mod.py；锚点池为空（经锚点复用另有用例）
     d = setup_change(git_repo)
     first_full(git_repo, d)
     write(git_repo / "src" / "mod.py", "x = 2\n")
+    drop_anchors(git_repo)
 
     # When: 再运行 slice-gate.py baseline
     baseline(git_repo, d)
@@ -355,9 +364,11 @@ def test_full_when_changed_test_file_fails(git_repo):
 
 def test_full_when_test_file_had_preexisting_red(git_repo):
     # Given: change c 已有一次全量绿基线（预存红 1 条在 tests/test_old.py）；之后往 tests/test_old.py 追加一个通过的用例
+    #        锚点池为空（经锚点时预存红所在文件会被补跑，另有用例）
     d = setup_change(git_repo)
     first_full(git_repo, d)
     append(git_repo / "tests" / "test_old.py", "\n\ndef test_old_green():\n    assert True\n")
+    drop_anchors(git_repo)
 
     # When: 再运行 slice-gate.py baseline
     baseline(git_repo, d)
@@ -410,9 +421,11 @@ def test_cross_change_refused_when_script_differs(git_repo):
 
 def test_cross_change_refused_when_candidate_has_preexisting_red(git_repo):
     # Given: change c 跑过一次全量绿基线，预存红 1 条；change d 的全量脚本与 c 的内容相同，代码树与 c 所测的相同
+    #        锚点池为空（跨 change 带预存红只能经锚点复用，另有用例）
     c, d = two_changes(git_repo, old_red=True)
     bc = full_c(git_repo, c)
     assert bc["test"].get("failed"), bc
+    drop_anchors(git_repo)
 
     # When: 对 d 运行 slice-gate.py baseline
     baseline(git_repo, d)
