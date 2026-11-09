@@ -573,3 +573,9 @@ if [[ ${#suspect_found[@]} -gt 0 ]]; then
     log_info "  $rel"
   done
 fi
+
+# 升级后体检（只读、只报告）：doctor 恒 exit 0，失败也不影响 install 的退出码；首次安装不跑
+if [[ "$UPGRADE" == 1 && -d "$TARGET/openspec" && "${PYTHON_OK:-0}" == 1 ]]; then
+  echo
+  python3 "$TARGET/.claude/hooks/flight-doctor.py" doctor --openspec-root "$TARGET/openspec" || true
+fi

@@ -1,8 +1,6 @@
 """flight-doctor.py：forecast / cost / doctor（scenario: test-cost-visibility#forecast-* / cost-* / doctor-*）。"""
 import json
 
-import pytest
-
 from conftest import git, run_hook, write
 from final_helpers import baseline, make_repo
 
@@ -33,7 +31,6 @@ def forecast(repo, d):
     return p, (json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip() else None)
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：没有 flight-doctor.py")
 def test_forecast_predicts_full_final_when_deps_unmeasured(git_repo):
     # Given: 基线 deps_unmeasured.kind 为 plugins-dropped，gate.full_suite_sec 为 816
     d = plan_dir(git_repo, "c")
@@ -48,7 +45,6 @@ def test_forecast_predicts_full_final_when_deps_unmeasured(git_repo):
     assert "plugins-dropped" in j["final"]["why"] and "FLIGHT_PYTEST_ARGS" in j["final"]["why"], j
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：没有 flight-doctor.py")
 def test_forecast_reports_incremental_when_anchor_usable(git_repo):
     # Given: change 刚跑完测到依赖图的全量基线
     d = make_repo(git_repo)
@@ -62,7 +58,6 @@ def test_forecast_reports_incremental_when_anchor_usable(git_repo):
     assert j["final"]["mode"] == "incremental", j
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：没有 flight-doctor.py")
 def test_forecast_pending_while_baseline_running(git_repo):
     # Given: gate-baseline.json 是运行标记
     d = plan_dir(git_repo, "c")
@@ -85,7 +80,6 @@ TIMELINE = """<!-- timeline: ISO时间\t事件\t备注（由 hooks 自动追加�
 """
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：没有 flight-doctor.py")
 def test_cost_tallies_full_runs_by_reason(git_repo):
     # Given: timeline.md 有三条 baseline（两条全量、一条增量）与两条 final（一条全量、一条增量）
     d = plan_dir(git_repo, "c")
@@ -104,7 +98,6 @@ def test_cost_tallies_full_runs_by_reason(git_repo):
     assert any(r["class"] == "必要" and "锚点池为空" in r["reason"] for r in runs), runs
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：没有 flight-doctor.py")
 def test_doctor_reports_unforwarded_wrapper(git_repo):
     # Given: 两个在途 change 的基线 deps_unmeasured.kind 都是 plugins-dropped
     for name in ("c1", "c2"):

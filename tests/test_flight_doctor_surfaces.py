@@ -1,13 +1,10 @@
 """预告与体检出现的位置：install.sh --upgrade、spec.html（scenario: test-cost-visibility#upgrade-runs-doctor-report-only /
 spec-html-shows-cost-forecast）。"""
-import pytest
-
 from conftest import run_hook
 from final_helpers import baseline, make_repo
 from test_install import run_install
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：install.sh --upgrade 不跑 doctor")
 def test_upgrade_runs_doctor_report_only(tmp_path):
     # Given: 一个已安装模板的目标项目
     target = tmp_path / "proj"
@@ -22,7 +19,6 @@ def test_upgrade_runs_doctor_report_only(tmp_path):
     assert "[runner]" in up.stdout, up.stdout[-2000:]
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现：spec.html 没有「测试成本预告」段")
 def test_spec_html_shows_cost_forecast(git_repo, tmp_path):
     # Given: 一个有基线的 change
     d = make_repo(git_repo)
