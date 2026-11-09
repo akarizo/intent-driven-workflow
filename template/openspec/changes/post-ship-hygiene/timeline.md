@@ -10,3 +10,5 @@
 2026-11-09T03:31:52Z	apply-done	blocked=1 blocking=1
 2026-11-09T05:09:12Z	gate	S2 ok
 2026-11-09T05:09:18Z	integrate	wave 2 (S2 重派)
+2026-11-09T05:10:13Z	final	增量（锚点 3bc852cf0d，重跑 15 个文件 / 沿用 403 个用例） ok
+2026-11-09T05:10:15Z	apply-done	blocked=0 blocking=0
