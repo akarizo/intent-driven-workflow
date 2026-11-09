@@ -3,7 +3,7 @@ cross-change-anchor-with-preexisting-red-reruns-failed / baseline-anchor-chain-l
 import json
 
 from conftest import SCOPE_DECL, commit_all, write
-from final_helpers import baseline, change_and_commit, make_repo
+from final_helpers import PY, baseline, change_and_commit, make_repo
 
 RED = "def test_red():\n    assert False\n"
 
@@ -95,3 +95,29 @@ def test_baseline_anchor_chain_limit_forces_full(git_repo):
     assert out["mode"] == "full", out
     reasons = [s.get("reason") or "" for s in out.get("reuse_skipped") or []]
     assert any("上限 1" in r for r in reasons), reasons
+
+
+def test_anchor_hit_with_snapshotless_own_baseline_reruns_all_verify(git_repo):
+    # Given: change c 跑过全量基线（锚点测到依赖图）；S1 的 verify 只看 tests/test_b.py；
+    #        随后旧基线的 snapshot 被写成 null（结束快照失败的形态），再提交 src/a.py 的改动
+    d = make_repo(git_repo)
+    plan = json.loads((d / "slices.json").read_text(encoding="utf-8"))
+    plan["slices"][0]["verify"] = "%s -m pytest -q -p no:cacheprovider tests/test_b.py" % PY
+    write(d / "slices.json", json.dumps(plan, ensure_ascii=False, indent=1))
+    commit_all(git_repo, "verify")
+    baseline(git_repo, d)
+    bf = d / "gate-baseline.json"
+    old = json.loads(bf.read_text(encoding="utf-8"))
+    old["snapshot"] = None
+    bf.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+    commit_all(git_repo, "snapshot null")
+    change_and_commit(git_repo, "src/a.py", "def a():\n    return 1  # 改过\n")
+
+    # When: 再运行 baseline
+    out = baseline(git_repo, d)
+
+    # Then: 增量且来源是锚点；verify 全部重跑，没有一条带 reused
+    assert out["mode"] == "incremental", out.get("reuse_skipped")
+    assert out["incremental"]["source"] == "anchor", out["incremental"]
+    bl = json.loads(bf.read_text(encoding="utf-8"))
+    assert all("reused" not in v for v in bl["verify"].values()), bl["verify"]
