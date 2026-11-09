@@ -172,7 +172,7 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main
 ```
 your-project/
 ├── .claude/
-│   ├── commands/       # 16 个 slash 命令（见下方）
+│   ├── commands/       # 17 个 slash 命令（见下方）
 │   ├── skills/         # 16 个 skill + 1 个 legacy（见下方）
 │   ├── agents/         # 3 个 agent：slice-executor / integrator / code-reviewer（见下方）
 │   ├── workflows/      # opsx-apply.js：飞行流程的命名 Workflow 调度器
@@ -211,7 +211,7 @@ your-project/
 
 ## 完整工作流（变更全周期）
 
-一个典型变更从想法到归档要经过 7 个阶段，每个阶段对应至少一个 slash 命令：
+一个典型变更从想法到归档要经过 8 个阶段，每个阶段对应至少一个 slash 命令：
 
 ### 阶段 1 · 规划（写 markdown，不写代码）
 
@@ -323,11 +323,12 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 
 ### 阶段 3 · 知识沉淀（PR 前）
 
-`/claudemd-commit` 把本轮变更**预算中性**地沉淀进记忆层 —— 加一行必须减一行，加法与减法在同一个动作里：
+`/claudemd-commit` 把本轮变更**预算中性**地沉淀进记忆层 —— 加一行必须减一行，加法与减法在同一个动作里。`/pr-ship` 的 step 2b 已内置这一步（记忆层沉淀，自动，不问询），单独运行 `/claudemd-commit` 用于 PR 之外的场合。**自动录入**：通过四问与预算闸的条目直接写入并逐条报告，**较大差异才对齐**（单独运行时逐条问询；被 `/pr-ship` 调用时不落盘，列进 PR 正文等你裁决）。候选来源：
 
 - 应追加的新约定 / skill / convention
 - 应废弃的旧条目
 - 待沉淀的隐性知识（口头给过但未落地的反馈）—— 这类最有价值，是唯一从代码推导不出来的
+- **E 类 · 反复错误**：同一错误本轮**至少 2 次**且每次都有证据指针（门禁红记录 / review finding / fix commit / 用户原话纠正）才入选；只出现 1 次或给不出证据的进 backlog
 
 每条先过**准入四问**（会命中吗 / 不写会错吗 / 错了会静默吗 / 能写成测试吗），再按**分流表**定载体：每会话必命中 → CLAUDE.md；**只是省重新查证的时间 → `memory/`**；只治理某片目录 → `.claude/rules/*.md` + `paths:`；多步流程 → skill；可断言 → 测试。「重要」不等于「该常驻」。
 
@@ -347,11 +348,11 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 `/pr-ship` 端到端：
 
 ```
-预检 gh/glab → 梳理变更 → 必要时 commit → 预合并冲突检查
+预检 gh/glab → 梳理变更 → 记忆层沉淀（自动，较大差异列进 PR 正文）→ 必要时 commit → 预合并冲突检查
   → push → 起 PR/MR 标题正文 → 创建 PR/MR
   → 读 gate-report.md + evidence.log 作为评审输入 → 起【干净的】code-reviewer subagent 评审（不重跑测试）
   → 报告作为评论入库（签名必带）
-  → 与用户逐条讨论修复 → 落地补丁到同 PR → 自动修复至多 2 轮增量复核（mode=follow-up，只审修复补丁）
+  → CRITICAL/HIGH 自动修复 → 落地补丁到同 PR → 至多 2 轮增量复核（mode=follow-up，只审修复补丁）
 ```
 
 关键设计：
@@ -372,11 +373,15 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 
 违反 TDD 纪律记 **CRITICAL**，阻止归档。
 
-### 阶段 6 · 归档
+### 阶段 6 · 合并后清理
+
+PR 被人类合并后跑 `/clean-after-merged [target-branch]`：先 `--ff-only` 同步 target，再由 `merged-cleanup.py` 判定每个 worktree / 分支 / 飞行快照是否已合并。**safe 档自动执行**（删已合并 worktree、`branch -d`、删 `refs/flight/*`），**manual 档只打印命令交你**（squash 合并需 `-D`、子仓提交未推送、有未提交改动、远端分支 `push --delete` 等）。显式运行本命令即授权 safe 档（铁律 6 例外）；脚本不可用时回退为只 fetch + ff 同步、不自动删除任何东西。
+
+### 阶段 7 · 归档
 
 `/opsx-archive <name>` 把变更标记为已完成。前置：**implementation 必须已合回 main**（git 纪律由 openspec-git-discipline skill 守护）。
 
-### 阶段 7 · 知识收敛（累积几轮后）
+### 阶段 8 · 知识收敛（累积几轮后）
 
 `/claudemd-distill` 对所有 CLAUDE.md 做彻底压缩 = 蒸馏：
 
@@ -403,7 +408,7 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 
 ---
 
-## 16 个 slash 命令
+## 17 个 slash 命令
 
 按命名空间分组。
 
@@ -428,17 +433,18 @@ python3 .claude/hooks/memory-lint.py --hook   # PostToolUse 用，读 stdin payl
 | --- | --- | --- |
 | `claudemd-lint` | pre-commit / CI / 每次写入后 | 机械拦截：字节预算 / 单行长度 / 悬空指针 / `@` 误用 |
 | `memory-lint` | 每次写入 memory 后 / CLI 全量 | 机械拦截：索引↔文件双向闭合（悬空指针 / 孤儿）· 状态漂移 · 索引行长与常驻预算 |
-| `/claudemd-commit` | 每轮变更结束 / PR 前 | 增量 + **预算中性**（加一减一，字节零净增）、逐条与用户讨论 |
+| `/claudemd-commit` | 每轮变更结束 / PR 前（`/pr-ship` step 2b 已内置） | 增量 + **预算中性**（加一减一，字节零净增）、自动录入，较大差异才对齐 |
 | `/claudemd-distill` | 累积多轮后 / 结构性重排 | 全量大扫除、逐文件确认 |
 | `/claudemd-standardize` | 初次采纳标准 / 大幅漂移后 | 全量对标：正确层级创建缺失 + 全部按标准重生成 |
 
 日常增长由 commit 的预算中性约束住 → distill 不再承担「止血」职责，只做定期重排。
 
-### `/pr-*`（PR/MR 闭环，1 个）
+### `/pr-*` 与合并后清理（PR/MR 闭环，2 个）
 
 | 命令 | 目的 |
 | --- | --- |
-| `/pr-ship [target-branch]` | 端到端送出本次变更：commit → push → 创建 PR/MR → 干净 subagent 自审 → 评论入库 → 迭代修复 |
+| `/pr-ship [target-branch]` | 端到端送出本次变更：记忆层沉淀 → commit → push → 创建 PR/MR → 干净 subagent 自审 → 评论入库 → 迭代修复 |
+| `/clean-after-merged [target-branch]` | PR 合并后清理 worktree、分支与飞行快照：先 `--ff-only` 同步 target（safe 档自动、manual 档交你；命令本身即逻辑，无同名 skill） |
 
 ### `/spec-*`（意图可视化，1 个）
 
