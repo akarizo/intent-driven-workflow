@@ -1,15 +1,12 @@
 """基线只有 nodeid 形式的预存红时，final 全量按 nodeid 差分（scenario: baseline-anchor-reuse#anchor-baseline-diffs-final-by-nodes）。"""
 import json
 
-import pytest
-
 from conftest import commit_all
 from final_helpers import baseline, final, make_repo
 
 RED = "def test_red():\n    assert False\n"
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：final 全量只按 junit 形式的 test.failed 差分")
 def test_anchor_baseline_diffs_final_by_nodes(git_repo):
     # Given: 基线 test.failed_form 为 nodes，failed_nodes 只有 tests/test_red.py::test_red，该用例在当前树上仍然失败
     d = make_repo(git_repo, extra={"tests/test_red.py": RED})

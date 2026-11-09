@@ -1144,6 +1144,27 @@ def _diff_verdict(label, tg, known_failed):
     return "G2 %s: exit 1（新增 %d 条失败）\n%s" % (label, len(new), "\n".join(new[:6])), None
 
 
+NODES_UNDIFFABLE = "基线只有 nodeid 形式的预存红，本次依赖图未测，无法差分；重跑 baseline --full"
+
+
+def _nodes_verdict(tg, known_nodes):
+    """基线 test.failed_form == "nodes" 时的全量差分（design D11）：用依赖图逐用例结局对 failed_nodes 差分
+    → (failed_item, warning_item)。依赖图未测 → 红（安全方向：不把红判成绿）；不可度量的退出同 _diff_verdict。"""
+    rc = tg["rc"]
+    if rc == 0:
+        return None, None
+    if tg["deps"] is None:
+        return "G2 test: exit %d，%s" % (rc, NODES_UNDIFFABLE), None
+    if tg["failed"] is None:
+        return "G2 test: exit %d（按退出码判：%s）\n%s" % (rc, tg["why"], _tail(tg["out"])), None
+    fails = sorted(n for n, o in (tg["deps"].get("nodes") or {}).items() if o in ("FAILED", "ERROR"))
+    known = set(known_nodes or [])
+    new = [n for n in fails if n not in known]
+    if new or not fails:
+        return "G2 test: exit 1（新增 %d 条失败）\n%s" % (len(new), "\n".join(new[:6])), None
+    return None, "G2 test: exit 1，失败均为基线预存红（%d 条已按基线排除）" % len(fails)
+
+
 def _tg_measurable(tg):
     """run_test_gate 结果能否给锚点：绿，或可度量的 exit 1。收集错误 / 超时 / 其他退出码时
     出错的测试文件没有用例结论，依赖图的 failed 漏掉它们，锚点不可用。"""
@@ -1492,6 +1513,8 @@ SCOPE_FILE = "gate-scope.json"
 SCOPE_TIMEOUT = 300  # 秒，不可配置
 SCOPE_REPORT_FIELDS = ("full", "triggers", "count")
 SCOPE_UNDECLARED = "scope:undeclared"  # 伪触发项：未声明且本 change 建立声明（design D2）
+SCOPE_EXTRAS = ("global", "blind", "anchor_max_hops")  # gate-scope.json 的可选字段（unified-test-result-reuse design D5）
+SCOPE_EXTRAS_SHAPE = {"global": "字符串数组", "blind": "字符串数组", "anchor_max_hops": "正整数"}
 SCOPE_DECL_SOURCE = "仓库声明 gate-scope.json"
 PLAIN_TEST_CMDS = ("npm test", "go test ./...", "cargo test")
 
@@ -1524,9 +1547,11 @@ def _scope_decl(change_dir):
     if not isinstance(obj, dict):
         return None, [head + "顶层须是对象 {\"builtin\": true} 或 {\"cmd\": \"<命令>\"}"]
     errors = []
-    extra = sorted(str(k) for k in obj if k not in ("cmd", "builtin"))
+    extra = sorted(str(k) for k in obj if k not in ("cmd", "builtin") + SCOPE_EXTRAS)
     if extra:
-        errors.append(head + "有未知字段 %s（只允许 cmd 或 builtin 之一）" % ", ".join(extra))
+        errors.append(head + "有未知字段 %s（只允许 cmd 或 builtin 之一，另可选 %s）" % (", ".join(extra), " / ".join(SCOPE_EXTRAS)))
+    errors.extend(head + "的 %s 须是%s" % (k, SCOPE_EXTRAS_SHAPE[k]) for k in SCOPE_EXTRAS
+                  if k in obj and not _scope_extra_ok(k, obj[k]))
     if "cmd" in obj and "builtin" in obj:
         errors.append(head + "cmd 与 builtin 只能取其一")
     elif "builtin" in obj and obj["builtin"] is not True:
@@ -1540,6 +1565,27 @@ def _scope_decl(change_dir):
     if "builtin" in obj:
         return {"kind": "builtin", "cmd": None, "source": SCOPE_DECL_SOURCE}, []
     return {"kind": "cmd", "cmd": obj["cmd"], "source": SCOPE_DECL_SOURCE}, []
+
+
+def _scope_extra_ok(key, val):
+    """gate-scope.json 可选字段的形状（design D5）：global / blind 为字符串数组，anchor_max_hops 为正整数（bool 不算）。"""
+    if key == "anchor_max_hops":
+        return isinstance(val, int) and not isinstance(val, bool) and val > 0
+    return isinstance(val, list) and all(isinstance(x, str) for x in val)
+
+
+def _scope_extras(change_dir):
+    """gate-scope.json 的可选字段 → {"global": [glob], "blind": [glob], "anchor_max_hops": int}（design D5 / D6）；
+    文件缺失、读不出、字段缺失或形状错误都取缺省（空、空、ANCHOR_MAX_HOPS）；形状错误由 _scope_decl 报。"""
+    out = {"global": [], "blind": [], "anchor_max_hops": ANCHOR_MAX_HOPS}
+    try:
+        with open(_scope_decl_path(change_dir), "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except (OSError, ValueError):
+        return out
+    if isinstance(obj, dict):
+        out.update({k: obj[k] for k in SCOPE_EXTRAS if k in obj and _scope_extra_ok(k, obj[k])})
+    return out
 
 
 def _scope_provider(gate, change_dir):
@@ -1617,21 +1663,25 @@ def _builtin_report(root, change_dir, data, phase):
     rgate = dict(gate, test=test_cmd)
     akey = _anchor_key(root, change_rel, test_cmd, gate) if test_cmd else None
     tkey = _tiers_key(root, change_dir, tiers)
-    baseline, anchor = None, None
+    baseline, anchor, hcap = None, None, None
+    extras = _scope_extras(change_dir)  # 与 final 同一出处（design D5 / D6）
     if phase == "preflight":
         baseline = load_baseline(change_dir)
+        khops = extras["anchor_max_hops"]
         try:
             pick = _pick_anchor(root, akey, tkey, _snapshot(root, change_rel), git(root, "rev-parse", "HEAD"),
-                                change_rel, os.path.basename(os.path.realpath(change_dir)))
+                                change_rel, os.path.basename(os.path.realpath(change_dir)), khops)
         except RuntimeError:
             pick = None
         anchor = pick[0] if pick else None
+        hcap = _hops_cap(root, akey, tkey, pick, khops)
     else:
         cands = _anchor_candidates(root, akey, tkey, limit=1)
         anchor = cands[0] if cands else None
     decl = _decl_rels(root, change_dir)
     tier_rel = _change_rel(root, _tiers_path(change_dir))
-    t, _, err = _full_triggers(root, delta, anchor, baseline, rgate, tier_rel, decl, bool(gate.get("impacted")))
+    t, _, err = _full_triggers(root, delta, anchor, baseline, rgate, tier_rel, decl, bool(gate.get("impacted")),
+                               extras["global"], hcap)
     if err:
         notes.append(err)
     if anchor is None and phase != "preflight":
@@ -3632,14 +3682,17 @@ def cmd_final(args):
             akey = _anchor_key(root, change_rel, test_cmd, gate)
             tkey = _tiers_key(root, args.change_dir, tiers)
             imp = gate.get("impacted")
-            pick = None
+            extras = _scope_extras(args.change_dir)  # gate-scope.json 的 global / blind / anchor_max_hops（design D5 / D6）
+            khops = extras["anchor_max_hops"]
+            pick, hcap = None, None
             if not args.full and cur_snap is not None:
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
-                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name))
+                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name, khops))
+                hcap = None if imp else _hops_cap(root, akey, tkey, pick, khops)
             rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
             tier_rel, decl = _change_rel(root, _tiers_path(args.change_dir)), _decl_rels(root, args.change_dir)
             why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate,
-                                 tier_rel=tier_rel, decl_rels=decl)
+                                 tier_rel=tier_rel, decl_rels=decl, declared_global=extras["global"], hops_cap=hcap)
             warnings.extend(wpy)
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
@@ -3649,7 +3702,8 @@ def cmd_final(args):
                 anc, dlt = pick if pick is not None else (None, None)
                 sfail, scope_info = _final_scope_guard(
                     root, args.change_dir, data, why,
-                    lambda: _full_triggers(root, dlt, anc, baseline, rgate, tier_rel, decl, bool(imp))[0])
+                    lambda: _full_triggers(root, dlt, anc, baseline, rgate, tier_rel, decl, bool(imp),
+                                           extras["global"], hcap)[0])
             anchor_part, byproducts = None, []
             run_regions = None  # 本次运行的已选区域；None = 全部
             genv = _gate_test_env("final", args.change_dir)  # gate.test 环境（unified-test-result-reuse design D2）
@@ -3687,7 +3741,7 @@ def cmd_final(args):
                        "rerun": None, "rerun_tests": None, "inherited_tests": None}
             elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
                 anchor, delta = pick
-                sel = _final_select(root, anchor, delta)
+                sel = _final_select(root, anchor, delta, extras["blind"])
                 run_sel, unit_files, hit = sel, set(), {}
                 if tiers is not None:
                     regs = tiers.get("regions") or {}
@@ -3752,11 +3806,13 @@ def cmd_final(args):
                           and not any(m in text for m in EARLY_STOP_MARKS))
                 anchor_part["measured"] = (bool(d) and ran_ok) or not run_sel
                 anchor_part["source"] = "final-incremental"
+                anchor_part["hops"] = _anchor_hops(anchor, khops) + 1  # 链长（design D6）
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）
                 tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True, extra_env=genv,
                                    keep_junit=rjunit)
-                f2, w2 = _diff_verdict("test", tg, bt.get("failed"))
+                f2, w2 = (_nodes_verdict(tg, bt.get("failed_nodes")) if bt.get("failed_form") == "nodes"
+                          else _diff_verdict("test", tg, bt.get("failed")))
                 failed.extend([f2] if f2 else [])
                 warnings.extend([w2] if w2 else [])
                 if tiers is not None:
@@ -3772,7 +3828,7 @@ def cmd_final(args):
                                "tests": _node_counts((ad or {}).get("nodes") or {}),
                                "nodes": _nodes_lower((ad or {}).get("nodes")), "deps_kind": tg["deps_kind"],
                                "measured": ad is not None and _tg_measurable(tg), "source": "final-full",
-                               "regions": []}
+                               "regions": [], "hops": 0}
                 nodes_ok = ad is not None
                 tres = {"mode": "full", "inherited": 0}
                 if ad is None:
@@ -4136,7 +4192,7 @@ def cmd_baseline(args):
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "nodes": _nodes_lower(ad.get("nodes")), "deps_kind": deps_un[0][0] if deps_un else None,
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
-            "measured": measured, "source": "baseline"})
+            "measured": measured, "source": "baseline", "hops": 0})
         if w:
             warnings.append(w)
     if warnings:
@@ -4638,6 +4694,7 @@ def _pool_dir(root, sub=POOL_DIR):
 # 锚点池（design D3）：<git common dir>/flight-anchors/，条目带依赖图，只留最新 ANCHOR_KEEP 条
 ANCHOR_DIR = "flight-anchors"
 ANCHOR_KEEP = 20
+ANCHOR_MAX_HOPS = 5  # 锚点链上限缺省（design D6）；项目经 gate-scope.json 的 anchor_max_hops 调整
 
 
 CHECKS_DIR = "flight-gate-checks"
@@ -5008,17 +5065,36 @@ def _impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps)
     return None
 
 
-def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name):
-    """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None。"""
+def _anchor_hops(entry, max_hops):
+    """锚点距最近一次全量推导的代数（design D6）：有合法 hops 取之；旧条目缺 hops 时 final-incremental 视为 max_hops（不可用），其余 0。"""
+    h = entry.get("hops")
+    if isinstance(h, int) and not isinstance(h, bool) and h >= 0:
+        return h
+    return max_hops if entry.get("source") == "final-incremental" else 0
+
+
+def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name, max_hops=ANCHOR_MAX_HOPS):
+    """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None；hops >= max_hops 的锚点不可用（design D6）。"""
     best = None
     for cand in _anchor_candidates(root, key, tkey):  # 由新到旧：严格更小才替换
+        if _anchor_hops(cand, max_hops) >= max_hops:
+            continue
         d = _delta(root, cand, cur_snap, head, change_rel, cand.get("change") == name)
         if d is not None and (best is None or len(d) < len(best[1])):
             best = (cand, d)
     return best
 
 
+def _hops_cap(root, key, tkey, pick, max_hops):
+    """没有可用锚点、且有候选因链长被滤掉 → max_hops（供 _full_triggers 报 final:anchor-hops）；否则 None。"""
+    if pick is not None:
+        return None
+    return max_hops if any(_anchor_hops(c, max_hops) >= max_hops for c in _anchor_candidates(root, key, tkey)) else None
+
+
 NO_ANCHOR = "final:no-anchor"
+ANCHOR_HOPS = "final:anchor-hops"
+DECLARED_GLOBAL = "declared-global:"  # 触发项前缀 + gate-scope.json 的 global glob（design D5）
 BASELINE_NO_NODES = "final:baseline-missing-failed-nodes"
 UNREPRODUCIBLE = "final:gate-test-unreproducible"
 
@@ -5042,18 +5118,22 @@ def _unreproducible_why(root, gate):
     return None
 
 
-def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels=(), impacted=False):
+def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels=(), impacted=False,
+                   declared_global=(), hops_cap=None):
     """全量触发项（design D5，按 spec 顺序收集全部命中）→ (triggers, warnings, err)。
-    代码类：final:no-anchor / final:baseline-missing-failed-nodes / final:gate-test-unreproducible；文件类：仓库相对路径。
+    代码类：final:no-anchor（hops_cap 非 None 时为 final:anchor-hops，链耗尽）/ final:baseline-missing-failed-nodes /
+    final:gate-test-unreproducible；文件类：仓库相对路径；declared-global:<glob>：Δ 命中 gate-scope.json 的 global。
     impacted=True 只看锚点与全局文件；anchor 为 None 时不判「没见过」；err = 锚点内容比对失败的原因（不抛）。"""
     trig = []
     if anchor is None:
-        trig.append(NO_ANCHOR)
+        trig.append(NO_ANCHOR if hops_cap is None else ANCHOR_HOPS)
     bt = (baseline or {}).get("test") or {}
     if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
         trig.append(BASELINE_NO_NODES)
     delta = list(delta or [])
     trig.extend(p for p in delta if _global_file(p))
+    dg = [g for g in declared_global if any(fnmatch.fnmatchcase(p, g) for p in delta)]
+    trig.extend(DECLARED_GLOBAL + g for g in dg)
     if impacted:
         return trig, [], None
     if _unreproducible_why(root, gate or {}):
@@ -5066,7 +5146,7 @@ def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels
     seen |= _shell_closure(root, seen)
     skip = set(decl_rels) | {tier_rel}
     cand = [p for p in delta if p not in seen and not _py_test_file(p) and p not in skip and not p.startswith(".claude/")
-            and not _global_file(p)]
+            and not _global_file(p) and not any(fnmatch.fnmatchcase(p, g) for g in dg)]
     snap = anchor.get("snapshot") or {}
     try:
         blobs = _blobs_at(root, anchor["commit"], [p for p in cand if p not in snap])
@@ -5078,27 +5158,37 @@ def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels
     return trig, (["Δ 中 %d 个 .py 文件未被任何用例加载：%s" % (len(py), ", ".join(py[:8]))] if py else []), None
 
 
-def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None, decl_rels=()):
+def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, tier_rel=None, decl_rels=(),
+              declared_global=(), hops_cap=None):
     """自动全量的原因（_full_triggers 的第一条触发项拼成人话）→ (why | None, warnings)。
     impacted=True（gate.impacted，design D8）：只看 --full、锚点与全局文件，不要求依赖图与 failed_nodes。
-    tier_rel / decl_rels：openspec 根的分层文件与声明文件，不算「未被任何用例触及的非 Python 文件」（scope-fallback-guard D4、本 change D6）。"""
+    tier_rel / decl_rels：openspec 根的分层文件与声明文件，不算「未被任何用例触及的非 Python 文件」（scope-fallback-guard D4、本 change D6）。
+    declared_global / hops_cap：同 _full_triggers（unified-test-result-reuse design D5 / D6）。"""
     if full:
         return "手动要求 --full", []
     anchor, delta = pick if pick is not None else (None, None)
-    trig, warns, err = _full_triggers(root, delta, anchor, baseline, gate, tier_rel, decl_rels, impacted)
+    trig, warns, err = _full_triggers(root, delta, anchor, baseline, gate, tier_rel, decl_rels, impacted,
+                                      declared_global, hops_cap)
     if not trig:
         return (None, warns) if err is None else (err, [])
     first = trig[0]
     if first == NO_ANCHOR:
         return "没有可用锚点" + ("（%s）" % snap_why if snap_why else ""), []
+    if first == ANCHOR_HOPS:
+        return "锚点链已达上限 %d 代（anchor_max_hops）" % hops_cap, []
     if first == BASELINE_NO_NODES:
         return "基线缺 failed_nodes（有预存红），重跑 baseline", []
     if first == UNREPRODUCIBLE:
         return _unreproducible_why(root, gate or {}), []
-    files = [t for t in trig if t not in (NO_ANCHOR, BASELINE_NO_NODES, UNREPRODUCIBLE)]
+    files = [t for t in trig if t not in (NO_ANCHOR, BASELINE_NO_NODES, UNREPRODUCIBLE)
+             and not t.startswith(DECLARED_GLOBAL)]
     glob = [p for p in files if _global_file(p)]
     if glob:
         return "Δ 含全局文件：%s" % ", ".join(glob[:8]), []
+    dg = [t[len(DECLARED_GLOBAL):] for t in trig if t.startswith(DECLARED_GLOBAL)]
+    if dg:
+        return "Δ 命中项目声明的全局路径 %s：%s" % (
+            dg[0], next(p for p in delta if fnmatch.fnmatchcase(p, dg[0]))), []
     return "Δ 含未被任何用例触及的非 Python 文件：%s" % ", ".join(files[:8]), []
 
 
@@ -5258,14 +5348,21 @@ def _shell_closure(root, files, memo=None):
     return out
 
 
-def _final_select(root, anchor, delta):
-    """选中集合（design D5、D7）：依赖（∪ 其 shell 静态闭包）与 Δ 相交 ∪ Δ 里的测试文件 ∪ 锚点失败所在 ∪ 盲；只留现存文件，排序。"""
+def _final_select(root, anchor, delta, blind=()):
+    """选中集合（design D5、D7）：依赖（∪ 其 shell 静态闭包）与 Δ 相交 ∪ Δ 里的测试文件 ∪ 锚点失败所在 ∪ 盲
+    ∪ 匹配 blind glob（gate-scope.json 声明的盲区，unified-test-result-reuse D5）的已跟踪测试文件；只留现存文件，排序。"""
     ds, memo = set(delta), {}
     sel = {f for f, v in (anchor.get("deps") or {}).items()
            if ds.intersection(v) or ds.intersection(_shell_closure(root, v, memo))}
     sel.update(p for p in delta if _py_test_file(p))
     sel.update(str(n).split("::", 1)[0] for n in anchor.get("failed") or [])
     sel.update(anchor.get("blind") or [])
+    if blind:
+        try:
+            tracked = [p for p in _git_raw(root, ["ls-files", "-z"]).split("\0") if p and _py_test_file(p)]
+        except RuntimeError:
+            tracked = []
+        sel.update(p for p in tracked if any(fnmatch.fnmatchcase(p, g) for g in blind))
     return sorted(f for f in sel if os.path.isfile(os.path.join(root, f)))
 
 

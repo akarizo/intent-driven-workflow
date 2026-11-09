@@ -1,8 +1,6 @@
 """gate-scope.json 的可选字段 global / blind / anchor_max_hops（scenario: flight-runner-contract#declared-* / scope-decl-extras-shape-checked）。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL, run_hook
 from final_helpers import baseline, change_and_commit, final, make_repo
 
@@ -11,7 +9,6 @@ def _decl(repo, **extra):
     (repo / "openspec" / "gate-scope.json").write_text(json.dumps(dict(SCOPE_DECL, **extra)) + "\n", encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：gate-scope.json 不认 global")
 def test_declared_global_forces_full(git_repo):
     # Given: gate-scope.json 声明 global ["plugins/**"]；baseline 后只提交了没有任何用例加载的 plugins/p.py
     _decl(git_repo, **{"global": ["plugins/**"]})
@@ -28,7 +25,6 @@ def test_declared_global_forces_full(git_repo):
     assert "plugins/**" in (inc.get("full_why") or ""), inc
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：gate-scope.json 不认 blind")
 def test_declared_blind_always_rerun(git_repo):
     # Given: gate-scope.json 声明 blind ["tests/test_c.py"]；baseline 后只提交了 src/a.py 的改动
     _decl(git_repo, blind=["tests/test_c.py"])
@@ -42,10 +38,9 @@ def test_declared_blind_always_rerun(git_repo):
     # Then: 增量；重跑 2 个文件（依赖命中的 test_a 与声明盲区的 test_c）
     inc = out.get("incremental") or {}
     assert inc.get("mode") == "incremental", (out, p.stderr)
-    assert inc.get("rerun_files") == 2, inc
+    assert inc.get("rerun") == ["tests/test_a.py", "tests/test_c.py"], inc
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：可选字段没有形状校验")
 def test_scope_decl_extras_shape_checked(git_repo):
     # Given: gate-scope.json 的 global 是字符串、anchor_max_hops 是 0
     _decl(git_repo, **{"global": "plugins/**", "anchor_max_hops": 0})
