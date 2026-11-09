@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+unified-test-result-reuse · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+unified-test-result-reuse
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">specs</span><span class="chip" data-state="done">adr</span><span class="chip" data-state="done">tasks</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">模板里&quot;复用测试结果&quot;的三条路——基线复用、增量 final、检查——彼此不通，代价也看不见。afa 一个 change 一天跑了 5 次全量基线，final 里又多跑一遍全量，最后是人自己发现才来问。对本机 7 个已安装项目做了只读盘点（2026-11-09，数字均为下限）：</p><p class="why-body">- <strong>afa</strong>：
+  - 全量基线 95 次、合计 37,633 秒，复用成功只有 6 次；
+  - 首次基线没有任何候选：64 次 / 28,161 秒；
+  - 重新规划时，切片代码已经落地，基线必然全量：17 次 / 6,337 秒；
+  - final 因&quot;没有可用锚点&quot;全量 33 次；锚点池 20 条里只有 2 条测到依赖图；
+  - 检查因缓存键混进了 <code>FLIGHT_*</code>，再跑一遍全量：25 次。
+- <strong>gateway</strong>：不是 pytest，又没配 <code>gate.impacted</code>，final 每次全量。
+- <strong>其余 6 个项目</strong>的 slice-gate 都比模板旧。</p><p class="why-body">方案与证据见 <code>docs/full-suite-reuse-rootfix.html</code>（主仓库工作区，未入库）。用户已逐项决策（Q1–Q6）：合成一个 change，项目侧适配由用户在各项目自己做。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>结果交接</strong>：final 跑完 gate.test 后写出本次测试结果文件，经新变量 <code>GATE_TEST_RESULT</code> 交给 <code>gate.checks</code>；锚点另记逐用例结局，增量 final 也能交出完整结局。<code>FLIGHT_*</code> / <code>GATE_*</code> 写进契约，声明为每次运行都会变的变量；gate.test 的环境里加上 <code>GATE_PHASE</code> / <code>GATE_CHANGE</code>，包装脚本不必再写死 change 名。</li><li><strong>运行器契约</strong>：新增导出 <code>FLIGHT_PLUGIN_PATH</code> / <code>FLIGHT_PYTEST_ARGS</code>，会重建环境的包装脚本把这两个变量转发给 pytest，依赖图就能测到。&quot;依赖图未测&quot;拆成四类原因（不是 pytest / 插件被丢弃 / 插件导入失败 / 记录不完整），每类带修法。新增契约文档 <code>template/.claude/flight-runner-contract.md</code>，随安装下发。</li><li><strong>项目级声明</strong>：<code>&lt;openspec 根&gt;/gate-scope.json</code> 在 <code>cmd</code> / <code>builtin</code> 之外可选 <code>global</code>（命中即全量）、<code>blind</code>（匹配的测试文件每次都重跑）、<code>anchor_max_hops</code>（锚点链上限）。</li><li><strong>基线走锚点</strong>：基线候选扩大为&quot;本 change 旧基线 → 锚点池（任意来源，可跨 change，须测到依赖图）→ 基线池&quot;。有非测试改动时，按 final 已有的选测与全量触发规则只补跑受影响的测试。跨 change 带预存红只能经锚点路径复用（锚点上失败的文件一定重跑），基线池仍只收全绿（<strong>修订 2026-10-15 用户决策</strong>，新 ADR 取代旧论证）。红基线的测试部分本身有效时可按部件复用。同 change 门禁脚本只计 gate.test 闭包里实际用到的。</li><li><strong>cmd_key 归一</strong>：命令直接引用的文件内容里出现的本 change 名，先归一再算指纹，并纳入静态 shell 闭包。各 change 的同款包装脚本因此能互相复用。<strong>BREAKING（一次性）</strong>：升级后旧的基线、锚点、池条目指纹全部失配，各跑一次全量后恢复。</li><li><strong>锚点链上限</strong>：锚点记录&quot;由增量推出的代数&quot;，达到 K 代（默认 5，<code>anchor_max_hops</code> 可调）就强制全量。基线与增量 final 共用这条规则（用户决策）。<strong>BREAKING（行为）</strong>：已经在正常增量的项目，升级后会周期性多跑一次全量。</li><li><strong>测试成本可见</strong>：新增零 token 脚本 <code>flight-doctor.py</code>：</li><li><code>forecast</code>：在 baseline 报告行、<code>/opsx-apply</code> 起飞前和 spec.html 里，给出&quot;这次 baseline / final 会不会全量、为什么、大约多少秒&quot;；</li><li><code>cost</code>：收口时汇总本 change 的全量次数与原因，分&quot;必要&quot;与&quot;可避免&quot;两类；</li><li><code>doctor</code>：项目级体检，<code>install.sh --upgrade</code> 结束时自动跑，只报告。</li><li>全部只预告，不阻断（用户决策 Q3）。</li><li><strong>规划指引</strong>：propose 的命令与 skill 同步写明——包装脚本要转发运行器契约、用 <code>$GATE_CHANGE</code>、不写死 change 名；基线复用规则的描述随实现更新。</li></ul><div class="impact"><span class="tag"><strong>代码</strong>：</span><span class="tag"><code>template/.claude/hooks/slice-gate.py</code>（基线、final、run_test_gate、锚点、cmd_key、选测声明、检查环境）；</span><span class="tag">新增 <code>template/.claude/hooks/flight-doctor.py</code>；</span><span class="tag"><code>template/.claude/hooks/spec_html.py</code>（成本预告段）；</span><span class="tag"><code>install.sh</code>（升级后跑 doctor）。</span><span class="tag"><strong>文档</strong>：</span><span class="tag">新增 <code>template/.claude/flight-runner-contract.md</code>；</span><span class="tag"><code>opsx-propose</code> / <code>opsx-apply</code> 命令与同名 skill；</span><span class="tag"><code>template/openspec/schemas/intent-driven/schema.yaml</code> 的选测声明描述；</span><span class="tag">README。</span><span class="tag"><strong>ADR</strong>：新增 <code>DRAFT-baseline-reuse-via-dependency-anchor</code>，取代 <code>DRAFT-baseline-reuse-by-content-fingerprint</code> 的&quot;跨 change 只复用全绿&quot;与&quot;只认测试文件 Δ&quot;两项；新增 <code>DRAFT-gate-test-result-handoff-and-runner-contract</code>（检查与包装脚本的两份运行契约）。</span><span class="tag"><strong>兼容</strong>：</span><span class="tag">旧检查不读 <code>GATE_TEST_RESULT</code>，行为不变；</span><span class="tag">旧的 <code>gate-scope.json</code> 不带新字段，行为不变；</span><span class="tag">不转发契约的包装脚本行为不变（全量），只是现在会被预告和归因；</span><span class="tag">cmd_key 算法变化与锚点链上限，各让每个项目多跑一次全量。</span><span class="tag"><strong>不在本 change</strong>：afa testgate 的契约适配、检查改读 <code>GATE_TEST_RESULT</code>、headrun 缓存键剔除 <code>FLIGHT_*</code>、gateway 配 <code>gate.impacted</code>（用户在各项目自己做，本 change 只交付契约文档）；把 afa 临时修复加回去。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>gate-test-result-handoff</code>：final 把本次测试结果交给检查；易变变量契约；gate.test 环境带阶段与 change 名。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>flight-runner-contract</code>：包装脚本转发依赖图插件的契约变量；依赖图未测的四类原因；项目级 <code>global</code> / <code>blind</code> 声明。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>baseline-anchor-reuse</code>：基线经锚点复用（含跨 change 带预存红）、红基线按部件复用、cmd_key 归一与 shell 闭包、门禁脚本闭包口径、锚点链上限。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>test-cost-visibility</code>：成本预告（forecast）、收口全量归因（cost）、项目体检（doctor）及其在 propose / apply / spec.html / 安装升级中的出现位置。</h4><p></p></div><div class="cap-card" data-kind="modified"><span class="cap-kind">Modified</span><h4>无：<code>openspec/specs/</code> 下还没有已归档的规格。相关的旧行为（基线复用、增量 final、检查注入）都定义在尚未归档的 change 里，本 change 以新增能力的方式写明修订点，并在 design 里逐条对照。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>baseline-anchor-reuse <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 基线经锚点复用，非测试改动按依赖图补跑</p><p>Rule: baseline（不带 <code>--full</code>、没有测试分层文件）SHALL 依次尝试三类候选：
+1. 本 change 的旧基线（现有规则）；
+2. 锚点池：条件是 <code>gate.test</code> 指纹与分层指纹都匹配、<code>measured</code> 为真、未达锚点链上限；多条可用时取 |Δ| 最小的；
+3. 基线池。</p><p>经锚点复用时：
+- Δ 命中全量触发项（与 final 同一套规则，含项目声明的 <code>global</code>）→ 不复用，原因写进 <code>reuse_skipped</code>；
+- 否则只补跑 final 同一选择集合：依赖与 Δ 相交的测试文件 ∪ Δ 里现存的测试文件 ∪ 锚点失败所在的文件 ∪ 盲区 ∪ 声明的 <code>blind</code>。</p><p>经锚点复用的基线：
+- 预存红 = 补跑结果中 <code>FAILED</code> / <code>ERROR</code> 的 nodeid，记在 <code>test.failed_nodes</code>，并标 <code>test.failed_form</code> 为 <code>nodes</code>；
+- <code>mode</code> 为 <code>incremental</code>，<code>incremental.source</code> 为 <code>anchor</code>，<code>incremental.from</code> 点名锚点的 change 与 commit，<code>incremental.rerun_files</code> 列出补跑的测试文件。</p><p>基线池入池条件不变（只收全绿的全量）。跨 change 带预存红的结论只能经锚点路径复用；锚点失败用例所在的文件一定在补跑集合里。</p><div class="scenario"><p class="scenario-name">Scenario: replan-after-landing-reuses-anchor</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 有一次测到依赖图的全量基线</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后提交了非测试文件 <code>src/a.py</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>mode</code> 为 <code>incremental</code>、<code>incremental.source</code> 为 <code>anchor</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>incremental.rerun_files</code> 恰为 <code>[&quot;tests/test_a.py&quot;]</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: global-file-in-delta-forces-full-baseline</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 有一次测到依赖图的全量基线</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后提交了 <code>pytest.ini</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>mode</code> 为 <code>full</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>reuse_skipped</code> 里有一条锚点候选的理由，同时含「全局文件」与 <code>pytest.ini</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: cross-change-anchor-with-preexisting-red-reruns-failed</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>仓库里有一个总是失败的用例 <code>tests/test_red.py::test_red</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>change <code>other</code> 跑过全量基线，锚点测到依赖图，预存红含该用例</span></li><li><span class="step-key" data-kw="AND">AND</span><span>change <code>c</code> 与 <code>other</code> 的 gate.test 相同，且 <code>c</code> 还没有基线</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对 <code>c</code> 运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>mode</code> 为 <code>incremental</code>、<code>incremental.from.change</code> 为 <code>other</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>incremental.rerun_files</code> 含 <code>tests/test_red.py</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>test.failed_nodes</code> 含 <code>tests/test_red.py::test_red</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: anchor-baseline-diffs-final-by-nodes</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 的基线 <code>test.failed_form</code> 为 <code>nodes</code>，<code>test.failed_nodes</code> 为 <code>[&quot;tests/test_red.py::test_red&quot;]</code>，该用例在当前树上仍然失败</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>final --full</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>final 不把 <code>tests/test_red.py::test_red</code> 判为新增失败，G2 test 不红</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 红基线里有效的测试部分按部件复用</p><p>Rule: 基线 SHALL 记 <code>test_ok</code>：测试部分本身有效时为真（跑了、可度量、运行期间没有已有文件被改动）。
+- 本 change 旧基线 <code>ok</code> 为假、但 <code>test_ok</code> 为真，且 Δ 满足复用条件时，复用它的测试部分；verify、lint、typecheck 与检查照常判定与重跑；
+- 旧基线缺 <code>test_ok</code> 字段时不复用测试部分。</p><div class="scenario"><p class="scenario-name">Scenario: red-baseline-test-part-reused</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 的 gate.test 每运行一次就往仓库外的计数文件追加一行</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第一次基线因 S1 的 verify 为 <code>false</code> 而红，测试部分绿且可度量</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>把 S1 的 verify 改为 <code>true</code> 后再运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>基线 <code>ok</code> 为真、<code>verify.S1.exit</code> 为 0、<code>incremental.source</code> 为 <code>own</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>计数文件只有一行</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: cmd_key 归一 change 名并覆盖 shell 闭包</p><p>Rule: <code>cmd_key</code> SHALL 取命令直接引用的仓库内文件及其静态 shell 闭包（被 <code>source</code> / <code>.</code> / <code>bash</code> 调用的仓库内脚本）的内容，先把其中本 change 目录名（按词边界）替换成 <code>&lt;change&gt;</code>，再与归一后的命令文本一起算指纹。
+- 两个 change 的包装脚本只差 change 名时，指纹相同；
+- 闭包里任一脚本的内容变了，指纹就变。</p><div class="scenario"><p class="scenario-name">Scenario: cmd-key-normalizes-change-name</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>alpha</code> 与 <code>beta</code> 各有 <code>verify/full.sh</code>，内容只差各自的 change 名，都 <code>source</code> 同目录的 <code>_common.sh</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别对两条 gate.test 算 <code>cmd_key</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两个指纹相同</span></li><li><span class="step-key" data-kw="AND">AND</span><span>改动 <code>beta</code> 的 <code>_common.sh</code> 之后，<code>beta</code> 的指纹与 <code>alpha</code> 不同</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 本 change 门禁脚本只按 gate.test 闭包影响测试结论</p><p>Rule: 用本 change 旧基线复用测试结论时，本 change 目录里的门禁脚本 SHALL 只计 gate.test（与 <code>gate.pytest</code>）静态 shell 闭包里的那些。其余脚本（例如只被 <code>gate.lint</code> 引用的）改动不让测试结论失效；lint、typecheck 与 verify 的沿用判定照旧把它们计入。</p><div class="scenario"><p class="scenario-name">Scenario: lint-only-gate-script-change-keeps-test-reuse</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 有一次全绿的全量基线，gate.lint 是 <code>bash &lt;change&gt;/verify/lint.sh</code>，gate.test 不引用它</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后只改了 <code>&lt;change&gt;/verify/lint.sh</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>mode</code> 为 <code>incremental</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>lint 记录没有 <code>reused</code> 标记（已重跑）</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 锚点链上限</p><p>Rule: 锚点 SHALL 记 <code>hops</code>：
+- 全量运行写出的锚点为 0；
+- 由增量推出的锚点（增量 final、经锚点的增量基线）为来源锚点的 <code>hops</code> + 1。</p><p><code>hops</code> ≥ K 的锚点不作 final 与基线的候选；K 取 <code>gate-scope.json</code> 的 <code>anchor_max_hops</code>，缺省 5。因此没有可用锚点时，<code>full_why</code> 或 <code>reuse_skipped</code> 写「锚点链已达上限 K 代」。</p><p>旧锚点缺 <code>hops</code> 时，<code>source</code> 为 <code>final-incremental</code> 的视为已达上限，其余视为 0。</p><div class="scenario"><p class="scenario-name">Scenario: final-anchor-chain-limit-forces-full</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-scope.json</code> 声明 <code>anchor_max_hops: 2</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>锚点池里全部锚点的 <code>hops</code> 都是 2</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后提交了 <code>src/a.py</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 final</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>incremental.mode</code> 为 <code>full</code>，<code>full_why</code> 含「上限 2」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>新写的锚点 <code>hops</code> 为 0</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-anchor-chain-limit-forces-full</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-scope.json</code> 声明 <code>anchor_max_hops: 1</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>change <code>c</code> 的旧基线后有非测试改动，锚点池里全部锚点的 <code>hops</code> 都是 1</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>mode</code> 为 <code>full</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>reuse_skipped</code> 有一条含「上限 1」</span></li></ul></div></div></div><div class="spec-card"><h3>flight-runner-contract <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 导出供包装脚本转发的契约变量</p><p>Rule: <code>run_test_gate</code> 加载 flight 插件时，SHALL 在保留现有 <code>PYTEST_ADDOPTS</code> / <code>PYTHONPATH</code> 注入的同时，另外导出两个变量：
+- <code>FLIGHT_PLUGIN_PATH</code>：flight 插件与 <code>sitecustomize.py</code> 所在目录；
+- <code>FLIGHT_PYTEST_ARGS</code>：本次要传给 pytest 的 <code>-p</code> 插件参数与 <code>--junitxml</code> 参数，按 shell 规则引号。</p><p>会重建子进程环境的包装脚本，只要把前者放进被测进程的 <code>PYTHONPATH</code>、把后者原样传给 pytest，依赖图即可测到。去掉插件的重跑（<code>_plain</code>）不导出这两个变量。</p><div class="scenario"><p class="scenario-name">Scenario: wrapper-forwarding-contract-measures-deps</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>gate.test 是一个包装脚本：清空 <code>PYTEST_ADDOPTS</code> 与 <code>PYTHONPATH</code>，再以 <code>PYTHONPATH=$FLIGHT_PLUGIN_PATH</code> 和 <code>$FLIGHT_PYTEST_ARGS</code> 调 pytest</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>基线 warnings 里没有「依赖图未测」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>最新锚点 <code>measured</code> 为真</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 依赖图未测的原因分四类</p><p>Rule: 依赖图没测到时，SHALL 给出机读类别和带修法的人话。类别：
+- <code>not-pytest</code>：既没有 junit 输出，也没有 pytest 汇总行；
+- <code>plugins-dropped</code>：pytest 跑了（有 junit 或汇总行），但外层防护标记没写、也没有插件导入错误——包装脚本没把 <code>-p</code> 参数传给 pytest；
+- <code>plugin-import-failed</code>：输出里有 flight 插件导入错误（沿用现有的去插件重跑）；
+- <code>incomplete</code>：依赖图记录有开始、没有结束，或已损坏。</p><p>基线写 <code>deps_unmeasured: {kind, why}</code>，锚点写 <code>deps_kind</code>；<code>plugins-dropped</code> 与 <code>plugin-import-failed</code> 的 why 点名 <code>FLIGHT_PLUGIN_PATH</code> / <code>FLIGHT_PYTEST_ARGS</code> 与契约文档路径。</p><div class="scenario"><p class="scenario-name">Scenario: wrapper-dropping-plugins-classified</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>gate.test 是一个包装脚本：只把 <code>PYTEST_ADDOPTS</code> 里的 <code>--junitxml</code> 参数传给 pytest，丢掉 <code>-p</code> 参数</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>基线 <code>deps_unmeasured.kind</code> 为 <code>plugins-dropped</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>deps_unmeasured.why</code> 含 <code>FLIGHT_PYTEST_ARGS</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: non-pytest-gate-classified</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>gate.test 是 <code>true</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>基线 <code>deps_unmeasured.kind</code> 为 <code>not-pytest</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 项目可以声明全局路径、盲区与锚点链上限</p><p>Rule: 门禁 SHALL 认得 <code>&lt;openspec 根&gt;/gate-scope.json</code> 在恰含 <code>cmd</code> 或 <code>builtin</code> 之一之外的三个可选字段：
+- <code>global</code>：仓库相对路径 glob 的数组。Δ 中有路径匹配时，final 与经锚点的基线都自动全量，原因点名该 glob；内建选测提供方把它当作全选触发项。
+- <code>blind</code>：测试文件 glob 的数组。匹配的现存测试文件每次增量都重跑。
+- <code>anchor_max_hops</code>：正整数，锚点链上限（缺省 5）。</p><p>字段形状不合法时，lint 与 preflight 判红并点名字段。</p><div class="scenario"><p class="scenario-name">Scenario: declared-global-forces-full</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-scope.json</code> 声明 <code>global: [&quot;plugins/**&quot;]</code>；baseline 之后只提交了一个没有任何用例加载的 <code>plugins/p.py</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 final</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>incremental.mode</code> 为 <code>full</code>，<code>full_why</code> 含 <code>plugins/**</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: declared-blind-always-rerun</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-scope.json</code> 声明 <code>blind: [&quot;tests/test_c.py&quot;]</code>；baseline 之后只提交了 <code>src/a.py</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 final</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>incremental.mode</code> 为 <code>incremental</code>，<code>rerun_files</code> 为 2（依赖命中的 <code>tests/test_a.py</code> 与声明盲区的 <code>tests/test_c.py</code>）</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: scope-decl-extras-shape-checked</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-scope.json</code> 是 <code>{&quot;cmd&quot;: &quot;&lt;恒未全选&gt;&quot;, &quot;global&quot;: &quot;plugins/**&quot;, &quot;anchor_max_hops&quot;: 0}</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 lint</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 点名 <code>global</code> 须是字符串数组、<code>anchor_max_hops</code> 须是正整数</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 运行器契约文档随模板下发</p><p>Rule: 模板 SHALL 提供 <code>template/.claude/flight-runner-contract.md</code>，随 <code>install.sh</code> 下发到项目的 <code>.claude/</code>。文档写明：
+- 包装脚本要转发的两个变量与转发方法；
+- 检查可读的 <code>GATE_TEST_RESULT</code> 及其字段；
+- <code>GATE_PHASE</code> / <code>GATE_CHANGE</code>；
+- <code>FLIGHT_</code> 与 <code>GATE_</code> 两个前缀的变量每次运行都会变，项目侧任何按环境做键的缓存都必须剔除它们（建议改用白名单）；
+- 依赖图未测的四类原因与修法；
+- <code>gate-scope.json</code> 的 <code>global</code> / <code>blind</code> / <code>anchor_max_hops</code>。</p><p><code>/opsx-propose</code> 命令与同名 skill SHALL 用同一措辞要求：新写的包装脚本转发契约变量，用 <code>$GATE_CHANGE</code> 代替写死的 change 名。</p><div class="scenario"><p class="scenario-name">Scenario: contract-doc-shipped-with-template</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>模板仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读 <code>template/.claude/flight-runner-contract.md</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>文档含 <code>FLIGHT_PLUGIN_PATH</code>、<code>FLIGHT_PYTEST_ARGS</code>、<code>GATE_TEST_RESULT</code>、<code>GATE_CHANGE</code>、<code>anchor_max_hops</code> 与四个类别名</span></li><li><span class="step-key" data-kw="AND">AND</span><span>写明 <code>FLIGHT_</code> 与 <code>GATE_</code> 前缀的变量须从项目缓存键中剔除</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: propose-guidance-forwards-contract</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>模板仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读 <code>template/.claude/commands/opsx-propose.md</code> 与 <code>template/.claude/skills/openspec-propose/SKILL.md</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两处都含同一句要求：包装脚本转发 <code>FLIGHT_PLUGIN_PATH</code> / <code>FLIGHT_PYTEST_ARGS</code>，用 <code>$GATE_CHANGE</code>，不写死 change 名</span></li></ul></div></div></div><div class="spec-card"><h3>gate-test-result-handoff <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: final 把本次测试结果交给检查</p><p>Rule: final 跑完 gate.test（全量、内建增量或 <code>gate.impacted</code>）之后、运行任何 <code>gate.checks</code> 的 <code>final</code> 之前，SHALL 写出结果文件 <code>&lt;git common dir&gt;/flight-gate-checks/&lt;change&gt;/.gate-test-result.json</code>，并在每项检查的环境里设 <code>GATE_TEST_RESULT=&lt;该文件绝对路径&gt;</code>。</p><p>结果文件字段：
+- <code>change</code>、<code>commit</code>、<code>at</code>；
+- <code>mode</code>：<code>full</code> / <code>incremental</code> / <code>impacted</code>；
+- <code>cmd</code>、<code>cmd_key</code>：gate.test 命令与它的指纹；
+- <code>nodes</code>：<code>{仓库相对 nodeid: outcome}</code>，outcome 取 <code>passed</code> / <code>failed</code> / <code>error</code> / <code>skipped</code> / <code>xfailed</code> / <code>xpassed</code>；<code>impacted</code> 模式或依赖图未测时为 <code>null</code>；
+- <code>inherited</code>：沿用锚点结论的用例数；全量为 0；<code>impacted</code> 为 <code>null</code>；
+- <code>failed_nodes</code>：本次判为失败（<code>failed</code> / <code>error</code>）的 nodeid，排序；
+- <code>junit</code>：本次 junit 副本（同目录 <code>.gate-test-junit.xml</code>）的绝对路径；增量时只含重跑部分，取不到时为 <code>null</code>；
+- <code>complete</code>：<code>nodes</code> 覆盖锚点与本次重跑的全部用例时为真。</p><p>同树沿用的 final 不运行检查，也不写结果文件。</p><div class="scenario"><p class="scenario-name">Scenario: final-full-hands-result-to-checks</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划配了一项检查，它的 <code>final</code> 命令把 <code>GATE_TEST_RESULT</code> 指向的文件复制到仓库外</span></li><li><span class="step-key" data-kw="AND">AND</span><span>baseline 已跑过</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>final --full</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>复制出的结果 <code>mode</code> 为 <code>full</code>、<code>inherited</code> 为 0、<code>complete</code> 为真</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>nodes</code> 里 <code>tests/test_a.py::test_a</code> 的结局为 <code>passed</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>junit</code> 指向的文件存在</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-incremental-result-composes-anchor-outcomes</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>baseline 已写下测到依赖图的锚点，之后只提交了 <code>src/a.py</code> 的改动</span></li><li><span class="step-key" data-kw="AND">AND</span><span>计划配了同样复制结果文件的检查</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 final</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>结果 <code>mode</code> 为 <code>incremental</code>、<code>complete</code> 为真、<code>inherited</code> 至少为 1</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>nodes</code> 同时含本次重跑的 <code>tests/test_a.py::test_a</code> 与沿用锚点的 <code>tests/test_b.py::test_b</code>，结局都是 <code>passed</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-checks-get-no-test-result</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划配了一项检查，它的 <code>baseline</code> 与 <code>final</code> 命令都把环境里 <code>GATE_TEST_RESULT</code> 的值记到仓库外</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>依次运行 baseline 与 <code>final --full</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>baseline 阶段记录到的值为空</span></li><li><span class="step-key" data-kw="AND">AND</span><span>final 阶段记录到的值指向一个存在的文件</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: gate.test 的环境带阶段与 change 名</p><p>Rule: baseline 与 final 运行 gate.test、<code>gate.impacted</code> 与增量重跑时，SHALL 在环境里设 <code>GATE_PHASE</code>（<code>baseline</code> 或 <code>final</code>）与 <code>GATE_CHANGE</code>（change 目录名），让包装脚本不必把 change 名写死在脚本里。</p><div class="scenario"><p class="scenario-name">Scenario: gate-test-env-carries-phase-and-change</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>c</code> 的 gate.test 是一个包装脚本：先把 <code>GATE_PHASE</code> 与 <code>GATE_CHANGE</code> 追加写到仓库外的记录文件，再运行 pytest</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>依次运行 baseline 与 <code>final --full</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>记录文件依次为 <code>baseline c</code> 与 <code>final c</code></span></li></ul></div></div></div><div class="spec-card"><h3>test-cost-visibility <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 起飞前预告测试成本</p><p>Rule: <code>python3 .claude/hooks/flight-doctor.py forecast --change-dir &lt;dir&gt; [--json]</code> SHALL 只读 <code>gate-baseline.json</code>、锚点池、<code>gate-scope.json</code> 与 <code>slices.json</code>，给出三段：
+- <code>baseline</code>：
+  - <code>mode</code> 取 <code>full</code> / <code>incremental</code> / <code>pending</code> / <code>missing</code>；
+  - 附原因与秒数；
+- <code>final</code>：
+  - <code>mode</code> 取 <code>incremental</code> / <code>full</code> / <code>impacted</code> / <code>unknown</code>；
+  - 全量时 <code>why</code> 写第一条原因（依赖图未测的类别与修法、不是 pytest 且没配 <code>gate.impacted</code>、锚点链耗尽、没有可用锚点等）；
+  - <code>sec</code> 取 <code>gate.full_suite_sec</code>；
+- <code>checks</code>：检查名单。</p><p>无论结论如何，都 exit 0、不阻断。<code>--json</code> 打印一个 JSON 对象，否则打印人读的三行。</p><div class="scenario"><p class="scenario-name">Scenario: forecast-predicts-full-final-when-deps-unmeasured</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change 的基线 <code>deps_unmeasured.kind</code> 为 <code>plugins-dropped</code>，<code>slices.json</code> 的 <code>gate.full_suite_sec</code> 为 816</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>forecast --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>final.mode</code> 为 <code>full</code>、<code>final.sec</code> 为 816，<code>final.why</code> 含 <code>plugins-dropped</code> 与 <code>FLIGHT_PYTEST_ARGS</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: forecast-reports-incremental-when-anchor-usable</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change 刚跑完测到依赖图的全量基线</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>forecast --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>final.mode</code> 为 <code>incremental</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: forecast-pending-while-baseline-running</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-baseline.json</code> 是运行标记</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>forecast --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>baseline.mode</code> 为 <code>pending</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 收口时归因每一次全量</p><p>Rule: <code>python3 .claude/hooks/flight-doctor.py cost --change-dir &lt;dir&gt; [--json]</code> SHALL 从 <code>timeline.md</code> 的 <code>baseline</code> / <code>final</code> 事件，统计全量与增量（含同树沿用）次数，以及能读到的全量秒数之和，再把每次全量的原因归为两类：
+- <code>必要</code>：<code>--full</code>、全局文件或声明的 <code>global</code>、锚点链上限、分层恒全量、首次没有锚点；
+- <code>可避免</code>：依赖图未测（各类别）、候选基线是红的、cmd_key 不同、有非测试改动但锚点不可用。</p><p>认不出的原因归 <code>未分类</code>。命令恒 exit 0。</p><div class="scenario"><p class="scenario-name">Scenario: cost-tallies-full-runs-by-reason</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>timeline.md</code> 有三条 baseline 事件：</span></li><li><span class="step-key" data-kw="AND">AND</span><span>有两条 final 事件：<code>全量（没有可用锚点） ok</code> 与 <code>增量 ok</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>cost --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>baseline</code> 计数为全量 2、增量 1，全量秒数之和为 910</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>final</code> 计数为全量 1、增量 1</span></li><li><span class="step-key" data-kw="AND">AND</span><span>依赖图未测那一条归 <code>可避免</code>，锚点池为空那一条归 <code>必要</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 项目级体检</p><p>Rule: <code>python3 .claude/hooks/flight-doctor.py doctor [--openspec-root &lt;dir&gt;]</code> SHALL 只读体检，分节打印：
+- <code>[runner]</code>：在途 change 的基线里依赖图未测的份数，按类别计，附修法；
+- <code>[anchors]</code>：锚点池条数、测到依赖图的比例、<code>hops</code> 分布；
+- <code>[gate.test]</code>：不是 pytest、又没配 <code>gate.impacted</code> 的在途 change 数；
+- <code>[declare]</code>：<code>gate-scope.json</code> 是否声明了 <code>global</code> / <code>blind</code> / <code>anchor_max_hops</code>。</p><p>命令恒 exit 0，不改任何文件。</p><div class="scenario"><p class="scenario-name">Scenario: doctor-reports-unforwarded-wrapper</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两个在途 change 的基线 <code>deps_unmeasured.kind</code> 都是 <code>plugins-dropped</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>doctor</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>[runner]</code> 段写明 2 份基线是 <code>plugins-dropped</code>，并点名 <code>FLIGHT_PLUGIN_PATH</code> 与 <code>FLIGHT_PYTEST_ARGS</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 预告与体检出现在人看得见的地方</p><p>Rule: 预告与体检 SHALL 出现在下列位置：
+- <code>install.sh --upgrade</code> 结束时，对目标项目跑 <code>flight-doctor.py doctor</code> 并原样打印；doctor 失败不影响 install 的退出码。
+- <code>spec_html.py</code> 渲染「测试成本预告」段，取 <code>forecast --json</code>；取不到时保留占位。
+- <code>/opsx-apply</code> 在 preflight 之后打印 <code>forecast</code>；<code>/opsx-propose</code> 报告 baseline 结束的那一行附上 <code>forecast</code> 的结论；两处都写明只预告、不阻断；命令与同名 skill 同改。</p><div class="scenario"><p class="scenario-name">Scenario: upgrade-runs-doctor-report-only</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个已安装模板的目标项目</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>install.sh --upgrade &lt;目标&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出含 <code>[runner]</code> 段标题</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: spec-html-shows-cost-forecast</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个有基线的 change</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>spec_html.py --change-dir &lt;dir&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>生成的 <code>spec.html</code> 含「测试成本预告」段</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: apply-and-propose-docs-print-forecast</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>模板仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读 <code>opsx-apply.md</code>、<code>opsx-propose.md</code> 与两者的同名 skill</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>四处都含 <code>flight-doctor.py forecast</code>，且都写明「只预告，不阻断」</span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><ul><li><strong>现状</strong>：复用测试结果的三条路互不相通。</li><li><strong>基线</strong>：<code>cmd_baseline</code> 的候选只有本 change 旧基线与基线池（<code>_baseline_candidates</code>，<code>slice-gate.py:4513</code>）；只有 Δ 全是 <code>test_*.py</code> 才复用（<code>_try_reuse</code>，<code>:5181</code>）；基线池只收全绿的全量。</li><li><strong>final</strong>：有锚点与依赖图的增量（<code>_pick_anchor</code> / <code>_final_select</code> / <code>_full_triggers</code>），但锚点要 <code>measured</code> 才可用。</li><li><strong>检查</strong>：环境只有 <code>GATE_PHASE</code> / <code>GATE_CHANGE</code> / <code>GATE_BASE_COMMIT</code> / <code>GATE_CHECK_DIR</code> 加 Δ 三件（<code>_check_env</code>，<code>:4568</code>），拿不到门禁刚跑出的测试结果。</li><li><strong>实测</strong>（2026-11-09，本机 7 个已安装项目只读盘点，数字均为下限）：</li><li><strong>afa</strong>：</li><li>全量基线 95 次、合计 37,633 秒；首个候选被拒理由：无候选 64 次 / 28,161 秒，有非测试改动 17 / 6,337，候选红 12 / 2,910，cmd_key 不同 2 / 225；</li><li>final 因&quot;没有可用锚点&quot;全量 33 次；锚点池 20 条里 2 条测到依赖图；</li><li>检查有 25 次&quot;未复用 head 全量：键不符&quot;，全部含 <code>FLIGHT_*</code>，其中 21 次只差 <code>FLIGHT_*</code>。</li><li><strong>gateway</strong>：cargo / pnpm，锚点 20 条全部未测，final 全量·无锚点 8 次。</li><li><strong>stc-foundation</strong>：直接调 pytest，final 增量 19 次、沿用 6 次——契约满足时现有机制是有效的。</li><li><strong>根因</strong>（方案文档 03 节）：</li><li><strong>R1</strong>：afa testgate 有意重建子进程环境，丢弃 <code>-p flight_*</code> 与 sitecustomize，依赖图永远测不到；今天只留一条&quot;依赖图未测：没有依赖图输出（不是 pytest？）&quot;警告。</li><li><strong>R2</strong>：基线只认测试文件 Δ。</li><li><strong>R3</strong>：跨 change 永远没有候选：基线池只收全绿；<code>cmd_key</code> 吃进了写死 change 名的包装脚本内容。</li><li><strong>R4</strong>：检查拿不到结果，项目侧缓存键混进了每次运行都变的 <code>FLIGHT_*</code>。</li><li><strong>R5</strong>：代价不可见。</li><li><strong>附</strong>：<code>GLOBAL_FILES</code> 写死（<code>:4727</code>），项目无法声明按名字动态加载的目录（afa <code>executor/dlib_impl</code>）。</li><li><strong>在役 ADR</strong>：</li><li><code>DRAFT-baseline-reuse-by-content-fingerprint</code>：本 change 取代其中两项；</li><li><code>DRAFT-final-incremental-by-dependency-anchor</code>：决策 4 的一项已被 <code>DRAFT-builtin-scope-provider-and-shell-closure</code> 取代，分层一项已被 <code>DRAFT-tier-file-diffed-by-entry-in-final</code> 取代，其余在役，本 change 沿用；</li><li><code>DRAFT-gate-paired-checks-by-exit-code</code>：本 change 只扩展其环境契约，判定仍只看退出码；</li><li><code>DRAFT-scope-provider-mandatory-with-runtime-guard</code>：选测声明契约 v2，本 change 只加可选字段。</li><li><strong>用户决策</strong>（2026-11-09）：</li><li>Q1：跨 change 带预存红只经锚点放开；</li><li>Q2：锚点链按代数设上限，K=5，基线与 final 一起管；</li><li>Q3：只预告不阻断；</li><li>Q4：合成一个 change；</li><li>Q5：项目侧适配由用户自己做；</li><li>Q6：afa 临时修复先撤。</li><li><strong>约束</strong>：</li><li>纯标准库，Python 3.9 兼容（禁 <code>match</code>、禁 <code>X | Y</code> 注解）；</li><li>判定零 token；</li><li><code>slice-gate.py</code> 是单文件，同 wave 的切片 owns 不能相交——这决定了切片形状（见 tasks）。</li></ul><p>C4 · 容器图（本 change 触及的部分；★ 为新增，◆ 为修改）</p><p>``<code> [人类] ──/opsx-propose──▶ ◆opsx-propose.md / skill ──baseline──▶ ◆slice-gate.py baseline ──写──▶ gate-baseline.json │                              │ 报告行附预告                     │  ◆候选：旧基线 → 锚点池 → 基线池 │                              ▼                                  │  ◆非测试 Δ：按依赖图补跑（_final_select） │                        ★flight-doctor.py forecast ◀──只读───────┤ │                              ▲                                  ▼ │ /opsx-apply ──▶ ◆opsx-apply.md ─preflight 后─┘        [git common dir] │                                                         ├─ flight-anchors/   ◆ +nodes +hops +deps_kind │                                                         ├─ flight-baseline-pool/（不变：只收全绿） │   ◆slice-gate.py final ──写──▶ ★flight-gate-checks/&lt;change&gt;/.gate-test-result.json │        │ run_test_gate：◆导出 FLIGHT_PLUGIN_PATH / FLIGHT_PYTEST_ARGS，◆设 GATE_PHASE / GATE_CHANGE │        ▼                                    │ GATE_TEST_RESULT │   [项目包装脚本 gate.test] ──转发契约──▶ pytest ＋ flight_deps / flight_guard │        ▼                                    ▼ │   [项目检查 gate.checks final] ◀────────────┘（读结果，不再重跑全量） │ └─ install.sh --upgrade ◆──▶ ★flight-doctor.py doctor（只报告） spec_html.py ◆「测试成本预告」段 ◀── ★flight-doctor.py forecast --json ★template/.claude/flight-runner-contract.md（随 .claude/ 下发，项目侧适配依据） ◆&lt;openspec 根&gt;/gate-scope.json：+global +blind +anchor_max_hops（可选） </code>``</p><ul><li><strong>边界</strong>：模板只负责产出、交接与预告；项目侧的包装脚本与检查是否接入契约，由项目自己决定（Q5）。不接入的项目行为不变，只是会被预告和归因。</li><li><strong>假设</strong>：项目的 gate.test 最终调用 pytest，或者配了 <code>gate.impacted</code>。非 pytest、又没配 <code>gate.impacted</code> 的项目，依赖图无从谈起，本 change 只让这件事可见（<code>not-pytest</code>）。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong> - 每份测试结果只产出一次，基线、final、检查都能取用。 - 重新规划（切片代码已落地）与首次基线，在锚点可用时按依赖图只补跑受影响的测试。 - 包装脚本有一条稳定、写成文档的路，把依赖图插件接进被测进程。 - 每次全量都有机读原因；起飞前预告，收口时归因。 - 依赖图盲区的累积有上限，项目能声明全局路径与盲区。</p><p><strong>Non-Goals:</strong> - 不改任何项目仓库（afa testgate、gateway 的 <code>gate.impacted</code>）：只交付契约文档（Q5）。 - 不改基线池入池条件（仍只收全绿）。 - 有测试分层文件时，基线仍恒全量（现状，<code>DRAFT-test-tiers-unit-baseline-by-audit-probe</code>）。 - 不做&quot;源路径 → 测试 glob&quot;的影响映射（只做 <code>global</code> / <code>blind</code>，见 Open Questions）。 - 不做跨机器共享锚点；不改 G7；不加 CI。 - 不阻断起飞（Q3）。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><strong>写入时机</strong></summary><p>final 在 gate.test（全量 / 内建增量 / <code>gate.impacted</code>）判定之后、运行任何检查之前写。路径 <code>&lt;git common dir&gt;/flight-gate-checks/&lt;change&gt;/.gate-test-result.json</code>，即 <code>_check_dir</code> 的父目录，原子写。同树沿用的 final 不运行检查，不写。</p></details><details><summary><strong>字段</strong></summary><p>见 spec。</p></details><details><summary><code>nodes</code> 来自依赖图插件的逐用例结局（<code>_read_deps</code> 的 <code>nodes</code>），依赖图未测时为 <code>null</code>；</summary></details><details><summary>增量时，<code>nodes</code> = 锚点 <code>nodes</code> 中未选中文件的条目 ∪ 本次重跑结局，<code>inherited</code> 为前者条数；</summary></details><details><summary><code>complete</code> = 依赖图已测，且（全量，或锚点带 <code>nodes</code>）。</summary></details><details><summary><strong>junit 副本</strong></summary><p><code>run_test_gate</code> 新增参数 <code>keep_junit=&lt;路径&gt;</code>，临时目录删除前把 junit 复制过去。增量重跑经 <code>_pytest_outcomes</code> 也带同名参数。</p></details><details><summary><strong>锚点带 <code>nodes</code></strong></summary><p>锚点条目新增 <code>nodes</code>（仓库相对 nodeid → outcome），全量时取依赖图插件结果，增量时按 <code>_anchor_forward</code> 的同一口径换掉重跑过的文件。体积与已有的 <code>deps</code> 同量级，afa 可以接受。</p></details><details><summary><strong>为什么放 git common dir 而不是检查目录</strong></summary><p>每项检查各有一个目录，baseline 实跑前会清空；结果是本次 final 共享的，放在它们的父目录。</p></details><details><summary><strong>否决</strong></summary></details><details><summary>把结局写进检查目录 → 每个检查一份，重复；</summary></details><details><summary>让检查自己去读锚点池 → 锚点的选取与沿用规则在模板里，交给项目等于让它重写一遍；</summary></details><details><summary>只交 junit → 增量时 junit 不完整，而且 nodeid 与 classname 对不齐（<code>baseline-incremental-reuse</code> D3 已否决这条路）。</summary></details><details><summary><code>run_test_gate</code>、<code>_pytest_outcomes</code> 与 <code>gate.impacted</code> 的运行，在环境里设 <code>GATE_PHASE</code>（<code>baseline</code> / <code>final</code>）与 <code>GATE_CHANGE</code>（change 目录名）。调用方经 <code>extra_env</code> 传入，不改它们在检查环境里的含义。</summary></details><details><summary><strong>契约声明</strong></summary><p><code>FLIGHT_</code> 与 <code>GATE_</code> 前缀的变量都是每次运行的易变量。项目侧任何按环境做键的缓存都必须剔除这两个前缀，建议直接改用白名单。afa 盘点里还见过 <code>CLAUDE_EFFORT</code> 混进键，所以白名单才是根治。</p></details><details><summary><strong>否决</strong></summary><p>让 slice-gate 在 gate.test 环境里不设 <code>FLIGHT_*</code> → 插件靠它们定位输出，不设就测不到依赖图。</p></details><details><summary><code>_flight_plugins</code> 写好插件目录之后，导出 <code>FLIGHT_PLUGIN_PATH=&lt;该目录&gt;</code> 与 <code>FLIGHT_PYTEST_ARGS=&lt;shlex.join([&quot;-p&quot;, &quot;flight_guard&quot;, (&quot;-p&quot;, &quot;flight_deps&quot;), (&quot;-p&quot;, &quot;flight_tier_probe&quot;), &quot;--junitxml=&lt;path&gt;&quot;])&gt;</code>。</summary></details><details><summary>现有的 <code>PYTEST_ADDOPTS</code> 注入与 <code>PYTHONPATH</code> 前置照旧，直接调 pytest 的项目零改动。</summary></details><details><summary><strong>包装脚本的转发方法</strong>（写进契约文档）</summary></details><details><summary>被测进程 <code>PYTHONPATH</code> 以 <code>$FLIGHT_PLUGIN_PATH</code> 开头；</summary></details><details><summary>把 <code>$FLIGHT_PYTEST_ARGS</code> 按 shell 拆词后传给 pytest；</summary></details><details><summary>两者都为空时什么也不加。</summary></details><details><summary><strong>去插件重跑（<code>_plain</code>）</strong>不导出这两个变量，包装脚本看到空值就不转发，与今天一致。</summary></details><details><summary><strong>否决</strong></summary></details><details><summary>改用 <code>PYTEST_PLUGINS</code> → 会被同样的环境清洗丢掉（afa <code>runners.py:31</code> 同时丢 <code>PYTEST_ADDOPTS</code> 与 <code>PYTEST_PLUGINS</code>）；</summary></details><details><summary>让模板识别并改写包装脚本 → 侵入项目代码。</summary></details><details><summary><code>_read_deps</code> 返回 <code>(None, why)</code> 的地方，连同 <code>run_test_gate</code> 的去插件重跑分支，统一产出 <code>deps_kind</code></summary></details><details><summary><code>not-pytest</code></summary><p>junit 不存在且输出里没有 pytest 汇总行（复用现有汇总行正则）；</p></details><details><summary><code>plugins-dropped</code></summary><p>pytest 跑了（junit 存在或有汇总行），但 <code>FLIGHT_GUARD_OK</code> 标记没写、输出里没有插件导入错误；</p></details><details><summary><code>plugin-import-failed</code></summary><p>沿用现有 <code>FLIGHT_PLUGIN_FAIL</code> 判定与去插件重跑；</p></details><details><summary><code>incomplete</code></summary><p>现有的&quot;记录不完整&quot;&quot;记录损坏&quot;两种。</p></details><details><summary><strong>记录</strong></summary></details><details><summary>基线写 <code>deps_unmeasured: {kind, why}</code>，<code>warnings</code> 的文字改为 `依赖图未测（&lt;kind&gt;）</summary><p>&lt;why&gt;`；</p></details><details><summary>锚点写 <code>deps_kind</code>；</summary></details><details><summary>final 的&quot;没有可用锚点&quot;原因附上最近一份基线的 <code>deps_unmeasured.kind</code>（有的话）。</summary></details><details><summary><strong>why 带修法</strong></summary><p>前两类点名 <code>FLIGHT_PLUGIN_PATH</code> / <code>FLIGHT_PYTEST_ARGS</code> 与 <code>.claude/flight-runner-contract.md</code>。</p></details><details><summary><strong>否决</strong></summary><p>继续只给一句&quot;不是 pytest？&quot;→ afa 的真实原因是插件被丢弃，旧文字误导了排查。</p></details><details><summary><code>_scope_decl</code> 的字段白名单加上 <code>global</code>、<code>blind</code>、<code>anchor_max_hops</code>，形状错误按现有格式点名。新增 <code>_scope_extras(change_dir) -&gt; {&quot;global&quot;: [...], &quot;blind&quot;: [...], &quot;anchor_max_hops&quot;: int}</code>，文件缺失或无字段时取缺省（空、空、5）。</summary></details><details><summary><strong><code>global</code></strong></summary></details><details><summary>进 <code>_full_triggers</code></summary><p>Δ 路径与任一 glob 匹配（<code>fnmatch</code> 对仓库相对完整路径）→ 触发项 <code>declared-global:&lt;glob&gt;</code>；</p></details><details><summary>final 原因文字为&quot;Δ 命中项目声明的全局路径 &lt;glob&gt;</summary><p>&lt;路径&gt;&quot;；</p></details><details><summary>内建提供方的计划期预测走同一函数，自动一致（<code>DRAFT-builtin-scope-provider-and-shell-closure</code> 决策 1）。</summary></details><details><summary><strong><code>blind</code></strong></summary><p>进 <code>_final_select</code>，匹配的现存测试文件并入选中集合。</p></details><details><summary><strong>为什么放 <code>gate-scope.json</code></strong></summary><p>它已是仓库级、声明式、被列为&quot;声明文件不触发全量&quot;的门禁配置，全局与盲区也直接影响选测预测。另开文件会让同一套触发规则读两处。</p></details><details><summary><strong>否决</strong></summary></details><details><summary>写进每个 change 的 <code>slices.json</code> → 全局路径是仓库的属性，不是某个 change 的；</summary></details><details><summary>扩写死的 <code>GLOBAL_FILES</code> → 各项目各不相同。</summary></details><details><summary><strong>记录</strong></summary><p>锚点条目新增 <code>hops</code>。</p></details><details><summary><code>baseline</code> 全量 / <code>final-full</code> 为 0；</summary></details><details><summary><code>final-incremental</code> 与经锚点的增量基线为来源锚点 <code>hops + 1</code>；</summary></details><details><summary>旧条目缺 <code>hops</code></summary><p><code>source == &quot;final-incremental&quot;</code> 视为 K（不可用），其余视为 0。</p></details><details><summary><strong>选取</strong></summary><p><code>_pick_anchor</code> 与基线的锚点候选都先滤掉 <code>hops &gt;= K</code> 的条目。K 来自 <code>_scope_extras</code>，<code>_pick_anchor</code> 新增关键字参数 <code>max_hops</code>，缺省为常量 <code>ANCHOR_MAX_HOPS = 5</code>。</p></details><details><summary><strong>原因</strong></summary><p>被滤掉之后没有可用锚点时，原因写&quot;锚点链已达上限 K 代（anchor_max_hops）&quot;，触发项代码 <code>final:anchor-hops</code>。</p></details><details><summary><strong>为什么不是&quot;锚点年龄&quot;</strong></summary><p>同一棵树上依赖图漂移的来源是一次次增量推导，不是时间（Q2=A）。</p></details><details><summary><strong>K=5 的依据</strong></summary><p>用户在没有对账数据时选的保守值；对账后经 <code>anchor_max_hops</code> 调整，不改代码。</p></details><details><summary><strong>候选顺序</strong></summary></details><details><summary><strong>锚点路径判定</strong></summary></details><details><summary><code>_full_triggers(root, delta, anchor, None, gate, …)</code> 有触发项 → 跳过该锚点，原因进 <code>reuse_skipped</code>；</summary></details><details><summary>否则 <code>sel = _final_select(root, anchor, delta)</code>（含 D5 的 blind），用 <code>_pytest_outcomes(root, sel, gate, deps_out=…)</code> 补跑。补跑超时、rc ∉ {0, 1, 5}、或有收集错误 → 中止，走全量。</summary></details><details><summary><strong>结果</strong></summary></details><details><summary><code>test = {&quot;exit&quot;: 0 或 1, &quot;failed&quot;: None, &quot;failed_nodes&quot;: [补跑中 FAILED/ERROR], &quot;failed_form&quot;: &quot;nodes&quot;, &quot;sec&quot;: 补跑耗时}</code>；</summary></details><details><summary><code>mode: incremental</code>，<code>incremental: {&quot;source&quot;: &quot;anchor&quot;, &quot;from&quot;: {change, commit, at}, &quot;rerun_files&quot;: sel, &quot;hops&quot;: anchor.hops + 1}</code>；</summary></details><details><summary>写新锚点</summary><p><code>_anchor_forward</code> 口径，<code>source: &quot;baseline-incremental&quot;</code>，<code>hops</code> 同上。</p></details><details><summary><strong>verify</strong></summary><p>经锚点（任意来源）时全部重跑，与跨 change 基线池候选一致。</p></details><details><summary><strong>lint / typecheck</strong></summary><p>只在本 change 旧基线且严格 Δ 为空时沿用，规则不变。</p></details><details><summary><strong>跨 change 带预存红</strong></summary><p>锚点的 <code>failed</code> 所在文件恒在 <code>sel</code> 里（<code>_final_select</code> 现有行为），所以别人的红一定被重跑、按本次结果记录，不会整份沿用别人的名单。这正是 2026-10-15 否决理由（&quot;留着把红判成绿的窗口&quot;）所指的那条路径，现在关上了（Q1=A）。基线池入池条件不变。</p></details><details><summary><strong>否决</strong></summary></details><details><summary>把基线池也放开带红 → 池条目没有依赖图，做不到&quot;失败文件必重跑&quot;；</summary></details><details><summary>锚点路径只对本 change 开放 → 首次基线（afa 64 次）照样没有候选。</summary></details><details><summary><strong>记录</strong></summary><p>基线新增 <code>test_ok</code>：gate.test 跑了、可度量（rc 0 或 <code>failed</code> 非 None），且 <code>reasons</code> 里没有&quot;运行期间被修改&quot;&quot;结束快照失败&quot;&quot;运行期间 gate/verify 被修改&quot;三类。</p></details><details><summary><strong>复用</strong></summary><p><code>_try_reuse</code> 对本 change 旧基线放宽：<code>ok is True</code> 或 <code>test_ok is True</code> 都可作测试部分的候选；跨 change 与池候选仍要求 <code>ok is True</code>。复用时 verify / lint / typecheck / 检查照常走各自的沿用规则，原来红的那一项会重新实跑。</p></details><details><summary><strong>缺字段</strong></summary><p>旧基线缺 <code>test_ok</code> → 不放宽（安全方向）。</p></details><details><summary><strong>算法</strong></summary><p><code>cmd_key</code> 对命令里直接写出的仓库内文件，加上它们经 <code>_shell_closure</code> 求出的静态闭包，逐个读内容。把本 change 目录名按词边界（前后不是 <code>[A-Za-z0-9_-]</code>）替换成 <code>&lt;change&gt;</code>，再算 sha1，与归一后的命令文本一起进指纹。读不到的文件按现状处理（只记路径）。</p></details><details><summary><strong>影响</strong></summary></details><details><summary>各 change 按同一模板生成的包装脚本（afa 89 个 change 的 <code>verify/full_suite.sh</code>）指纹相同，跨 change 的锚点与基线池都能命中；</summary></details><details><summary>被 source 的 <code>_env.sh</code> 进了指纹</summary><p>内容不同就不命中，这是正确的口径。</p></details><details><summary><strong>BREAKING（一次性）</strong></summary><p>算法变了，升级后既有的基线、锚点、池条目全部失配，各项目第一次 baseline / final 全量，之后恢复。写进迁移说明与 doctor 提示。</p></details><details><summary><strong>否决</strong></summary><p>只归一命令文本 → 内容里的 change 名才是 afa 指纹分裂的原因。</p></details><details><summary><code>_try_reuse</code> 用本 change 旧基线时，<code>_delta(..., same_change=True)</code> 照旧计入本 change 目录里的门禁脚本。然后从&quot;测试结论用的 Δ&quot;里去掉不在 gate.test / <code>gate.pytest</code> 静态 shell 闭包里的那些（闭包同 D9）。</summary></details><details><summary>verify 的重跑判定（<code>_verify_rerun</code>）与 lint / typecheck 的严格 Δ 仍用完整 Δ。</summary></details><details><summary><strong>为什么</strong></summary><p>afa 今天的重新规划改了 <code>_env.sh</code>（只被 lint / verify 的包装用到），按现规则这会让测试结论失效；D9 之后它在不在指纹里由闭包说了算，口径统一。</p></details><details><summary>基线 <code>test.failed_form == &quot;nodes&quot;</code> 时，final 全量的 G2 test 按 <code>failed_nodes</code> 差分。</summary></details><details><summary>需要本次全量的依赖图逐用例结局（<code>nodes</code>）；</summary></details><details><summary>依赖图未测、无法得到 nodeid → G2 test 红，原因&quot;基线只有 nodeid 形式的预存红，本次依赖图未测，无法差分；重跑 baseline --full&quot;（安全方向</summary><p>不会把红判成绿）。</p></details><details><summary>增量 final 本来就按 <code>failed_nodes</code> 差分，不变。</summary></details><details><summary><strong>新文件</strong></summary><p>只读，恒 exit 0，纯标准库，3.9 兼容。经 <code>importlib</code> 按路径加载同目录的 <code>slice-gate.py</code>，复用：</p></details><details><summary><code>load_plan</code>、<code>load_baseline</code>、<code>_snapshot</code>、<code>_anchor_key</code>、<code>_tiers_key</code>、<code>_pick_anchor</code>、<code>_full_why</code>、<code>_scope_extras</code>；</summary></details><details><summary>不复制判定逻辑，也就不会与门禁漂移。</summary></details><details><summary><strong>为什么单独成文件</strong></summary><p><code>slice-gate.py</code> 单文件被 S1–S3 串行占用。可见性只读这些数据，独立出来既能与 S2 并行，也让&quot;门禁判定&quot;与&quot;报告&quot;职责分开。</p></details><details><summary><strong>forecast</strong></summary></details><details><summary>baseline 段读 <code>gate-baseline.json</code></summary><p><code>running</code> → <code>pending</code>；缺 → <code>missing</code>；否则取 <code>mode</code>、<code>reuse_skipped[0].reason</code>、<code>test.sec</code>；</p></details><details><summary>final 段</summary><p>有 <code>gate.impacted</code> → <code>impacted</code>；有分层部件形态 → <code>full</code>（部件恒全量）；否则用当前树调 <code>_pick_anchor</code> 与 <code>_full_why</code>：</p></details><details><summary>有原因 → <code>full</code> + 原因；</summary></details><details><summary>无锚点且基线有 <code>deps_unmeasured</code> → <code>full</code> + 类别与修法；</summary></details><details><summary>都没有 → <code>incremental</code>；</summary></details><details><summary>任何异常 → <code>unknown</code> + 异常文字；</summary></details><details><summary><code>sec</code> 取 <code>gate.full_suite_sec</code>；</summary></details><details><summary>checks 段列 <code>gate.checks[].name</code>。</summary></details><details><summary><strong>cost</strong></summary></details><details><summary>解析 <code>timeline.md</code> 的 <code>baseline</code> / <code>final</code> 行</summary></details><details><summary>备注含 <code>增量</code> 或 <code>同树沿用</code> → 增量；</summary></details><details><summary>含 <code>全量</code> → 全量，<code>exit e, Ns</code> 里的秒数计入；</summary></details><details><summary>原因取 `全量</summary><p><code> 之后或 </code>全量（…）` 括号里的文字；</p></details><details><summary>归类表（关键词 → 必要 / 可避免）写在文件顶部常量里，认不出 → <code>未分类</code>。</summary></details><details><summary>依赖 D13 的基线 timeline 备注格式。</summary></details><details><summary><strong>doctor</strong></summary></details><details><summary>扫 <code>&lt;openspec 根&gt;/changes/*/gate-baseline.json</code>（不含 <code>archive/</code>）、锚点池、各 <code>slices.json</code> 的 gate、<code>gate-scope.json</code>，输出四节；</summary></details><details><summary>另提示 cmd_key 算法变化后首次全量属正常（D9）。</summary></details><details><summary>全量基线的 timeline 备注，由 <code>exit e, Ns ok|red</code> 改为 `exit e, Ns ok|red；全量</summary><p>&lt;原因&gt;`。</p></details><details><summary>原因取首个候选的拒绝理由，或下列固定文字</summary></details><details><summary><code>无可用候选（锚点池为空）</code>；</summary></details><details><summary>`锚点不可用（依赖图未测</summary><p>&lt;kind&gt;）`；</p></details><details><summary><code>锚点链已达上限 K 代</code>；</summary></details><details><summary><code>手动要求 --full</code>；</summary></details><details><summary><code>有测试分层文件（恒全量）</code>。</summary></details><details><summary>经锚点的增量基线备注为 <code>增量（经锚点 &lt;change&gt;@&lt;commit 前 10 位&gt;，补跑 n 个测试文件 t秒） ok|red</code>。</summary></details><details><summary><code>timeline.py</code> 不改，只按列追加。</summary></details><details><summary><strong><code>/opsx-propose</code> step 5</strong></summary><p>baseline 结束的报告行，后面追加 <code>flight-doctor.py forecast</code> 的一行输出（原样转述）。</p></details><details><summary><strong><code>/opsx-apply</code> step 3</strong></summary><p>preflight 之后运行 <code>forecast</code> 并原样打印，不影响是否起飞。</p></details><details><summary><strong>step 6 收口</strong></summary><p>在 <code>timeline.py report</code> 之后运行 <code>cost</code>。</p></details><details><summary><strong>spec.html</strong></summary><p><code>spec_html.py</code> 渲染时子进程调 <code>forecast --json</code>，渲染「测试成本预告」段；失败、超时（30 秒）或非 JSON → 占位文字&quot;预告不可用：&lt;原因&gt;&quot;（铁律 10）。</p></details><details><summary><strong><code>install.sh --upgrade</code></strong></summary><p>结束时，若目标有 <code>openspec/</code> 且有 <code>python3</code>，运行 <code>python3 &quot;$TARGET/.claude/hooks/flight-doctor.py&quot; doctor --openspec-root &quot;$TARGET/openspec&quot;</code>，输出原样打印，<code>|| true</code>。</p></details><details><summary><strong>命令与同名 skill 同改</strong></summary><p><code>opsx-propose.md</code> ↔ <code>openspec-propose/SKILL.md</code>，<code>opsx-apply.md</code> ↔ <code>openspec-apply-change/SKILL.md</code>。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[依赖图漏记 → 基线把红记成绿]</strong></summary><p>基线现在也会经锚点推导，与增量 final 是同一类盲区（<code>DRAFT-final-incremental-by-dependency-anchor</code> 已接受）。</p></details><details><summary>锚点失败的文件必重跑；</summary></details><details><summary>全局文件与声明的 <code>global</code> 触发全量；</summary></details><details><summary>盲区与声明的 <code>blind</code> 必重跑；</summary></details><details><summary>链长上限 K=5；</summary></details><details><summary><code>--full</code> 随时可用；</summary></details><details><summary>项目启用前先做一次对账</summary><p>同一棵树上分别跑增量与全量，逐条比对结果（写进契约文档的&quot;接入步骤&quot;）。</p></details><details><summary><strong>[cmd_key 算法变化导致一次性全量]</strong></summary><p>升级后每个项目多跑一次全量基线和全量 final。</p></details><details><summary><strong>[链长上限让已在增量的项目周期性多跑全量]</strong></summary><p>stc-foundation 一类项目升级后，每 5 次增量多一次全量（用户已接受，Q2 补充决策）。</p></details><details><summary><strong>[合成结局交给检查，检查误把它当成实跑]</strong></summary><p>增量时 <code>nodes</code> 里有沿用的条目。</p></details><details><summary><strong>[flight-doctor 依赖 slice-gate 的私有函数名]</strong></summary><p>S2 / S3 改了签名就会坏。</p></details><details><summary><strong>[包装脚本转发 sitecustomize 改变项目的冷启动约定]</strong></summary><p>afa testgate 有意重建环境。</p></details><details><summary><strong>[<code>gate-scope.json</code> 字段变多]</strong></summary><p>契约 v2 写的是&quot;恰含 cmd 或 builtin 之一&quot;。</p></details><details><summary><strong>[<code>nodes</code> 让锚点体积变大]</strong></summary><p>afa 上万用例。</p></details></div><div class="design-block"><h3>Migration Plan</h3><p>- <strong>升级</strong>：<code>install.sh --upgrade</code> 下发新 <code>slice-gate.py</code>、<code>flight-doctor.py</code> 与契约文档，结束时打印 doctor 报告。 - <strong>一次性全量</strong>：cmd_key 算法变了，各项目升级后的第一次 baseline / final 全量；缺 <code>hops</code> 的 <code>final-incremental</code> 锚点视为已达上限，也让第一次 final 全量。之后恢复增量。 - <strong>兼容</strong>： - 旧 <code>gate-scope.json</code>（无新字段）、旧检查（不读 <code>GATE_TEST_RESULT</code>）、不转发契约的包装脚本，行为都与今天相同； - 旧基线缺 <code>test_ok</code> / <code>failed_form</code> → 按旧规则处理。 - <strong>回退</strong>： - <code>baseline --full</code> / <code>final --full</code> 恒等于不复用； - 删掉 <code>&lt;git common dir&gt;/flight-anchors/</code> 即回到&quot;每次全量&quot;，下一次全量后重建； - 回滚代码时，新字段被旧代码忽略。 - <strong>项目侧接入</strong>（不在本 change，用户执行）： 1. 按契约文档改包装脚本； 2. 跑一次 baseline，确认依赖图测到； 3. 对账； 4. 声明 <code>global</code> / <code>blind</code>； 5. 检查改读 <code>GATE_TEST_RESULT</code>。</p></div><div class="design-block"><h3>Open Questions</h3><p>- <strong>ADR 取代</strong>：<code>DRAFT-baseline-reuse-by-content-fingerprint</code> 的两项决策被本 change 修订： - &quot;只有测试文件变了才复用全量&quot;——扩展为经锚点按依赖图复用； - &quot;跨 change 只复用全绿&quot;——锚点路径放开带红，基线池不变。 由新 ADR <code>DRAFT-baseline-reuse-via-dependency-anchor</code> 记录取代，原 ADR 不改；其&quot;盲区&quot;一节的兜底论证随之换成 D7 的&quot;失败文件必重跑&quot;与 D6 的链长上限。 - <strong>检查契约扩展</strong>：<code>DRAFT-gate-paired-checks-by-exit-code</code> 的环境契约新增 <code>GATE_TEST_RESULT</code>，判定仍只看退出码，不构成取代；与运行器契约一起记入新 ADR <code>DRAFT-gate-test-result-handoff-and-runner-contract</code>。 - <strong>K 的默认值</strong>：5 是没有对账数据时的保守选择；afa 接入后用对账结果复核，经 <code>anchor_max_hops</code> 调整。 - <strong>影响映射</strong>（&quot;源路径 glob → 测试 glob&quot;）：比 <code>global</code> 更精确，afa 的 <code>dlib_impl</code> 会受益。等 <code>global</code> 的实际命中数据出来再定（backlog）。</p></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody><tr><td class="mono">S1</td><td>判定器契约层：结果交接 GATE_TEST_RESULT、gate.test 环境带 GATE_PHASE/GATE_CHANGE、导出 FLIGHT_PLUGIN_PATH/FLIGHT_PYTEST_ARGS、依赖图未测四分类、锚点带 nodes、cmd_key 归一与 shell 闭包</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_gate_test_result.py<br>tests/test_runner_contract.py<br>tests/test_cmd_key_normalize.py<br>tests/test_final_checks_env.py<br>tests/test_final_deps.py<br>tests/test_final_guard.py<br>tests/test_baseline_incremental.py<br>tests/test_baseline_pool.py</td><td><code>python3 -m pytest -q tests/test_gate_test_result.py tests/test_runner_contract.py tests/test_cmd_key_normalize.py tests/test_final_checks_env.py tests/test_final_deps.py tests/test_final_guard.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_final_incremental.py tests/test_gate_checks_final.py</code></td></tr><tr><td class="mono">S2</td><td>判定器 final 侧：gate-scope.json 的 global/blind/anchor_max_hops（形状、全量触发、盲区重跑）、锚点 hops 与链长上限、基线 nodeid 形式时 final 全量按 nodeid 差分</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_scope_decl_extras.py<br>tests/test_anchor_hops.py<br>tests/test_final_nodes_diff.py<br>tests/test_final_incremental.py<br>tests/test_final_reuse.py<br>tests/test_gate_scope_lint.py<br>tests/test_builtin_scope_precision.py<br>tests/test_scope_contract_v2.py</td><td><code>python3 -m pytest -q tests/test_scope_decl_extras.py tests/test_anchor_hops.py tests/test_final_nodes_diff.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_gate_scope_lint.py tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_final_impacted.py tests/test_tier_file_incremental.py</code></td></tr><tr><td class="mono">S3</td><td>判定器基线侧：候选扩为旧基线→锚点池→基线池、非测试 Δ 按依赖补跑、跨 change 带预存红经锚点、红基线按部件复用（test_ok）、门禁脚本只计 gate.test 闭包、基线链长上限、timeline 备注写全量原因</td><td>wave 3</td><td>S2</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_baseline_anchor_reuse.py<br>tests/test_baseline_component_reuse.py<br>tests/test_baseline_incremental.py<br>tests/test_baseline_pool.py<br>tests/test_baseline_skip.py<br>tests/test_slice_gate_baseline_preflight.py<br>tests/test_gate_checks_baseline.py</td><td><code>python3 -m pytest -q tests/test_baseline_anchor_reuse.py tests/test_baseline_component_reuse.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_slice_gate_baseline_preflight.py tests/test_gate_checks_baseline.py tests/test_final_incremental.py</code></td></tr><tr><td class="mono">S4</td><td>可见性：新增 flight-doctor.py（forecast / cost / doctor），spec.html「测试成本预告」段，install.sh --upgrade 末尾跑 doctor 只报告</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/flight-doctor.py<br>template/.claude/hooks/spec_html.py<br>install.sh<br>tests/test_flight_doctor.py<br>tests/test_flight_doctor_surfaces.py<br>tests/test_install.py<br>tests/test_spec_html.py</td><td><code>python3 -m pytest -q tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py tests/test_install.py tests/test_spec_html.py tests/test_spec_html_scope.py</code></td></tr><tr><td class="mono">S5</td><td>文档：运行器契约 flight-runner-contract.md；propose / apply 命令与同名 skill（转发契约、不写死 change 名、forecast / cost 调用、基线复用新规则）；schema 与 README 的选测声明措辞</td><td>wave 3</td><td>S4</td><td>template/.claude/flight-runner-contract.md<br>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>template/.claude/commands/opsx-apply.md<br>template/.claude/skills/openspec-apply-change/SKILL.md<br>template/openspec/schemas/intent-driven/schema.yaml<br>README.md<br>tests/test_runner_contract_docs.py<br>tests/test_scope_docs.py<br>tests/test_template_docs.py<br>tests/test_baseline_incremental_docs.py<br>tests/test_incremental_final_docs.py</td><td><code>python3 -m pytest -q tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_incremental_final_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py</code></td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>gate-test-result-handoff#final-full-hands-result-to-checks</td><td><code>tests/test_gate_test_result.py::test_final_full_hands_result_to_checks</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>gate-test-result-handoff#final-incremental-result-composes-anchor-outcomes</td><td><code>tests/test_gate_test_result.py::test_final_incremental_result_composes_anchor_outcomes</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>gate-test-result-handoff#baseline-checks-get-no-test-result</td><td><code>tests/test_gate_test_result.py::test_baseline_checks_get_no_test_result</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>gate-test-result-handoff#gate-test-env-carries-phase-and-change</td><td><code>tests/test_gate_test_result.py::test_gate_test_env_carries_phase_and_change</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#wrapper-forwarding-contract-measures-deps</td><td><code>tests/test_runner_contract.py::test_wrapper_forwarding_contract_measures_deps</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#wrapper-dropping-plugins-classified</td><td><code>tests/test_runner_contract.py::test_wrapper_dropping_plugins_classified</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#non-pytest-gate-classified</td><td><code>tests/test_runner_contract.py::test_non_pytest_gate_classified</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#cmd-key-normalizes-change-name</td><td><code>tests/test_cmd_key_normalize.py::test_cmd_key_normalizes_change_name</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#declared-global-forces-full</td><td><code>tests/test_scope_decl_extras.py::test_declared_global_forces_full</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#declared-blind-always-rerun</td><td><code>tests/test_scope_decl_extras.py::test_declared_blind_always_rerun</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#scope-decl-extras-shape-checked</td><td><code>tests/test_scope_decl_extras.py::test_scope_decl_extras_shape_checked</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#final-anchor-chain-limit-forces-full</td><td><code>tests/test_anchor_hops.py::test_final_anchor_chain_limit_forces_full</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#anchor-baseline-diffs-final-by-nodes</td><td><code>tests/test_final_nodes_diff.py::test_anchor_baseline_diffs_final_by_nodes</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#replan-after-landing-reuses-anchor</td><td><code>tests/test_baseline_anchor_reuse.py::test_replan_after_landing_reuses_anchor</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#global-file-in-delta-forces-full-baseline</td><td><code>tests/test_baseline_anchor_reuse.py::test_global_file_in_delta_forces_full_baseline</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#cross-change-anchor-with-preexisting-red-reruns-failed</td><td><code>tests/test_baseline_anchor_reuse.py::test_cross_change_anchor_with_preexisting_red_reruns_failed</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#red-baseline-test-part-reused</td><td><code>tests/test_baseline_component_reuse.py::test_red_baseline_test_part_reused</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#lint-only-gate-script-change-keeps-test-reuse</td><td><code>tests/test_baseline_component_reuse.py::test_lint_only_gate_script_change_keeps_test_reuse</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-anchor-reuse#baseline-anchor-chain-limit-forces-full</td><td><code>tests/test_baseline_anchor_reuse.py::test_baseline_anchor_chain_limit_forces_full</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#forecast-predicts-full-final-when-deps-unmeasured</td><td><code>tests/test_flight_doctor.py::test_forecast_predicts_full_final_when_deps_unmeasured</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#forecast-reports-incremental-when-anchor-usable</td><td><code>tests/test_flight_doctor.py::test_forecast_reports_incremental_when_anchor_usable</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#forecast-pending-while-baseline-running</td><td><code>tests/test_flight_doctor.py::test_forecast_pending_while_baseline_running</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#cost-tallies-full-runs-by-reason</td><td><code>tests/test_flight_doctor.py::test_cost_tallies_full_runs_by_reason</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#doctor-reports-unforwarded-wrapper</td><td><code>tests/test_flight_doctor.py::test_doctor_reports_unforwarded_wrapper</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#upgrade-runs-doctor-report-only</td><td><code>tests/test_flight_doctor_surfaces.py::test_upgrade_runs_doctor_report_only</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#spec-html-shows-cost-forecast</td><td><code>tests/test_flight_doctor_surfaces.py::test_spec_html_shows_cost_forecast</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#contract-doc-shipped-with-template</td><td><code>tests/test_runner_contract_docs.py::test_contract_doc_shipped_with_template</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>flight-runner-contract#propose-guidance-forwards-contract</td><td><code>tests/test_runner_contract_docs.py::test_propose_guidance_forwards_contract</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>test-cost-visibility#apply-and-propose-docs-print-forecast</td><td><code>tests/test_runner_contract_docs.py::test_apply_and_propose_docs_print_forecast</code></td><td><span class="chip" data-state="missing">missing</span></td></tr></tbody></table><h3>飞行记录</h3><p class="placeholder">尚无飞行记录事件。</p>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 判定器契约层：结果交接 GATE_TEST_RESULT、gate.test 环境带 GATE_PHASE/GATE_CHANGE、导出 FLIGHT_PLUGIN_PATH/FLIGHT_PYTEST_ARGS、依赖图未测四分类、锚点带 nodes、cmd_key 归一与 shell 闭包 （deps: - · verify: <code>python3 -m pytest -q tests/test_gate_test_result.py tests/test_runner_contract.py tests/test_cmd_key_normalize.py tests/test_final_checks_env.py tests/test_final_deps.py tests/test_final_guard.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_final_incremental.py tests/test_gate_checks_final.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 判定器 final 侧：gate-scope.json 的 global/blind/anchor_max_hops（形状、全量触发、盲区重跑）、锚点 hops 与链长上限、基线 nodeid 形式时 final 全量按 nodeid 差分 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_scope_decl_extras.py tests/test_anchor_hops.py tests/test_final_nodes_diff.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_gate_scope_lint.py tests/test_builtin_scope_precision.py tests/test_scope_contract_v2.py tests/test_final_impacted.py tests/test_tier_file_incremental.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 判定器基线侧：候选扩为旧基线→锚点池→基线池、非测试 Δ 按依赖补跑、跨 change 带预存红经锚点、红基线按部件复用（test_ok）、门禁脚本只计 gate.test 闭包、基线链长上限、timeline 备注写全量原因 （deps: S2 · verify: <code>python3 -m pytest -q tests/test_baseline_anchor_reuse.py tests/test_baseline_component_reuse.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_skip.py tests/test_slice_gate_baseline_preflight.py tests/test_gate_checks_baseline.py tests/test_final_incremental.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 可见性：新增 flight-doctor.py（forecast / cost / doctor），spec.html「测试成本预告」段，install.sh --upgrade 末尾跑 doctor 只报告 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py tests/test_install.py tests/test_spec_html.py tests/test_spec_html_scope.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S5 文档：运行器契约 flight-runner-contract.md；propose / apply 命令与同名 skill（转发契约、不写死 change 名、forecast / cost 调用、基线复用新规则）；schema 与 README 的选测声明措辞 （deps: S4 · verify: <code>python3 -m pytest -q tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_incremental_final_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-09 12:52 · 章节 8 · 图示 0 · 任务 5
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
