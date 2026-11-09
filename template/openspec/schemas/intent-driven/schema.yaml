@@ -299,9 +299,13 @@ artifacts:
       `slice-gate.py lint` 校验）；增量 final 改由它运行、不用内建选测，库经
       `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）/
       `GATE_ANCHOR_COMMIT`（锚点 commit）交给它改动清单与锚点。
-      选测范围声明（契约 v2）：openspec 根目录下 `gate-scope.json` 恰为
+      选测范围声明（契约 v2）：openspec 根目录下 `gate-scope.json`
+      恰含 cmd 或 builtin 之一，另可选 global / blind / anchor_max_hops——
       `{"builtin": true}`（模板内建选测）或 `{"cmd": "<只算范围的命令>"}`（仓库
-      自带选测）二选一；`gate.scope`（可选，非空字符串）是计划级的 cmd。提供方
+      自带选测）；`global`（仓库相对路径 glob 数组，Δ 命中即全量）、`blind`（测试
+      文件 glob 数组，每次增量都重跑）、`anchor_max_hops`（正整数，锚点链上限，
+      缺省 5），形状不合法 lint 判红，详见 `.claude/flight-runner-contract.md`；
+      `gate.scope`（可选，非空字符串）是计划级的 cmd。提供方
       优先级：`gate.scope` > `gate-scope.json` > 未声明。未声明 → lint 判红
       （「未声明选测范围」）；本 change 的 owns 正是建立 `gate-scope.json` 时，按
       伪触发项 `scope:undeclared` 视作全选，须在 `gate.scope_full_reason` 为它写

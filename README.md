@@ -178,7 +178,8 @@ your-project/
 │   ├── workflows/      # opsx-apply.js：飞行流程的命名 Workflow 调度器
 │   ├── hooks/          # 分级门禁 intent-gate.py + 飞行门禁 slice-gate.py 等 + 提醒 intent-reminder.py + hooks.json 片段（需 python3）
 │   ├── settings.json   # 合并注入上述 hooks（已存在则只并 hooks 节，保留你其余配置）
-│   └── claudemd-standard.md   # CLAUDE.md 层级规范（sync/distill 硬约束基线）
+│   ├── claudemd-standard.md   # CLAUDE.md 层级规范（sync/distill 硬约束基线）
+│   └── flight-runner-contract.md   # 运行器契约：包装脚本转发的变量、检查读的测试结果文件
 ├── openspec/
 │   ├── config.yaml     # schema: intent-driven + 4 条 rules
 │   ├── gate-scope.json # 选测声明：scope-seed 按历史 gate.test 判定是否代种 {"builtin": true}
@@ -272,7 +273,7 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **耗时**：`gate` / `baseline` / `final` 输出 `tier_sec`（单元 / 集成 / 各区域秒数），写进 `summary` 与飞行记录；没有分层文件时以上都不触发，行为不变
 - **部件（monorepo / 多语言）**：顶层写 `parts` 即部件形态，每个子项目 × runner 一个部件（`root` · `test_files` · 单元层 · 区域，选择器 `paths` 或 `list`），门禁逐部件运行、逐部件判 G10 / G11，final 恒全量；`gate.test` 写驱动命令 `python3 .claude/hooks/test-tiers.py run unit`。非 pytest 部件经 JUnit（`FLIGHT_JUNIT`）判 G10、经仓库内探针适配器判 G11，适配器须先过 `test-tiers.py canary` 金丝雀自检（库随机出题、亲自核验落盘），自检后按 sha 锁定，改动即 lint 红。简写形态（顶层 `unit` / `regions`）不变
 
-**基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；同仓全绿的全量跨 change 复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
+**基线增量复用**：改完计划后重跑 `slice-gate.py baseline` 时，只改了测试文件就复用上次全量、只补跑变了的测试文件；有测到依赖图的锚点时经锚点复用（跨 change 也可，非测试改动按依赖图补跑，带预存红的结论只经此路复用，链长受 `anchor_max_hops` 限制）；同仓全绿的全量跨 change 复用；红基线里有效的测试部分按部件复用；代码树没变时 lint / typecheck 沿用；verify 能从全量 junit 推导时不再单独跑；`--full` 强制全量。
 
 **增量 final**：`gate.test` 是 pytest 时，每次全量运行顺带记录依赖图（以测试文件为单位），并写一条锚点进锚点池 `<git common dir>/flight-anchors/`（各 worktree 共用，只留最新若干条）。
 - **增量**：final 默认取可用锚点（命令 / 单元层指纹相同，命令指纹含 `gate.pytest`、依赖图测到、是 HEAD 的祖先），只重跑依赖与改动相交的测试文件、改动里的测试文件、锚点里有失败的与盲文件，其余沿用锚点结论；跑完锚点前移
@@ -281,7 +282,7 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **`--full`**：`slice-gate.py final --full` 强制全量
 - **同树沿用**：代码树、计划与各门禁命令都没变且上次 final 绿 → 秒回，不跑任何测试或检查（`incremental.mode` 为 `reused`）
 - **`gate.impacted`**：可选；仓库已有选测命令时配上，增量 final 改由它运行
-- **选测范围声明（契约 v2）**：openspec 根 `gate-scope.json` 恰为 `{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测）二选一，计划里的 `gate.scope`（cmd）优先；未声明 → lint 判红，本 change 建立声明时按伪触发项 `scope:undeclared` 写理由；cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单）/ `GATE_SCOPE_CHANGE`（change 目录），命令往 `GATE_SCOPE_OUT` 写 `{full, triggers, count}`，失败即红；builtin 进程内预测 final 会不会全选，取不到锚点时列待定项；全选时须在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），审批页显示提供方、命令与理由；两字段不进 `plan_sha`
+- **选测范围声明（契约 v2）**：openspec 根 `gate-scope.json` 恰含 cmd 或 builtin 之一，另可选 global / blind / anchor_max_hops：`{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测）；`global` 声明 Δ 命中即全量的路径 glob、`blind` 声明每次增量都重跑的测试文件、`anchor_max_hops` 是锚点链上限（缺省 5），计划里的 `gate.scope`（cmd）优先；未声明 → lint 判红，本 change 建立声明时按伪触发项 `scope:undeclared` 写理由；cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单）/ `GATE_SCOPE_CHANGE`（change 目录），命令往 `GATE_SCOPE_OUT` 写 `{full, triggers, count}`，失败即红；builtin 进程内预测 final 会不会全选，取不到锚点时列待定项；全选时须在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），审批页显示提供方、命令与理由；两字段不进 `plan_sha`
 - **开跑前复核**：baseline 开跑前、final 跑任何测试之前都按提供方重算选测范围；final 有未表态的全选触发项、提供方失败或理由在 approve 提交后被改 → `G2 scope` 红、不跑测试；`final --full` 豁免
 - **checks 的三个环境变量**：final 运行 `gate.checks` 的 `final` 命令时另注入 `GATE_FINAL_MODE`（`incremental` / `full`）· `GATE_DELTA_FILE`（改动清单文件，每行一个仓库相对路径）· `GATE_ANCHOR_COMMIT`（锚点 commit，无锚点为空串）；`gate.impacted` 同样拿到
 
@@ -295,6 +296,14 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 - **GWT 注释先于代码**：测试函数体首行是 `// Given:`（Python 用 `#`）、`When:`、`Then:` 三段中文注释，之后才是 setup / mock / 被测调用 / 断言
 - 一个测试只触发一个被测动作（When 块单一）
 - 测试运行由 hook 留痕（`evidence.log`），**不接受自述**；反模式（mock 滥用、生产类塞测试方法、不懂依赖就 mock、不完整 mock、测试事后补救）在 `testing-anti-patterns.md` 列出
+
+#### 运行器契约
+
+项目侧接入飞行门禁测试运行的唯一依据是 `.claude/flight-runner-contract.md`（随模板下发）：
+- **包装脚本**：会重建子进程环境的 `gate.test` 包装脚本须让被测进程 `PYTHONPATH` 以 `$FLIGHT_PLUGIN_PATH` 开头、把 `$FLIGHT_PYTEST_ARGS` 按 shell 拆词传给 pytest，并用 `$GATE_CHANGE` 取 change 名；直接调 pytest 的项目零改动
+- **测试结果交接**：final 运行检查时注入 `GATE_TEST_RESULT`（本次 final 的逐用例结局、`mode` / `inherited` / `complete`），检查不必自己重跑测试
+- **易变变量**：`FLIGHT_` 与 `GATE_` 前缀的变量每次运行都变，项目缓存键须剔除，建议改用白名单
+- **依赖图未测**：基线按 `not-pytest` / `plugins-dropped` / `plugin-import-failed` / `incomplete` 四类给出原因与修法；`flight-doctor.py forecast` 起飞前预告测试成本（只预告，不阻断），`cost` 收口归因每次全量，`doctor` 由 `install.sh --upgrade` 结束时体检
 
 #### Workflow 前置条件
 
