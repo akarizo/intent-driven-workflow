@@ -43,7 +43,8 @@
         "README.md",
         "docs/WORKFLOW_zh.md",
         "install.sh",
-        "tests/test_clean_after_merged_docs.py"
+        "tests/test_clean_after_merged_docs.py",
+        "tests/test_tiers_docs.py"
       ],
       "deps": [
         "S1",
