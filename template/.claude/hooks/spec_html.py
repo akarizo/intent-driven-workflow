@@ -536,6 +536,35 @@ def render_scope(gate, change_dir, owns=()):
     return "".join(parts)
 
 
+FORECAST_TIMEOUT = 30  # 秒
+
+
+def render_forecast(change_dir):
+    """测试成本预告小节（design D14）：子进程取 flight-doctor.py forecast --json；失败 / 超时 / 非 JSON → 占位（铁律 10）。"""
+    head = '<h3>测试成本预告</h3>'
+    cmd = [sys.executable, os.path.join(HOOKS_DIR, "flight-doctor.py"), "forecast", "--change-dir", change_dir, "--json"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=FORECAST_TIMEOUT)
+        fc = json.loads(p.stdout)
+        b, f = fc["baseline"], fc["final"]
+        checks = fc.get("checks") or []
+    except subprocess.TimeoutExpired:
+        return head + '<p class="placeholder">预告不可用：超时（%d 秒）</p>' % FORECAST_TIMEOUT
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return head + '<p class="placeholder">预告不可用：%s</p>' % esc("%s: %s" % (type(e).__name__, e))
+
+    def row(label, part, extra=""):
+        sec = part.get("sec")
+        return '<tr><td>%s</td><td><code>%s</code></td><td>%s</td><td>%s</td></tr>' % (
+            label, esc(part.get("mode")), esc(part.get("why") or "-"), esc("-" if sec is None else "%s%s" % (sec, extra)))
+
+    return head + (
+        '<table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead>'
+        '<tbody>%s%s</tbody></table><p>检查 %d 项%s（只预告，不阻断）</p>'
+        % (row("baseline", b), row("final", f, "（约）"), len(checks),
+           "：" + esc(", ".join(str(c) for c in checks)) if checks else ""))
+
+
 def render_flight(change_dir):
     text = read_text(os.path.join(change_dir, "slices.json"))
     if not text:
@@ -593,10 +622,10 @@ def render_flight(change_dir):
         '<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th>'
         '<th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'
-        '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s'
+        '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s%s'
         % ("".join(slice_rows), render_scope(data.get("gate"), change_dir,
                                                         [o for s in slices for o in (s.get("owns") or [])]),
-           "".join(scenario_rows), timeline_html)
+           "".join(scenario_rows), render_forecast(change_dir), timeline_html)
     )
 
 
