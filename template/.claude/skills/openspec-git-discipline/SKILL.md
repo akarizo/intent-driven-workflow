@@ -27,8 +27,8 @@ Never create commits, branches, or merges unless the user explicitly asks. This 
 - **入口时机**：`/opsx-propose`、`/opsx-new` 在跑 `openspec new change "<change>"` **之前**先建好该 change 的 worktree 并进入它（CWD = worktree 根）。之后 `openspec` CLI 与所有工件写入用的都是相对路径（`openspec/changes/<change>/…`），自然落在 worktree 内 —— **无需改写任何路径常量，只需切 CWD**。
 - **产物范围**：5 工件（proposal→specs→design→adr→tasks）+ `spec.html` 审批面板 + apply 阶段的实现代码，**全部**落在 `.worktrees/<change>/` 内。禁止把任何 change 产物写到主仓库工作区。
 - **粒度**：**每 change 一间**，不是每 task 一间。一个 change 内的逐 task 实现（含 `openspec-subagent-apply-change` 逐 task 守门）在**同一间** worktree 里串行累积（task 依赖前序产出）。禁止为单个 task 各开 worktree，也禁止在 change worktree 内再嵌套子 worktree。
-- **建 worktree 是工作区准备，不是 lifecycle 推进**：因此生命周期 skill 可主动建 change worktree + 其分支（这不违反「不擅自建分支」——它不推进 propose→apply→archive 状态，也不 push/merge）。但 `merge` / `push` / `worktree remove` / `branch -d` 仍是破坏性收尾，一律交用户授权。
-- **清理只在主仓库根**：`git worktree remove .worktrees/<change>` → `git branch -d worktree-<change>` → `git worktree list` 验证，全部在主仓库根执行；禁 `cd` 进 worktree 后再删自身（CWD 卡死）。
+- **建 worktree 是工作区准备，不是 lifecycle 推进**：因此生命周期 skill 可主动建 change worktree + 其分支（这不违反「不擅自建分支」——它不推进 propose→apply→archive 状态，也不 push/merge）。但 `merge` / `push` / `worktree remove` / `branch -d` 仍是破坏性收尾，一律交用户授权（例外：显式运行 `/clean-after-merged` 时其 safe 档已获授权）。
+- **清理只在主仓库根**：首选 `/clean-after-merged` —— 它调用 `merged-cleanup.py` 判定每项是否已合并、是否需要 `--force`、用 `-d` 还是 `-D`，并先 `--ff-only` 同步 target；手工路径仍为 `git worktree remove .worktrees/<change>` → `git branch -d worktree-<change>` → `git worktree list` 验证，全部在主仓库根执行；禁 `cd` 进 worktree 后再删自身（CWD 卡死）。
 
 **Carve-out — per-task implementation commits during apply:** the `openspec-subagent-apply-change` (逐 task 守门) flow produces a small local commit per task during the apply phase. This is **allowed and not a violation**, because such commits are:
 
@@ -42,7 +42,7 @@ This carve-out covers **only** per-task implementation commits inside that apply
 
 - **由运行时创建，不是 LLM 手动嵌套** —— 临时 worktree 由 Workflow/Agent 运行时在该切片执行期间创建，执行体本身不手动在 change worktree 内再开子 worktree；
 - **以 SHA 合回，不是 `merge`/`push`** —— 每个切片（及 fix）的本地实现 commit 由 `integrator` 以其 HEAD 的 SHA 合回 change 分支，不 push、不 merge 进 main；
-- **清理由运行时负责（无残留改动时）** —— 临时 worktree 内没有未提交改动时由运行时自动清理；若有残留（例如 hook 追加的飞行记录），运行时会保留它，由人确认内容已由 integrator `record` 写回后，在主仓库根手动 `git worktree remove` 清理，执行体不动它。
+- **清理由运行时负责（无残留改动时）** —— 临时 worktree 内没有未提交改动时由运行时自动清理；若有残留（例如 hook 追加的飞行记录），运行时会保留它，由人确认内容已由 integrator `record` 写回后，在主仓库根运行 `/clean-after-merged`（只剩飞行记录的已合并 worktree 由脚本判定后带 `--force` 删除），执行体不动它。
 
 本 carve-out 只覆盖飞行 apply 工作流为每个执行体（含单片 wave 与 fix）产生的临时 worktree，不放松其它场景下「每 change 一间，禁止嵌套子 worktree」的规则，也不授权对 main 的 `push` 或 `merge`。
 
@@ -54,6 +54,7 @@ This carve-out covers **only** per-task implementation commits inside that apply
 - **gitlink 随切片提交**：子仓内先 `git -C <子仓路径>` 提交，再把 gitlink 并入同一个切片 commit；漏掉 gitlink 由 `G6 gitlink` 拦下。
 - **合回只经脚本**：切片与 fix 的合回只经 `slice-gate.py merge`，不手工 `git merge` 或解冲突。
 - **家子仓由合回推进**：家子仓的分支由合回推进；起飞前家子仓检出须等于 gitlink（preflight 校验）。
+- **删除含子仓的 worktree**：含已填充子仓的 worktree 删除需 `--force`；子仓库本体在 `.git/worktrees/<id>/modules/` 下，随 worktree 一起删除，未推送的子仓提交会丢失，`/clean-after-merged` 会把这类判为 `manual`。
 - **不支持的情形**：嵌套 submodule、新增或删除 submodule 的切片不支持，这类改动走 `--gate=per-task`。
 
 ## Gates
@@ -123,7 +124,7 @@ to merge on your own.
 
 - Writing any change artifact (工件 / `spec.html` / 实现代码) into the primary `main` working tree instead of `.worktrees/<change>/`.
 - Opening a separate worktree per task, or nesting a child worktree inside a change's worktree — the granularity is one worktree per change, tasks accumulate inside it.
-- Running `worktree remove` / `branch -d` from inside the worktree being removed (CWD deadlock) — do cleanup only from the primary repo root, and only when the user asks.
+- Running `worktree remove` / `branch -d` from inside the worktree being removed (CWD deadlock), or guessing `--force` / `-D` by hand instead of running `/clean-after-merged` — do cleanup only from the primary repo root, and only when the user asks.
 - Applying a proposal whose artifacts are uncommitted, or whose commit mixes artifacts with implementation code.
 - Treating files visible on disk (or in a worktree) as proof that the artifacts were committed.
 - Creating the next continue artifact without asking about committing the previous one.

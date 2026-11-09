@@ -1,0 +1,107 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "full_suite_sec": 265.9
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "判定脚本 merged-cleanup.py：plan / apply、合并状态四分、--force 与档位、-d 按 git 规则 + ff 同步、子仓存活校验、飞行快照 ref",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/merged-cleanup.py",
+        "tests/test_merged_cleanup.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_merged_cleanup.py",
+      "scenarios": [
+        "merged-cleanup-plan#plan-removes-merged-clean-worktree",
+        "merged-cleanup-plan#plan-detects-squash-merge",
+        "merged-cleanup-plan#plan-keeps-fresh-and-unmerged",
+        "merged-cleanup-plan#plan-forces-flight-records-only",
+        "merged-cleanup-plan#plan-defers-other-dirty-to-user",
+        "merged-cleanup-plan#plan-defers-locked-and-outside-worktrees",
+        "merged-cleanup-plan#plan-guards-unpushed-submodule-commit",
+        "merged-cleanup-plan#apply-prunes-borrowed-submodule-worktree",
+        "merged-cleanup-plan#apply-syncs-target-before-branch-delete",
+        "merged-cleanup-plan#plan-lists-remote-delete-for-user",
+        "merged-cleanup-plan#apply-removes-landed-flight-refs",
+        "merged-cleanup-plan#plan-refuses-outside-main-worktree"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "/clean-after-merged 命令、铁律 6 授权例外、git-discipline 清理条款、README / WORKFLOW_zh / install.sh 同步",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/commands/clean-after-merged.md",
+        "CLAUDE.md",
+        "template/CLAUDE.md.snippet",
+        "template/.claude/skills/openspec-git-discipline/SKILL.md",
+        "README.md",
+        "docs/WORKFLOW_zh.md",
+        "install.sh",
+        "tests/test_clean_after_merged_docs.py",
+        "tests/test_tiers_docs.py"
+      ],
+      "deps": [
+        "S1",
+        "S3"
+      ],
+      "verify": "python3 -m pytest -q tests/test_clean_after_merged_docs.py tests/test_docs_iron_rules.py tests/test_template_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_gate_checks_docs.py tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_incremental_final_docs.py",
+      "scenarios": [
+        "clean-after-merged-command#command-runs-plan-then-apply",
+        "clean-after-merged-command#iron-rule-grants-cleanup-exception",
+        "clean-after-merged-command#git-discipline-points-to-command",
+        "clean-after-merged-command#docs-list-new-command",
+        "clean-after-merged-command#readme-describes-auto-sedimentation"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "/pr-ship step 2b 记忆层沉淀 + /claudemd-commit 自动录入、较大差异对齐、E 类反复错误 + standard §13",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/commands/pr-ship.md",
+        "template/.claude/commands/claudemd-commit.md",
+        "template/.claude/claudemd-standard.md",
+        "tests/test_ship_memory_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_ship_memory_docs.py tests/test_template_docs.py tests/test_incremental_final_docs.py tests/test_ship_verdict.py tests/test_approval_gate.py tests/test_memory_lint.py",
+      "scenarios": [
+        "ship-memory-sedimentation#claudemd-commit-auto-records",
+        "ship-memory-sedimentation#claudemd-commit-bounded-recurring-errors",
+        "ship-memory-sedimentation#pr-ship-sediments-before-commit",
+        "ship-memory-sedimentation#pr-ship-reruns-final-after-sediment",
+        "ship-memory-sedimentation#pr-ship-lists-alignment-items-in-pr"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "merged-cleanup-plan#plan-removes-merged-clean-worktree": "tests/test_merged_cleanup.py::test_plan_removes_merged_clean_worktree",
+    "merged-cleanup-plan#plan-detects-squash-merge": "tests/test_merged_cleanup.py::test_plan_detects_squash_merge",
+    "merged-cleanup-plan#plan-keeps-fresh-and-unmerged": "tests/test_merged_cleanup.py::test_plan_keeps_fresh_and_unmerged",
+    "merged-cleanup-plan#plan-forces-flight-records-only": "tests/test_merged_cleanup.py::test_plan_forces_flight_records_only",
+    "merged-cleanup-plan#plan-defers-other-dirty-to-user": "tests/test_merged_cleanup.py::test_plan_defers_other_dirty_to_user",
+    "merged-cleanup-plan#plan-defers-locked-and-outside-worktrees": "tests/test_merged_cleanup.py::test_plan_defers_locked_and_outside_worktrees",
+    "merged-cleanup-plan#plan-guards-unpushed-submodule-commit": "tests/test_merged_cleanup.py::test_plan_guards_unpushed_submodule_commit",
+    "merged-cleanup-plan#apply-prunes-borrowed-submodule-worktree": "tests/test_merged_cleanup.py::test_apply_prunes_borrowed_submodule_worktree",
+    "merged-cleanup-plan#apply-syncs-target-before-branch-delete": "tests/test_merged_cleanup.py::test_apply_syncs_target_before_branch_delete",
+    "merged-cleanup-plan#plan-lists-remote-delete-for-user": "tests/test_merged_cleanup.py::test_plan_lists_remote_delete_for_user",
+    "merged-cleanup-plan#apply-removes-landed-flight-refs": "tests/test_merged_cleanup.py::test_apply_removes_landed_flight_refs",
+    "merged-cleanup-plan#plan-refuses-outside-main-worktree": "tests/test_merged_cleanup.py::test_plan_refuses_outside_main_worktree",
+    "clean-after-merged-command#command-runs-plan-then-apply": "tests/test_clean_after_merged_docs.py::test_command_runs_plan_then_apply",
+    "clean-after-merged-command#iron-rule-grants-cleanup-exception": "tests/test_clean_after_merged_docs.py::test_iron_rule_grants_cleanup_exception",
+    "clean-after-merged-command#git-discipline-points-to-command": "tests/test_clean_after_merged_docs.py::test_git_discipline_points_to_command",
+    "clean-after-merged-command#docs-list-new-command": "tests/test_clean_after_merged_docs.py::test_docs_list_new_command",
+    "clean-after-merged-command#readme-describes-auto-sedimentation": "tests/test_clean_after_merged_docs.py::test_readme_describes_auto_sedimentation",
+    "ship-memory-sedimentation#claudemd-commit-auto-records": "tests/test_ship_memory_docs.py::test_claudemd_commit_auto_records",
+    "ship-memory-sedimentation#claudemd-commit-bounded-recurring-errors": "tests/test_ship_memory_docs.py::test_claudemd_commit_bounded_recurring_errors",
+    "ship-memory-sedimentation#pr-ship-sediments-before-commit": "tests/test_ship_memory_docs.py::test_pr_ship_sediments_before_commit",
+    "ship-memory-sedimentation#pr-ship-reruns-final-after-sediment": "tests/test_ship_memory_docs.py::test_pr_ship_reruns_final_after_sediment",
+    "ship-memory-sedimentation#pr-ship-lists-alignment-items-in-pr": "tests/test_ship_memory_docs.py::test_pr_ship_lists_alignment_items_in_pr"
+  }
+}

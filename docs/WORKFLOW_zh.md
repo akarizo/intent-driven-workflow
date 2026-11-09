@@ -203,6 +203,8 @@ slice-gate.py lint（校验 slices.json：片数 1–9 / DAG 深度 ≤ 3 / 同 
 | archive 前 | **必须从 `main` 运行**；implementation 必须已合回 |
 | archive 后 | 提示 commit archive 与 spec sync 改动 |
 
+**合并后清理：`/clean-after-merged [target-branch]`**——PR 被人类合并后在主仓库根运行：先 `--ff-only` 同步 target，再由 `merged-cleanup.py` 判定每个 worktree / 分支 / 飞行快照的档位。**safe 档**（已合并的 worktree、`branch -d`、已落地 change 的 `refs/flight/*`）自动执行；**manual 档**（squash 合并需 `-D`、有未提交改动、被锁定、远端分支 `push --delete`）只打印命令交你。**子仓提交保护**：含子仓的 worktree 若有只存在于它的子仓提交（未推送），删除会连子仓库本体一起丢失，脚本一律判为 manual，先推送子仓再删。
+
 完整规则见 `.claude/skills/openspec-git-discipline/SKILL.md`。
 
 ---

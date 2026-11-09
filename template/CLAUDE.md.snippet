@@ -27,7 +27,7 @@
 3. TDD 与留痕：先失败测试后代码；测试运行由 hook 留痕，不接受自述。
 4. 独立评审必有：CRITICAL/HIGH 未闭环不得非 draft PR。
 5. 门禁红不收口：slice-gate / final gate 红时禁勾选、禁声明完成。
-6. Git 边界：一 change 一 worktree，不自动 merge / push / 删；ADR 只 supersede。
+6. Git 边界：一 change 一 worktree，不自动 merge / push / 删（例外：显式跑 `/clean-after-merged` 的 safe 档）；ADR 只 supersede。
 7. 两处审批不可省：飞行计划批准与 PR review；起飞批准由 takeoff-gate.py 校验人类消息证据（模型自证无效）。
 8. 度量必打印：apply 收口打印飞行记录，无数据不称提速。
 9. 零 token 优先：能脚本 / hook 判定的不交给模型。

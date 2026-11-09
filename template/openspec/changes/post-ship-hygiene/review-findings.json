@@ -1,0 +1,106 @@
+{
+  "change": "post-ship-hygiene",
+  "run_id": [
+    "wf_666d2372-f26",
+    "agent-redispatch:S2"
+  ],
+  "blocked": [
+    {
+      "slice": "S2",
+      "kind": "gate",
+      "reason": "G6 ownership: tests/test_tiers_docs.py 不在 owns 内",
+      "resolution": "已接续：规划缺陷（S2 owns 漏了钉住命令计数的 tests/test_tiers_docs.py，首轮 G1、重派 G6）。af06811 修正 owns 并重新取得人类批准后，单独重派 S2（cherry-pick bd831d2 → 5d4718d），门禁绿，integrator 合回（ff5e537），final 22/22 绿（1fd5ee8）"
+    }
+  ],
+  "blocking": [],
+  "fixed": [
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 196,
+      "summary": "已 lock 且目录已删除的 worktree 会让脚本直接崩溃（已定向抽查复现）。git 对 locked worktree 不报 prunable，于是走到 status_paths(path)，run() 以不存在的目录作 cwd 调 subprocess.run，抛出 FileNotFoundError。结果整个 plan/apply 输出 traceback，没有 JSON，进程以 exit 1 退出。exit 1 与契约里「apply 有失败项」的语义冲突，所有其他清理项也全部拿不到判定。按 spec，locked 应判 manual，现在却成了全局失败。复现步骤：worktree add .worktrees/l → worktree lock --reason 'agent running' → rm -rf .worktrees/l → plan，得到 FileNotFoundError，exit=1。",
+      "fix": "在 worktree_item 里，算 status / 子仓之前先判 os.path.isdir(path)。目录不存在时跳过 status_paths 与 check_subs，在 reasons 写一条 missing 说明（若要沿用已有标记，可并入 locked: 原因），并把档位判为 manual，命令仍为 unlock && remove（或 unlock && prune）。另一种做法是让 run() 捕获 OSError 并返回非 0，但判定层仍要显式处理目录缺失，否则会被当成干净。建议补一条 locked+missing 的测试。",
+      "resolution": "fix 44d6659 补测试并修复，integrate: fix a7a8a22"
+    }
+  ],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 150,
+      "summary": "`git ls-files -s` 没加 -z。core.quotePath 默认会把含非 ASCII 字符（如中文）的子仓路径转义成带引号的八进制串，导致 os.path.join(wt, path, '.git') 永远不存在，已填充的子仓漏判。漏判后 unpushed-submodule 防护整个被跳过。如果此时 worktree 里只有飞行记录改动（force=True），档位会是 safe，执行 `git worktree remove --force`，子仓里未推送的提交随 .git/worktrees/<id>/modules 一起被删，数据丢失。第 276 行 `ls-tree -r --name-only` 同理：change 名含非 ASCII 时不会被判 landed（这一处只是安全方向的漏删）。",
+      "fix": "改为 `ls-files -s -z`，按 NUL 切分后再 partition('\\t')。`ls-tree -r --name-only` 同样加 -z、按 NUL 切分。也可以统一传 `-c core.quotePath=false`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 136,
+      "summary": "status -z 的重命名/复制判定只看 X 列（s[0]）。worktree 侧出现的重命名（Y 列为 R/C，例如 intent-to-add 场景）会让下一段原路径被当成独立条目解析：路径错位，并可能把原路径误判为非飞行记录。",
+      "fix": "改成 `if s[0] in 'RC' or s[1] in 'RC':`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 372,
+      "summary": "apply 用 `plan['sync']['command'].split()[-1]` 从展示串反解 merge 源。command 是 shlex.quote 拼出来的，target 名含特殊字符时会带上引号，传给 git 后解析失败。展示串和执行参数混在一起，与「执行一律用参数列表」的约定不一致。",
+      "fix": "plan_sync 里把 src 存进内部字段（如 sync['_src']，public() 输出时剔除），apply 直接用这个字段；或者至少改用 shlex.split。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 415,
+      "summary": "plan --fetch 失败时静默忽略，用户会在不知情的情况下拿到基于陈旧 remote-tracking ref 的判定。",
+      "fix": "fetch 返回码非 0 时追加一条 warnings，例如 `fetch-failed: <stderr 首行>`，在 compute 之后合入 plan['warnings']。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_merged_cleanup.py",
+      "line": 17,
+      "summary": "删除 PENDING 时在 `import pytest` 与 `from conftest import ...` 之间多加了一个空行，属于无关的格式改动。",
+      "fix": "去掉多出的空行，保持原来的导入分组。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/pr-ship.md",
+      "line": 48,
+      "summary": "自动模式下的预算减法自相矛盾：2b 要求两个 lint 全绿、\"红了当场减\"，claudemd-commit step 5 超闸门时也要\"从同文件挑等量内容删\"；但 claudemd-commit.md:96 把 B 类以及\"为预算而删掉知识的减法\"都算作较大差异，被 /pr-ship 调用时不落盘。按文档无法同时满足。场景一：本分支删了一个被 CLAUDE.md 指针引用的文件，B 类删改不能落盘，claudemd-lint 报悬空指针、一直是红的。场景二：新增的 A/D/E 条目要靠删知识换预算，减法不能落盘，加法照样写入就超闸门。结局只有两种：执行体绕过对齐删了知识（违反\"较大差异必须对齐\"），或在 2b 卡死。文档对这两种情况都没写处置。",
+      "fix": "在 claudemd-commit.md step 6 的\"被 /pr-ship 调用时\"一条补一句：需要配一个较大差异减法才能过预算闸的加法条目，连同它的减法成对放进\"需与你对齐\"清单，两边都不落盘。B 类引起的 lint 红（悬空指针或超预算）同样放进该清单，不算 2b 失败。同时把 pr-ship.md:48 的\"红了当场减\"改为\"红了只用不丢含义的迁移（指针化 / 分流）当场减；减不够的，把对应的加法和减法一起放进需对齐清单，交给 step 6\"。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_ship_memory_docs.py",
+      "line": 4,
+      "summary": "PENDING 和 xfail 标记已经删掉，模块 docstring 还写着\"骨架：每个 scenario 一个 strict xfail……切片 S3 实现后去掉标记即解锁\"，和实际状态对不上。",
+      "fix": "改成已解锁的表述，例如\"每个 scenario 一条用例，断言 S3 落地后的文档契约\"，或者直接删掉这一句。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "CLAUDE.md",
+      "line": 12,
+      "summary": "铁律 6 新加的例外只写了「授权其 safe 档」。切片包第 2 步要求的枚举（ff 同步 target · 删已合并 worktree · `branch -d`）没有写进去，也没说明 safe 档由 merged-cleanup.py 判定。同一行前半句写着「不自动 merge」，而 safe 档实际会做 `git merge --ff-only` 同步本地 target，还会 `worktree remove --force`（只剩飞行记录或含子仓时）和 `update-ref -d refs/flight/*`。只读铁律、不读命令文档的模型拿不到 safe 档的边界，可能自行把别的动作归进 safe 档，或者把 ff 同步当成违反「不自动 merge」。",
+      "fix": "把这一句改为：显式跑 `/clean-after-merged` = 授权其 safe 档（由 merged-cleanup.py 判定：ff 同步 target · 删已合并 worktree（含脚本判定的 --force）· 删已落地 refs/flight/* · `branch -d`）；`branch -D` / `push --delete` / `worktree unlock` 永远交人。",
+      "slice": "S2"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/clean-after-merged.md",
+      "line": 37,
+      "summary": "第 4 步要求按原因标记给 `manual` 里的每条命令加中文说明，但 apply 的 JSON 契约 `{ok, done, failed, manual, kept}` 里 `manual` 只是命令字符串列表，不带原因，原因只在 plan 的 items[].reasons 里。apply 会在 fetch 和 ff 之后重新计算，结果可能和第 2 步展示的 plan 不一致，模型只能猜每条命令对应哪个原因。另外原因表（39–46 行）缺了脚本里会把条目判成 manual 的 `reference`（tip 不是 upstream/HEAD 的祖先，需要 -D）和 `missing`（worktree 目录已不存在）两种标记。",
+      "fix": "第 4 步改为：原因说明取自第 2 步 plan 的 manual 段，或者 apply 之后再跑一次 `merged-cleanup.py plan` 的 JSON，按 items[].reasons 前缀对应；原因表补上 `reference`（branch -d 会拒绝，需要先确认再 -D）和 `missing`（只剩 git 登记，用 `git worktree prune` 或确认后删除）两行。plan 不带 `--fetch` 就不会 fetch，所以那条命令写成 `plan` 不加参数即可。",
+      "slice": "S2"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/CLAUDE.md.snippet",
+      "line": 30,
+      "summary": "例外括号放在「不自动 merge / push / 删」的末尾，作用范围有歧义：可以读成三项都有例外，包括 push，而 safe 档从不 push；也可以读成只有「删」有例外，而 safe 档实际还包含 ff merge。这段措辞与切片包规定的文字一致，不算偏离 spec，但存在误读空间。",
+      "fix": "考虑改成：不自动 merge / push / 删（例外：显式跑 `/clean-after-merged` 的 safe 档，限 ff 同步与删已合并项，不含 push）。如果坚持完全照抄 spec 原文，可以不改。",
+      "slice": "S2"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "commit": "44d6659838b1fbb2ef532e7be7910ee0691cfe95",
+    "summary": "final 阻断：scenario 17/22"
+  }
+}
