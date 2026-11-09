@@ -3989,27 +3989,48 @@ def cmd_baseline(args):
         json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
         f.write("\n")
     # 有分层文件时恒走全量：G10 / G11 要单元层探针，复用的旧结果没有（design D5）
-    cands = _baseline_candidates(root, old, key, name, args.full or tiers is not None)
+    nocand = args.full or tiers is not None
+    extras = _scope_extras(args.change_dir)  # blind / global / anchor_max_hops（unified-test-result-reuse D5 / D6）
+    akey = _anchor_key(root, change_rel, test_cmd, gate)
+    acand = None if nocand else _baseline_anchor(root, akey, s0, git(root, "rev-parse", "HEAD"), change_rel, name,
+                                                 extras["anchor_max_hops"])
+    cands = _baseline_candidates(root, old, key, name, nocand, acand)
     # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用
     own = cands[0] if cands and old is not None and cands[0].get("snapshot") is old.get("snapshot") else None
     hit, src, skipped, rerun_cache = None, None, [], {}
     for cand in cands:
-        hit, why, abort = _try_reuse(root, args.change_dir, data, cand, s0, key, rerun_cache)
+        if cand is acand:
+            hit, why, abort = _try_anchor(root, args.change_dir, data, cand, extras)
+            ref = cand["pick"][0] if cand.get("pick") else {}
+        else:
+            hit, why, abort = _try_reuse(root, args.change_dir, data, cand, s0, key, rerun_cache, own=cand is own)
+            ref = cand
         if hit is not None:
             src = cand
+            hit = dict({"source": "own" if cand is own else "pool"}, **hit)
             break
-        skipped.append({"change": cand.get("change"), "commit": str(cand.get("commit") or "")[:12], "reason": why})
+        skipped.append({"change": ref.get("change"), "commit": str(ref.get("commit") or "")[:12], "reason": why})
         if abort:  # 补跑红 / 超时 / 异常退出码与候选无关，直接走全量（design D3）
             break
+    apart = None  # 经锚点时新锚点的依赖部分（design D7）
+    # 全量原因在开跑前定（本次写出的锚点不算，design D13）
+    full_reason = _baseline_full_reason(root, args.full, tiers, skipped, akey) if hit is None else None
     reasons, warnings, out = [], [], ""
     unit_wall, part_wall = 0.0, {}
     # 锚点的依赖图（全量与区域运行并起来）、没测到的 (类别, 原因)（design D3；unified-test-result-reuse D4）与不可度量的原因
     adeps, deps_un, deps_whys = None, [], []
     bl = {"commit": git(root, "rev-parse", "HEAD"), "at": now_iso(), "plan_sha": None,
           "ok": None, "reasons": reasons}
-    if hit is not None:
+    # 测试部分本身有效（design D8）：跑了且可度量；运行期间改动等「基线无效」类原因在后面另行扣除
+    test_ok = hit is not None
+    if hit is not None and "_test" in hit:  # 经锚点：预存红 = 补跑中的 FAILED / ERROR（design D7）
+        bl["test"], apart = hit.pop("_test"), hit.pop("_anchor")
+        if bl["test"]["failed_nodes"]:
+            warnings.append("预存红 %d 条（经锚点 %s 补跑），final 按 nodeid 差分" % (
+                len(bl["test"]["failed_nodes"]), hit["from"].get("change")))
+    elif hit is not None:
         ct = src.get("test") or {}
-        bl["test"] = {k: ct[k] for k in ("exit", "sec", "failed") if k in ct}
+        bl["test"] = {k: ct[k] for k in ("exit", "sec", "failed", "failed_nodes", "failed_form") if k in ct}
         if isinstance(ct.get("failed"), list) and ct["failed"]:
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     elif parts:  # 部件形态（design D8）：不跑 gate.test（驱动命令），逐部件运行单元层；不写锚点
@@ -4023,6 +4044,7 @@ def cmd_baseline(args):
         rc, out = tg["rc"], tg["out"]
         gate["full_suite_sec"] = round(time.time() - t0, 1)
         bl["test"] = {"exit": rc, "sec": gate["full_suite_sec"]}
+        test_ok = rc == 0 or tg["failed"] is not None
         adeps = tg["deps"]
         if adeps is None:
             deps_un.append((tg["deps_kind"], tg["deps_why"]))
@@ -4072,7 +4094,8 @@ def cmd_baseline(args):
     for s in data.get("slices") or []:
         vcmd = s.get("verify")
         pv = prev.get(s["id"])
-        if hit is not None and not _verify_rerun(root, vcmd, pv, hit["files"]):
+        # 红基线按部件复用（design D8）后旧 verify 可能是红的：红的那一片必须重跑
+        if hit is not None and not _verify_rerun(root, vcmd, pv, hit["files"]) and pv.get("exit") == 0:
             bl["verify"][s["id"]] = {"exit": pv.get("exit"), "cmd": vcmd, "reused": True}
             continue
         if hit is None and full_head is not None and _derive_verify(root, full_head, vcmd, tg.get("cases"), tg["failed"]):
@@ -4129,7 +4152,7 @@ def cmd_baseline(args):
             reasons.append("check %s 共用目录不可用：%s" % (cname, e))
             continue
         oc = old_checks.get(cname) if isinstance(old_checks, dict) else None
-        if (strict_delta == [] and kkey and isinstance(oc, dict) and "exit" in oc
+        if (strict_delta == [] and kkey and isinstance(oc, dict) and oc.get("exit") == 0  # 红的重跑（design D8）
                 and oc.get("cmd") == bcmd and oc.get("key") == kkey and os.path.isdir(cdir)):
             bl["checks"][cname] = {"exit": oc["exit"], "sec": oc.get("sec"), "cmd": bcmd, "key": kkey, "reused": True}
             continue
@@ -4151,7 +4174,7 @@ def cmd_baseline(args):
         elif crc != 0:
             reasons.append(_check_msg("check %s 在基线上红（exit %d）" % (cname, crc), log, cout))
     # 运行期间的改动（design D6）
-    s1, byproducts = None, []
+    s1, byproducts, n_valid = None, [], len(reasons)
     try:
         s1 = _snapshot(root, change_rel)
         reasons_d6, warnings_d6, byproducts = _run_changes(root, change_rel, s0, s1, (old or {}).get("byproducts"))
@@ -4172,6 +4195,8 @@ def cmd_baseline(args):
     bl["plan_sha"] = sha0
     if plan_sha(cur) != sha0:
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
+    # test_ok（design D8）：上面三类「基线无效」原因任一出现 → 测试部分也不可信
+    bl["test_ok"] = test_ok and len(reasons) == n_valid
     # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
     # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）；部件形态不写锚点（design D8）
     if hit is None and not parts:
@@ -4187,12 +4212,18 @@ def cmd_baseline(args):
         ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
         w = _anchor_write(root, {
             "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
-            "cmd_key": _anchor_key(root, change_rel, test_cmd, gate), "tiers_key": tkey,
+            "cmd_key": akey, "tiers_key": tkey,
             "tiers_detail": _tiers_detail(tiers), "files": ad["files"], "failed": bl["test"].get("failed_nodes") or [],
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "nodes": _nodes_lower(ad.get("nodes")), "deps_kind": deps_un[0][0] if deps_un else None,
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
             "measured": measured, "source": "baseline", "hops": 0})
+        if w:
+            warnings.append(w)
+    elif apart is not None:  # 经锚点的增量基线（design D7）：写新锚点，hops = 来源 + 1；基线无效时 measured false
+        w = _anchor_write(root, dict(apart, change=name, commit=bl["commit"], at=now_iso(), snapshot=s1,
+                                     byproducts=byproducts, cmd_key=akey, tiers_key=None, tiers_detail=None,
+                                     measured=apart["measured"] and not reasons))
         if w:
             warnings.append(w)
     if warnings:
@@ -4215,17 +4246,37 @@ def cmd_baseline(args):
         json.dump(bl, f, ensure_ascii=False, indent=2)
         f.write("\n")
     t, verdict = bl["test"], "ok" if bl["ok"] else "red"
-    if hit is not None:
+    if hit is not None and hit["source"] == "anchor":  # timeline 备注（unified-test-result-reuse design D13）
+        note = "增量（经锚点 %s@%s，补跑 %d 个测试文件 %ss） %s" % (
+            hit["from"].get("change"), str(hit["from"].get("commit") or "")[:10], len(hit["rerun_files"]),
+            hit["sec"], verdict)
+    elif hit is not None:
         note = "增量（复用 %s 的全量 exit %s, %ss；补跑 %d 个测试文件 %ss） %s" % (
-            hit["from"].get("change"), t.get("exit"), t.get("sec"), len(hit["files"]), hit["sec"], verdict)
+            hit["from"].get("change"), t.get("exit"), t.get("sec"), len(hit["rerun_files"]), hit["sec"], verdict)
     else:
-        note = "exit %s, %ss%s" % (t.get("exit"), t.get("sec"),
-                                    "；%s %s" % (_tier_note(bl["tier_sec"]), verdict) if "tier_sec" in bl else " " + verdict)
+        note = "exit %s, %ss%s；全量：%s" % (
+            t.get("exit"), t.get("sec"),
+            "；%s %s" % (_tier_note(bl["tier_sec"]), verdict) if "tier_sec" in bl else " " + verdict,
+            full_reason)
         if derived:
             note += "；verify 推导 %d 片" % derived
     timeline_record(args.change_dir, "baseline", note)
     print(json.dumps(dict(bl, test_cmd=test_cmd, tail=_tail(out)), ensure_ascii=False))
     sys.exit(0 if bl["ok"] else 1)
+
+
+def _baseline_full_reason(root, full, tiers, skipped, akey):
+    """全量基线的原因（unified-test-result-reuse design D13）：固定文字，或首个候选的拒绝理由。"""
+    if full:
+        return "手动要求 --full"
+    if tiers is not None:
+        return "有测试分层文件（恒全量）"
+    if skipped:
+        return skipped[0]["reason"]
+    un = _pool_candidates(root, akey, sub=ANCHOR_DIR,
+                          pred=lambda e: e.get("tiers_key") is None and e.get("measured") is not True
+                          and e.get("deps_kind"))
+    return "锚点不可用（依赖图未测：%s）" % un[0]["deps_kind"] if un else "无可用候选（锚点池为空）"
 
 
 def _die_running_baseline(change_dir, bl, data):
@@ -4668,14 +4719,79 @@ def _delta(root, cand, cur_snap, head, change_rel, same_change, strict=False):
                   and (old_snap[p] if p in old_snap else old_b.get(p)) != (cur_snap[p] if p in cur_snap else new_b.get(p)))
 
 
-def _baseline_candidates(root, old, key, name, full):
-    """可复用候选，按优先级排：本 change 旧基线（有 snapshot、非运行标记）在前，池候选在后（design D5）；--full 时没有候选。"""
+def _baseline_candidates(root, old, key, name, full, anchor=None):
+    """可复用候选，按优先级排（design D5；unified-test-result-reuse D7）：本 change 旧基线（有 snapshot、非运行标记）
+    → 锚点（anchor：_baseline_anchor 的结果，None = 没有）→ 池候选；--full / 有分层时没有候选。"""
     if full:
         return []
     cands = []
     if isinstance(old, dict) and old.get("running") is not True and isinstance(old.get("snapshot"), dict):
         cands.append(dict(old, change=old.get("change") or name))
+    if anchor is not None:
+        cands.append(anchor)
     return cands + _pool_candidates(root, key)
+
+
+def _baseline_anchor(root, akey, cur_snap, head, change_rel, name, max_hops):
+    """基线的锚点候选（unified-test-result-reuse design D7 / D6）：measured、无分层、hops < max_hops 里 |Δ| 最小的
+    → {"via": "anchor", "pick": (锚点, Δ)}；有锚点但都用不上 → {"via": "anchor", "skip": 理由}；池里没有 → None。"""
+    pick = _pick_anchor(root, akey, None, cur_snap, head, change_rel, name, max_hops)
+    if pick is not None:
+        return {"via": "anchor", "pick": pick}
+    if _hops_cap(root, akey, None, None, max_hops) is not None:
+        return {"via": "anchor", "skip": "锚点链已达上限 %d 代" % max_hops}
+    if _anchor_candidates(root, akey, None):
+        return {"via": "anchor", "skip": "锚点 commit 不是 HEAD 的祖先，或内容比对失败"}
+    return None
+
+
+def _try_anchor(root, change_dir, data, cand, extras):
+    """经锚点复用（unified-test-result-reuse design D7）→ (hit | None, 不复用的理由, abort)。
+    Δ 命中全量触发项（与 final 同一套，含声明的 global）→ 不复用；否则补跑 _final_select 的集合（含 blind）；
+    补跑超时 / exit ∉ {0, 1, 5} / 收集错误 → abort。hit 另带 _test（基线 test 段）与 _anchor（新锚点的依赖部分）。"""
+    if cand.get("skip"):
+        return None, cand["skip"], False
+    anchor, delta = cand["pick"]
+    gate = data.get("gate") or {}
+    why, _ = _full_why(root, False, cand["pick"], None, None, gate=gate,
+                       tier_rel=_change_rel(root, _tiers_path(change_dir)), decl_rels=_decl_rels(root, change_dir),
+                       declared_global=extras["global"])
+    if why:
+        return None, why, False
+    sel = _final_select(root, anchor, delta, extras["blind"])
+    d, outcomes, rc, text, timed_out, sec = {}, [], 0, "", False, 0.0
+    if sel:
+        t0 = time.time()
+        outcomes, rc, text, timed_out = _pytest_outcomes(root, sel, gate, deps_out=d,
+                                                         extra_env=_gate_test_env("baseline", change_dir))
+        sec = round(time.time() - t0, 1)
+    fails = sorted({n for n, o in outcomes if o in ("FAILED", "ERROR")})
+    if timed_out:
+        return None, "经锚点补跑超时", True
+    if (rc not in (0, 1, 5) or (rc == 1 and not fails) or "ERROR collecting" in text
+            or any(m in text for m in EARLY_STOP_MARKS)):
+        return None, "经锚点补跑 exit %s（异常退出或有收集错误）" % rc, True
+    hops = _anchor_hops(anchor, extras["anchor_max_hops"]) + 1
+    part = _anchor_forward(root, anchor, sel, d, fails, outcomes)
+    part.update({"deps_kind": None if d or not sel else "incomplete", "source": "baseline-incremental", "hops": hops})
+    return {"source": "anchor", "from": {"change": anchor.get("change"), "commit": anchor.get("commit"),
+                                         "at": anchor.get("at")},
+            "rerun_files": sel, "hops": hops, "files": delta, "sec": sec,
+            "_test": {"exit": 1 if fails else 0, "failed": None, "failed_nodes": fails, "failed_form": "nodes",
+                      "sec": sec},
+            "_anchor": part}, None, False
+
+
+def _test_gate_files(root, gate):
+    """gate.test / gate.pytest 直接写出的仓库内路径（文件或目录）及其 shell 静态闭包（design D10）；切词失败 → None。"""
+    refs = set()
+    for k in ("test", "pytest"):
+        try:
+            toks = shlex.split(gate.get(k) or "")
+        except ValueError:
+            return None
+        refs.update(r for r in (_repo_rel(root, t) for t in toks) if r and os.path.exists(os.path.join(root, r)))
+    return refs | _shell_closure(root, [r for r in refs if os.path.isfile(os.path.join(root, r))])
 
 
 # ---------------------------------------------------------------- 基线池（design D5）
@@ -5420,13 +5536,16 @@ def _pool_candidates(root, key, limit=10, sub=POOL_DIR, pred=None):
     return [e for _, e in hits[:limit]]
 
 
-def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache):
-    """复用判定（design D3）：返回 (hit | None, 不复用的理由, abort)；hit = {"from", "files", "sec"}。
+def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache, own=False):
+    """复用判定（design D3）：返回 (hit | None, 不复用的理由, abort)；hit = {"from", "files", "rerun_files", "sec"}。
+    own=True（本 change 旧基线，unified-test-result-reuse D8 / D10）：ok 或 test_ok 为真即可；测试结论的 Δ 不计
+    本 change 目录里不在 gate.test / gate.pytest 闭包内的门禁脚本（files 仍是完整 Δ，供 verify 判定）。
     补跑结果按 Δ 现存测试文件的 (路径, 当前 blob) 记进 rerun_cache；补跑红 / 超时 / 异常退出码 → abort=True。"""
-    if not isinstance(cand, dict) or cand.get("ok") is not True:
+    if not isinstance(cand, dict) or not (cand.get("ok") is True or (own and cand.get("test_ok") is True)):
         return None, "候选基线不是绿", False
     test = cand.get("test") or {}
-    if not (test.get("exit") == 0 or isinstance(test.get("failed"), list)):
+    nodes = test.get("failed_nodes") if test.get("failed_form") == "nodes" else None
+    if not (test.get("exit") == 0 or isinstance(test.get("failed"), list) or isinstance(nodes, list)):
         return None, "候选测试结果不可度量", False
     if not key or cand.get("cmd_key") != key:
         return None, "cmd_key 不同", False
@@ -5441,14 +5560,22 @@ def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache):
     delta = _delta(root, cand, cur_snap, head, change_rel, same)
     if delta is None:
         return None, "候选 commit 不是 HEAD 的祖先，或内容比对失败", False
-    other = [p for p in delta if not fnmatch.fnmatchcase(p.rsplit("/", 1)[-1], "test_*.py")]
+    tdelta = delta
+    refs = _test_gate_files(root, data.get("gate") or {}) if own else None
+    if refs is not None:  # design D10：本 change 目录里 gate.test 闭包之外的门禁脚本不影响测试结论
+        tdelta = [p for p in delta if not p.startswith(change_rel + "/") or is_test_path(p) or p in refs
+                  or any(p.startswith(r + "/") for r in refs)]
+    other = [p for p in tdelta if not fnmatch.fnmatchcase(p.rsplit("/", 1)[-1], "test_*.py")]
     if other:
         return None, "有非测试文件改动：%s" % ", ".join(other[:8]), False
-    stems = {p.rsplit("/", 1)[-1][:-3] for p in delta}
+    stems = {p.rsplit("/", 1)[-1][:-3] for p in tdelta}
     for f in test.get("failed") or []:
         if stems & set(str(f).split("::", 1)[0].split(".")):
             return None, "改动的测试文件有预存红：%s" % f, False
-    files = [p for p in delta if os.path.isfile(os.path.join(root, p))]
+    for f in test.get("failed_nodes") or []:
+        if str(f).split("::", 1)[0] in tdelta:
+            return None, "改动的测试文件有预存红：%s" % f, False
+    files = [p for p in tdelta if os.path.isfile(os.path.join(root, p))]
     sec = 0
     if files:
         try:
@@ -5467,7 +5594,7 @@ def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache):
         if not ok:
             return None, why, True
     return {"from": {"change": cand.get("change"), "commit": cand.get("commit"), "at": cand.get("at")},
-            "files": delta, "sec": sec}, None, False
+            "files": delta, "rerun_files": files, "sec": sec}, None, False
 
 
 def _run_changes(root, change_rel, s0, s1, prev_byproducts):

@@ -10,8 +10,8 @@ import time
 import pytest
 
 from conftest import git, write
-from test_baseline_incremental import (PY, append, baseline, clear, counting_test, full_c, marker, read_bl, read_plan,
-                                       setup_change, two_changes)
+from test_baseline_incremental import (PY, append, baseline, clear, counting_test, drop_anchors, full_c, marker, read_bl,
+                                       read_plan, setup_change, two_changes)
 
 POOL = "flight-baseline-pool"
 
@@ -33,9 +33,10 @@ def pool_entries(git_repo):
 
 def test_cross_change_reuse_same_tree(git_repo):
     # Given: change c 跑过一次全量绿基线，没有预存红；change d 的全量脚本与 c 内容相同、命令只差 change 目录名，还没有基线；
-    #        c 的工件与门禁脚本都没有提交
+    #        c 的工件与门禁脚本都没有提交；锚点池为空（锚点排在基线池之前）
     c, d = two_changes(git_repo, old_red=False)
     bc = full_c(git_repo, c)
+    drop_anchors(git_repo)
 
     # When: 对 d 运行 slice-gate.py baseline
     p = baseline(git_repo, d)

@@ -2,8 +2,6 @@
 cross-change-anchor-with-preexisting-red-reruns-failed / baseline-anchor-chain-limit-forces-full）。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL, commit_all, write
 from final_helpers import baseline, change_and_commit, make_repo
 
@@ -32,7 +30,6 @@ def clone_change(repo, src, dst):
     return t
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：基线候选不含锚点，非测试改动一律全量")
 def test_replan_after_landing_reuses_anchor(git_repo):
     # Given: change c 有一次测到依赖图的全量基线；之后提交了非测试文件 src/a.py 的改动
     d = make_repo(git_repo)
@@ -49,7 +46,6 @@ def test_replan_after_landing_reuses_anchor(git_repo):
     assert inc["rerun_files"] == ["tests/test_a.py"], inc
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：没有锚点候选，也就没有锚点候选的拒绝理由")
 def test_global_file_in_delta_forces_full_baseline(git_repo):
     # Given: change c 有一次测到依赖图的全量基线；之后提交了 pytest.ini 的改动
     d = make_repo(git_repo)
@@ -65,7 +61,6 @@ def test_global_file_in_delta_forces_full_baseline(git_repo):
     assert any("全局文件" in r and "pytest.ini" in r for r in reasons), reasons
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：跨 change 带预存红的结论不复用")
 def test_cross_change_anchor_with_preexisting_red_reruns_failed(git_repo):
     # Given: 一个总是失败的用例 test_red；change other 跑过全量基线（锚点测到依赖图、预存红含 test_red）；
     #        change c 与 other 的 gate.test 相同，且 c 还没有基线
@@ -84,7 +79,6 @@ def test_cross_change_anchor_with_preexisting_red_reruns_failed(git_repo):
     assert "tests/test_red.py::test_red" in (out["test"].get("failed_nodes") or []), out["test"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现：基线侧没有锚点链上限")
 def test_baseline_anchor_chain_limit_forces_full(git_repo):
     # Given: anchor_max_hops 为 1；change c 的旧基线后有非测试改动；锚点池里全部锚点的 hops 都是 1
     (git_repo / "openspec" / "gate-scope.json").write_text(
