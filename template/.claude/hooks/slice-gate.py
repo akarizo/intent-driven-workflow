@@ -3995,8 +3995,10 @@ def cmd_baseline(args):
     acand = None if nocand else _baseline_anchor(root, akey, s0, git(root, "rev-parse", "HEAD"), change_rel, name,
                                                  extras["anchor_max_hops"])
     cands = _baseline_candidates(root, old, key, name, nocand, acand)
-    # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用
-    own = cands[0] if cands and old is not None and cands[0].get("snapshot") is old.get("snapshot") else None
+    # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用。
+    # 旧基线 snapshot 缺失时它不进候选，须排除锚点包装 / 池候选的 None is None 误判（design D7：经锚点 verify 全部重跑）
+    own = (cands[0] if cands and cands[0] is not acand and isinstance(old, dict)
+           and isinstance(old.get("snapshot"), dict) and cands[0].get("snapshot") is old.get("snapshot") else None)
     hit, src, skipped, rerun_cache = None, None, [], {}
     for cand in cands:
         if cand is acand:
