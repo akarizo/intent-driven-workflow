@@ -14,9 +14,9 @@ import types
 
 import pytest
 
+
 from conftest import run_hook, write
 
-PENDING = pytest.mark.xfail(strict=True, reason="change post-ship-hygiene S1 未实现")
 HOOK = "merged-cleanup"
 
 
@@ -152,7 +152,6 @@ def home_with_sub_commit(w):
     return home, sha
 
 
-@PENDING
 def test_plan_removes_merged_clean_worktree(w):
     # Given: worktree-a 带一个提交，已在远端以 --no-ff 合入 main，本地 main 已同步；.worktrees/a 干净
     feature(w, "a")
@@ -170,7 +169,6 @@ def test_plan_removes_merged_clean_worktree(w):
     assert br["tier"] == "safe" and br["command"] == "git branch -d worktree-a", br
 
 
-@PENDING
 def test_plan_detects_squash_merge(w):
     # Given: worktree-s 的改动在远端以 squash 合入 main（tip 不是 main 的祖先），worktree 干净，本地已同步
     feature(w, "s")
@@ -187,7 +185,6 @@ def test_plan_detects_squash_merge(w):
     assert item(out, "worktree", ".worktrees/s")["tier"] == "safe"
 
 
-@PENDING
 def test_plan_keeps_fresh_and_unmerged(w):
     # Given: 刚从 main 建出的 .worktrees/f（无独有提交）；worktree-u 带一个未合并提交
     g(w.main, "worktree", "add", "-q", ".worktrees/f", "-b", "worktree-f")
@@ -207,7 +204,6 @@ def test_plan_keeps_fresh_and_unmerged(w):
     assert has_ref(w.main, "refs/heads/worktree-f") and has_ref(w.main, "refs/heads/worktree-u")
 
 
-@PENDING
 def test_plan_forces_flight_records_only(w):
     # Given: 已合并的临时 worktree .claude/worktrees/wf_1，未提交改动只有已跟踪的 timeline.md 被改、未跟踪的 gate-report.md
     wt = feature(w, "wf_1", files={"openspec/changes/c/timeline.md": "t0\n", "x.py": "x = 1\n"},
@@ -227,7 +223,6 @@ def test_plan_forces_flight_records_only(w):
     assert has_reason(it, "flight-records"), it
 
 
-@PENDING
 def test_plan_defers_other_dirty_to_user(w):
     # Given: 已合并的 .worktrees/d 里有一个未跟踪的 src/new.py
     wt = feature(w, "d")
@@ -250,7 +245,6 @@ def test_plan_defers_other_dirty_to_user(w):
     assert (wt / "src" / "new.py").is_file() and cmd in res["manual"], res
 
 
-@PENDING
 def test_plan_defers_locked_and_outside_worktrees(w):
     # Given: 已合并且干净的 .worktrees/l 被 lock（reason "agent running"）；另一个已合并且干净的 worktree 在仓库目录之外
     feature(w, "l")
@@ -273,7 +267,6 @@ def test_plan_defers_locked_and_outside_worktrees(w):
     assert (w.main / ".worktrees" / "l").is_dir() and outside.is_dir()
 
 
-@PENDING
 def test_plan_guards_unpushed_submodule_commit(w):
     # Given: 主仓含 mods/sub；change 家 .worktrees/c 在子仓提交了未推送的提交并钉 gitlink；worktree-c 已合入远端 main
     with_sub(w)
@@ -292,7 +285,6 @@ def test_plan_guards_unpushed_submodule_commit(w):
     assert second["tier"] == "safe" and has_reason(second, "submodule"), second
 
 
-@PENDING
 def test_apply_prunes_borrowed_submodule_worktree(w):
     # Given: 家 .worktrees/c（子仓提交未推送）；临时 worktree .claude/worktrees/wf_1 的 mods/sub 是从家子仓借出的 linked worktree；
     #        worktree-wf_1 的提交经 worktree-c 合入远端 main，wf_1 干净，主仓已 fetch
@@ -316,7 +308,6 @@ def test_apply_prunes_borrowed_submodule_worktree(w):
     assert home.is_dir()
 
 
-@PENDING
 def test_apply_syncs_target_before_branch_delete(w):
     # Given: worktree-wf_1（无 upstream）经 change 分支 worktree-c（有 upstream）合入远端 main，远端已删 worktree-c；
     #        两者的 worktree 已删除；主 worktree 在 main 上、干净，但落后于 origin/main（2026-11-09 实测形态）
@@ -338,7 +329,6 @@ def test_apply_syncs_target_before_branch_delete(w):
     assert done.index("git merge --ff-only origin/main") < done.index("git branch -d worktree-wf_1"), done
 
 
-@PENDING
 def test_plan_lists_remote_delete_for_user(w):
     # Given: worktree-a 已合入远端 main，远端分支 worktree-a 仍在；主仓已 fetch 并同步
     feature(w, "a")
@@ -355,7 +345,6 @@ def test_plan_lists_remote_delete_for_user(w):
     assert "refs/heads/worktree-a" in g(w.main, "ls-remote", "--heads", "origin")
 
 
-@PENDING
 def test_apply_removes_landed_flight_refs(w):
     # Given: 远端 main 树里有 openspec/changes/c/proposal.md、没有 openspec/changes/d/；本地有 refs/flight/c/S1 与 refs/flight/d/S1
     s = srv(w)
@@ -375,7 +364,6 @@ def test_apply_removes_landed_flight_refs(w):
     assert has_ref(w.main, "refs/flight/d/S1")
 
 
-@PENDING
 def test_plan_refuses_outside_main_worktree(w):
     # Given: 已合并且干净的 .worktrees/a
     wt = feature(w, "a")
