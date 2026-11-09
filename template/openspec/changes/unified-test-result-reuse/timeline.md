@@ -15,3 +15,7 @@
 2026-11-09T14:20:54Z	apply-done	blocked=0 blocking=1
 2026-11-09T14:21:27Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-09T14:21:57Z	ship	ready
+2026-11-09T14:22:42Z	ship	ready
+2026-11-09T14:23:09Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/13
+2026-11-09T14:48:15Z	final	增量（锚点 9a14b07064，重跑 44 个文件 / 沿用 201 个用例） ok
+2026-11-09T14:48:26Z	ship	ready
