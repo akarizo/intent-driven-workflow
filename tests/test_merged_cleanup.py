@@ -267,6 +267,33 @@ def test_plan_defers_locked_and_outside_worktrees(w):
     assert (w.main / ".worktrees" / "l").is_dir() and outside.is_dir()
 
 
+def test_plan_defers_locked_missing_worktree(w):
+    # Given: 已合并的 .worktrees/l 被 lock（reason "agent running"）后目录被 rm -rf；另有已合并且干净的 .worktrees/a
+    import shutil
+    feature(w, "l")
+    land(w, "worktree-l")
+    feature(w, "a")
+    land(w, "worktree-a")
+    sync(w)
+    g(w.main, "worktree", "lock", "--reason", "agent running", ".worktrees/l")
+    shutil.rmtree(str(w.main / ".worktrees" / "l"))
+
+    # When: 运行 plan 与 apply --no-fetch，再执行该项的 manual 命令
+    out = plan(w)
+    rc, res = apply(w, "--no-fetch")
+    lk = item(out, "worktree", ".worktrees/l")
+    fix = subprocess.run(lk["command"], shell=True, cwd=str(w.main), capture_output=True, text=True)
+
+    # Then: 不崩溃；l 为 manual，原因含 locked 与 missing；其他项照常判定并执行；manual 命令能清掉该登记
+    assert lk["tier"] == "manual" and has_reason(lk, "locked") and has_reason(lk, "missing"), lk
+    assert lk["command"] in out["manual"], out["manual"]
+    assert item(out, "worktree", ".worktrees/a")["tier"] == "safe"
+    assert rc == 0 and res["failed"] == [], res
+    assert not (w.main / ".worktrees" / "a").exists()
+    assert fix.returncode == 0, fix.stderr
+    assert ".worktrees/l" not in g(w.main, "worktree", "list")
+
+
 def test_plan_guards_unpushed_submodule_commit(w):
     # Given: 主仓含 mods/sub；change 家 .worktrees/c 在子仓提交了未推送的提交并钉 gitlink；worktree-c 已合入远端 main
     with_sub(w)

@@ -193,7 +193,11 @@ def worktree_item(ctx, wt):
     state = ctx.merged(wt["head"])
     item["merged"] = state
     manual = False
-    changes = status_paths(path)
+    missing = not os.path.isdir(path)  # locked 的 worktree 目录被删，git 不报 prunable
+    changes = [] if missing else status_paths(path)
+    if missing:
+        item["reasons"].append("missing: worktree 目录已不存在，只剩 git 登记")
+        manual = True
     if changes:
         item["force"] = True
         if all(is_flight(p) for p in changes):
@@ -202,7 +206,8 @@ def worktree_item(ctx, wt):
             item["dirty"] = changes
             item["reasons"].append("dirty: %d 处未提交改动，需人工确认后再删" % len(changes))
             manual = True
-    manual = check_subs(ctx, path, item) or manual
+    if not missing:
+        manual = check_subs(ctx, path, item) or manual
     if wt["locked"]:
         item["reasons"].append("locked: " + wt["locked"])
         manual = True
