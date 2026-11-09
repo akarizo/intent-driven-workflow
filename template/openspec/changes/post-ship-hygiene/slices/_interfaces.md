@@ -18,3 +18,9 @@
 - `template/.claude/commands/pr-ship.md` step 2b 记忆层沉淀
 - `template/.claude/commands/claudemd-commit.md` 自动录入与较大差异对齐
 - `template/.claude/claudemd-standard.md` §13 E 类反复错误
+
+## S2
+文档类切片，无代码符号。
+- `template/.claude/commands/clean-after-merged.md` 新命令，调用 S1 的 `merged-cleanup.py` plan / apply
+- `template/.claude/skills/openspec-git-discipline/SKILL.md` 清理条款
+- `CLAUDE.md` / `template/CLAUDE.md.snippet` 铁律 6 授权例外；`README.md` / `docs/WORKFLOW_zh.md` / `install.sh` 同步
