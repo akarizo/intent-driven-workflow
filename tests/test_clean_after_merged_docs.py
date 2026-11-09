@@ -4,11 +4,8 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
 import re
 
-import pytest
-
 from conftest import ROOT
 
-PENDING = pytest.mark.xfail(strict=True, reason="change post-ship-hygiene S2 未实现")
 CLAUDE = ROOT / "template" / ".claude"
 
 
@@ -31,7 +28,6 @@ def iron6(text):
     return [line for line in text.splitlines() if line.startswith("6. Git 边界")]
 
 
-@PENDING
 def test_command_runs_plan_then_apply():
     # Given: template/.claude/commands/clean-after-merged.md
     text = read(CLAUDE / "commands" / "clean-after-merged.md")
@@ -51,7 +47,6 @@ def test_command_runs_plan_then_apply():
         assert k in guard, k
 
 
-@PENDING
 def test_iron_rule_grants_cleanup_exception():
     # Given: 根 CLAUDE.md 与 template/CLAUDE.md.snippet
     root = read(ROOT / "CLAUDE.md")
@@ -67,7 +62,6 @@ def test_iron_rule_grants_cleanup_exception():
     assert len(snippet.encode("utf-8")) <= 8 * 1024
 
 
-@PENDING
 def test_git_discipline_points_to_command():
     # Given: openspec-git-discipline/SKILL.md
     text = read(CLAUDE / "skills" / "openspec-git-discipline" / "SKILL.md")
@@ -84,7 +78,6 @@ def test_git_discipline_points_to_command():
     assert "/clean-after-merged" in carve
 
 
-@PENDING
 def test_docs_list_new_command():
     # Given: README.md、install.sh、docs/WORKFLOW_zh.md
     readme = read(ROOT / "README.md")
@@ -100,7 +93,6 @@ def test_docs_list_new_command():
     assert "/clean-after-merged" in workflow
 
 
-@PENDING
 def test_readme_describes_auto_sedimentation():
     # Given: README.md
     readme = read(ROOT / "README.md")

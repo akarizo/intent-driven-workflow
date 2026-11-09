@@ -18,8 +18,8 @@ def test_docs_describe_test_tiers():
 
     # Then: 命令文档含四个子命令、/opsx-mini 与门禁分层耗时 tier_sec；schema 含 gate.integration、gate.integration_skip、unit.cmd；
     #       propose 命令与同名 skill 都含「先定层」；verify 命令与同名 skill 都含 G10 与 G11；
-    #       TDD skill 含「先定层」与「3 秒」；slice-executor 含 G12；README 含 /test-tiers 与「16 个 slash 命令」；
-    #       install.sh 含「16 个 slash command」；CLAUDE.md.snippet 含 test-tiers.json
+    #       TDD skill 含「先定层」与「3 秒」；slice-executor 含 G12；README 含 /test-tiers 与「17 个 slash 命令」；
+    #       install.sh 含「17 个 slash command」；CLAUDE.md.snippet 含 test-tiers.json
     for word in ("test-tiers.py probe", "render", "check", "allow-slow", "/opsx-mini", "tier_sec"):
         assert word in cmd, word
     for word in ("gate.integration", "gate.integration_skip", "unit.cmd"):
@@ -32,6 +32,6 @@ def test_docs_describe_test_tiers():
     assert "先定层" in tdd and "3 秒" in tdd
     assert "G12" in read("template/.claude/agents/slice-executor.md")
     readme = read("README.md")
-    assert "/test-tiers" in readme and "16 个 slash 命令" in readme
-    assert "16 个 slash command" in read("install.sh")
+    assert "/test-tiers" in readme and "17 个 slash 命令" in readme
+    assert "17 个 slash command" in read("install.sh")
     assert "test-tiers.json" in read("template/CLAUDE.md.snippet")
