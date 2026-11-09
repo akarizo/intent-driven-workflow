@@ -125,8 +125,8 @@ def has_reason(it, tag):
     return any(r.startswith(tag) for r in it["reasons"])
 
 
-def with_sub(w):
-    """主仓加 submodule mods/sub（子仓远端 sub.git）并推送。"""
+def with_sub(w, path="mods/sub"):
+    """主仓加 submodule（缺省 mods/sub，子仓远端 sub.git）并推送。"""
     seed = w.tmp / "sub-seed"
     seed.mkdir()
     g(seed, "init", "-q", "-b", "main")
@@ -134,20 +134,20 @@ def with_sub(w):
     commit(seed, {"a.txt": "a\n"}, "init")
     sub_origin = w.tmp / "sub.git"
     g(w.tmp, "clone", "-q", "--bare", str(seed), str(sub_origin))
-    g(w.main, "submodule", "add", "-q", str(sub_origin), "mods/sub")
+    g(w.main, "submodule", "add", "-q", str(sub_origin), path)
     g(w.main, "commit", "-q", "-m", "add sub")
     g(w.main, "push", "-q", "origin", "main")
 
 
-def home_with_sub_commit(w):
+def home_with_sub_commit(w, path="mods/sub"):
     """change 家 .worktrees/c：在自己的 linked worktree 里初始化子仓，提交一个未推送的子仓提交并钉 gitlink。"""
     g(w.main, "worktree", "add", "-q", ".worktrees/c", "-b", "worktree-c")
     home = w.main / ".worktrees" / "c"
     g(home, "submodule", "update", "--init", "-q")
-    sub = home / "mods" / "sub"
+    sub = home / path
     ident(sub)
     sha = commit(sub, {"b.txt": "b\n"}, "sub: b")
-    g(home, "add", "mods/sub")
+    g(home, "add", path)
     g(home, "commit", "-q", "-m", "bump sub")
     return home, sha
 
@@ -406,6 +406,23 @@ def test_plan_refuses_outside_main_worktree(w):
         assert r.returncode == 2 and out["ok"] is False, r.stdout
         assert any(x.startswith("not-main-worktree") for x in out["reasons"]), out
     assert wt.is_dir() and has_ref(w.main, "refs/heads/worktree-a")
+
+
+def test_plan_guards_non_ascii_submodule_path(w):
+    # Given: 子仓路径含中文（mods/子仓）；change 家 .worktrees/c 的子仓有未推送提交，且只残留飞行记录改动；worktree-c 已合入远端 main
+    with_sub(w, "mods/子仓")
+    home, _ = home_with_sub_commit(w, "mods/子仓")
+    write(home / "openspec/changes/c/timeline.md", "t\n")
+    land(w, "worktree-c")
+    sync(w)
+
+    # When: 运行 plan
+    it = item(plan(w), "worktree", ".worktrees/c")
+
+    # Then: 子仓不因 core.quotePath 转义而漏判：manual + force，原因以 unpushed-submodule 开头且含 mods/子仓
+    assert (it["tier"], it["force"]) == ("manual", True), it
+    assert any(r.startswith("unpushed-submodule") and "mods/子仓" in r for r in it["reasons"]), it
+
 
 def test_plan_in_project_that_is_a_submodule(w):
     # Given: 本项目（origin.git）作为父仓 parent 的 submodule proj 检出（gitdir 在 parent/.git/modules/proj）；

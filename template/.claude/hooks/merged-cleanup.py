@@ -151,7 +151,9 @@ def is_flight(p):
 def check_subs(ctx, wt, item):
     """D5：已填充子仓 → force；子仓库随 W 删除且有未推送提交 → manual。返回是否命中 manual。"""
     populated = []
-    for line in (out(wt, "ls-files", "-s") or "").splitlines():
+    # -z：不加时非 ASCII 路径会被 core.quotePath 转义，子仓漏判 → unpushed-submodule 防护被跳过
+    rc, so, _ = run(wt, "ls-files", "-s", "-z")
+    for line in (so if rc == 0 else "").split("\0"):
         meta, _, path = line.partition("\t")
         if meta.startswith("160000 ") and os.path.exists(os.path.join(wt, path, ".git")):
             populated.append(path)
@@ -282,8 +284,8 @@ def plan_sync(ctx, warnings):
 
 
 def landed_changes(ctx):
-    names = out(ctx.root, "ls-tree", "-r", "--name-only", ctx.target_ref) or ""
-    return set(m.group(1) for m in (CHANGE_RE.search(p) for p in names.splitlines()) if m)
+    rc, names, _ = run(ctx.root, "ls-tree", "-r", "-z", "--name-only", ctx.target_ref)
+    return set(m.group(1) for m in (CHANGE_RE.search(p) for p in (names if rc == 0 else "").split("\0")) if m)
 
 
 def compute(ctx):
