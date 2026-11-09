@@ -5214,6 +5214,7 @@ NO_ANCHOR = "final:no-anchor"
 ANCHOR_HOPS = "final:anchor-hops"
 DECLARED_GLOBAL = "declared-global:"  # 触发项前缀 + gate-scope.json 的 global glob（design D5）
 BASELINE_NO_NODES = "final:baseline-missing-failed-nodes"
+BASELINE_NODES_IMPACTED = "final:baseline-nodes-only-impacted"  # 预存红只有 nodeid、gate.impacted 无法差分
 UNREPRODUCIBLE = "final:gate-test-unreproducible"
 
 
@@ -5248,6 +5249,8 @@ def _full_triggers(root, delta, anchor, baseline, gate, tier_rel=None, decl_rels
     bt = (baseline or {}).get("test") or {}
     if not impacted and bt.get("failed") and not isinstance(bt.get("failed_nodes"), list):
         trig.append(BASELINE_NO_NODES)
+    if impacted and bt.get("failed_form") == "nodes" and bt.get("failed_nodes"):
+        trig.append(BASELINE_NODES_IMPACTED)  # impacted 按 junit 清单差分，nodeid 形式预存红只能走全量 + _nodes_verdict
     delta = list(delta or [])
     trig.extend(p for p in delta if _global_file(p))
     dg = [g for g in declared_global if any(fnmatch.fnmatchcase(p, g) for p in delta)]
@@ -5296,9 +5299,11 @@ def _full_why(root, full, pick, baseline, snap_why, impacted=False, gate=None, t
         return "锚点链已达上限 %d 代（anchor_max_hops）" % hops_cap, []
     if first == BASELINE_NO_NODES:
         return "基线缺 failed_nodes（有预存红），重跑 baseline", []
+    if first == BASELINE_NODES_IMPACTED:
+        return "基线预存红只有 nodeid 形式，gate.impacted 无法按 nodeid 差分，改走全量", []
     if first == UNREPRODUCIBLE:
         return _unreproducible_why(root, gate or {}), []
-    files = [t for t in trig if t not in (NO_ANCHOR, BASELINE_NO_NODES, UNREPRODUCIBLE)
+    files = [t for t in trig if t not in (NO_ANCHOR, BASELINE_NO_NODES, BASELINE_NODES_IMPACTED, UNREPRODUCIBLE)
              and not t.startswith(DECLARED_GLOBAL)]
     glob = [p for p in files if _global_file(p)]
     if glob:
