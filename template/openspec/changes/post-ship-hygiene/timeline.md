@@ -8,3 +8,5 @@
 2026-11-09T03:31:23Z	review	findings=8 blocking=1 deferred=7
 2026-11-09T03:31:52Z	final	red
 2026-11-09T03:31:52Z	apply-done	blocked=1 blocking=1
+2026-11-09T05:09:12Z	gate	S2 ok
+2026-11-09T05:09:18Z	integrate	wave 2 (S2 重派)
