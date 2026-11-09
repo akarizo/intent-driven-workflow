@@ -14,3 +14,4 @@
 2026-11-09T05:10:15Z	apply-done	blocked=0 blocking=0
 2026-11-09T05:11:49Z	ship	ready
 2026-11-09T05:11:55Z	ship	ready
+2026-11-09T05:14:01Z	final	增量（锚点 1fd5ee8213，重跑 4 个文件 / 沿用 507 个用例） ok
