@@ -2,8 +2,6 @@
 import json
 import os
 
-import pytest
-
 from final_helpers import PY, baseline, change_and_commit, final, make_repo
 
 COPY_RESULT = """
@@ -28,7 +26,6 @@ def _copy_check(path):
     return [{"name": "copy", "baseline": None, "final": "python3 tools/copy_result.py %s" % path, "timeout_sec": 120}]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：final 不写 .gate-test-result.json、不设 GATE_TEST_RESULT")
 def test_final_full_hands_result_to_checks(git_repo, tmp_path):
     # Given: 计划配了一项检查，final 命令把 GATE_TEST_RESULT 指向的文件复制到仓库外；baseline 已跑过
     out_path = tmp_path / "result.json"
@@ -48,7 +45,6 @@ def test_final_full_hands_result_to_checks(git_repo, tmp_path):
     assert rec["junit"] and os.path.isfile(rec["junit"]), rec
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：增量 final 不交出合成结局（锚点不带 nodes）")
 def test_final_incremental_result_composes_anchor_outcomes(git_repo, tmp_path):
     # Given: baseline 写下测到依赖图的锚点；之后只提交了 src/a.py 的改动；检查复制结果文件
     out_path = tmp_path / "result.json"
@@ -69,7 +65,6 @@ def test_final_incremental_result_composes_anchor_outcomes(git_repo, tmp_path):
     assert rec["nodes"]["tests/test_b.py::test_b"] == "passed", rec["nodes"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：final 阶段检查拿不到 GATE_TEST_RESULT")
 def test_baseline_checks_get_no_test_result(git_repo, tmp_path):
     # Given: 一项检查的 baseline 与 final 命令都把 GATE_TEST_RESULT 的值追加记到仓库外
     log = tmp_path / "var.log"
@@ -88,7 +83,6 @@ def test_baseline_checks_get_no_test_result(git_repo, tmp_path):
     assert lines[1] and os.path.isfile(lines[1]), lines
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现：gate.test 环境没有 GATE_PHASE / GATE_CHANGE")
 def test_gate_test_env_carries_phase_and_change(git_repo, tmp_path):
     # Given: change c 的 gate.test 是包装脚本：先把 GATE_PHASE 与 GATE_CHANGE 追加写到仓库外，再运行 pytest
     log = tmp_path / "phase.log"
