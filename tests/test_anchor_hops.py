@@ -1,8 +1,6 @@
 """锚点链上限：final 侧（scenario: baseline-anchor-reuse#final-anchor-chain-limit-forces-full）。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL
 from final_helpers import baseline, change_and_commit, final, latest_anchor, make_repo
 
@@ -18,7 +16,6 @@ def set_all_hops(repo, hops):
         f.write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现：锚点没有 hops、不设链长上限")
 def test_final_anchor_chain_limit_forces_full(git_repo):
     # Given: anchor_max_hops 为 2；锚点池里全部锚点的 hops 都是 2；之后提交了 src/a.py 的改动
     (git_repo / "openspec" / "gate-scope.json").write_text(
