@@ -38,6 +38,23 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
    **CLAUDE.md 特别检查**：若工作树或本分支有 `CLAUDE.md` 的改动，跑一次 `python3 .claude/hooks/claudemd-lint.py`；带 ERROR 的 CLAUDE.md 不进 PR——直接停下报告需要先处理的项（不问询，等用户改完重跑）。
 
+2b. **记忆层沉淀（自动，不问询）**
+
+   按 `/claudemd-commit` 的自动模式运行，base = `origin/<target>`。巡视三处来源：
+   - ① 本会话**对话**（含 compact 摘要）：用户给过的规则、纠正、偏好归 D 类；纠正同时是 E 类的证据。
+   - ② 分支 diff：归 A / B 类。
+   - ③ 飞行记录与评审：`openspec/changes/<name>/timeline.md`、`gate-report.md`、`review-findings.json`，以及 `git log` 中的 `fix:` commit，作为 E 类证据。
+
+   产出写成独立 commit：`docs(memory): 沉淀本轮知识（+N / −M）`。写完跑 `python3 .claude/hooks/claudemd-lint.py` 与 `python3 .claude/hooks/memory-lint.py`，须全绿；红了当场减，减完再提交。没有可沉淀的条目时不产生 commit，在 Output Summary 记「无」。
+
+   飞行模式（`slices.json` 存在）下，沉淀 commit 之后重跑：
+   ```bash
+   python3 .claude/hooks/slice-gate.py final --change-dir openspec/changes/<name>
+   ```
+   原因：ship 裁决只容忍 final 之后出现记账文件，CLAUDE.md 不在其列。
+
+   较大差异条目（删除或反转既有含义 / 矛盾 / 动铁律或核心约束 / 写全局 `~/.claude/CLAUDE.md`）不落盘，交给 step 6 写进 PR 正文，由人在 PR review 时裁决。
+
 3. **如有未提交改动，直接 commit（不问询）**
 
    - `git add <仅与本任务相关的文件，不用 -A>`。
@@ -92,6 +109,8 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
      ```
      输出非空时追加到正文（不 ready 时是「## 飞行门禁未全绿」+ reasons；有 blocked 切片时附「### 飞行中记 blocked 的切片」并标 `gate` / `infra`）。不要自己改写或删减 reasons。
    - `openspec/changes/<name>/review-findings.json` 存在（飞行收口写入的 `{blocked, blocking, deferred, fix}`）→ 正文追加一段「## 切片评审（未自动修的 MEDIUM/LOW）」逐条列出 `文件:行号 — 摘要 — 修法`，让人类 reviewer 看得见 AI 放过了什么。
+   - step 2b 有沉淀条目 → 正文追加一段「## 记忆层沉淀」逐条列出 `载体 — 路径 — 动作 — 一行证据`。
+   - step 2b 有较大差异条目 → 正文追加一段「## 记忆层：需与你对齐」逐条列出，注明它们**未落盘**，等你在 PR review 时裁决。
 
    起草完直接用于创建 PR，不再逐项确认。
 
@@ -184,7 +203,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
 11. **收尾**
 
-    打印 Output Summary，直接结束（不再问询），并给出 `gh pr merge <num> --squash --delete-branch` / `glab mr merge <num>` 供用户自己在终端跑（不代用户合并）。
+    打印 Output Summary，直接结束（不再问询），并给出 `gh pr merge <num> --squash --delete-branch` / `glab mr merge <num>` 供用户自己在终端跑（不代用户合并）。合并后在主仓库根运行 `/clean-after-merged` 清理 worktree 与分支。
 
 **Output Summary（命令收尾时打印）**
 
@@ -198,6 +217,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 **review 轮数**: M
 **已自动修复**: X 条 CRITICAL/HIGH
 **评论中列出（未自动修）**: Y 条 MEDIUM/LOW
+**记忆层沉淀**: +N / −M（需对齐 K 条）
 
 下一步:
   - 等 human reviewer / CI
@@ -223,11 +243,11 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 | 上游 | 本命令 (`/pr-ship`) | 下游 |
 | --- | --- | --- |
 | `/opsx-apply` 飞行模式跑完 | ship: commit → PR → self-review → 自动修复（不问询） | 人类 reviewer 看 / 合并 |
-| `/claudemd-commit` 沉淀完知识 | ship: 把 CLAUDE.md 改动也带进同一个 PR | 累积多轮后 `/claudemd-distill` |
+| `/claudemd-commit`：已由 step 2b 内置，单独运行用于 PR 之外的场合 | ship: 2b 沉淀的 CLAUDE.md 改动进同一个 PR | 累积多轮后 `/claudemd-distill` |
 
 典型使用顺序：
 1. `/opsx-apply <change>` → 飞行模式跑完实现 + 测试
-2. `/claudemd-commit` → 把本轮变更里新的约定 / 反模式沉淀到记忆层
-3. `/pr-ship` → ship + 自审 + 自动修复到阻断项清零或跑满 2 轮
-4. 人类 reviewer 看 / 合并到 main
+2. `/pr-ship` → 记忆层沉淀（step 2b）+ ship + 自审 + 自动修复到阻断项清零或跑满 2 轮
+3. 人类 reviewer 看 / 合并到 main
+4. 合并后 `/clean-after-merged` → 清理 worktree 与分支
 5. （合并几轮后）`/claudemd-distill` → 收敛 CLAUDE.md
