@@ -47,6 +47,15 @@
   - 其余增量保持现有格式（含「增量」二字）。
   - 全量原因的固定文字：`无可用候选（锚点池为空）`、`锚点不可用（依赖图未测：<kind>）`、`锚点链已达上限 <K> 代`、`手动要求 --full`、`有测试分层文件（恒全量）`；其余直接取首个候选的拒绝理由。
 
+- **已合回的实际签名（S3，`template/.claude/hooks/slice-gate.py`）**：
+  - `_baseline_full_reason(root, full, tiers, skipped, akey)`：全量原因文字；
+  - `_baseline_candidates(root, old, key, name, full, anchor=None)`：旧基线 -> 锚点 -> 池；
+  - `_baseline_anchor(root, akey, cur_snap, head, change_rel, name, max_hops)`：写锚点基线；
+  - `_try_anchor(root, change_dir, data, cand, extras)`：经锚点增量；
+  - `_test_gate_files(root, gate)`：gate.test 静态闭包文件；
+  - `_try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache, own=False)`：`own=True` 时接受 `test_ok`。
+- **S5 已合回**：只含文档与 `tests/test_runner_contract_docs.py`，无源码接口。
+
 ## S4 提供（S5 写进文档）
 
 ```
