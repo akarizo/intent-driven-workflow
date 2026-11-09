@@ -15,3 +15,8 @@
 2026-11-09T05:11:49Z	ship	ready
 2026-11-09T05:11:55Z	ship	ready
 2026-11-09T05:14:01Z	final	增量（锚点 1fd5ee8213，重跑 4 个文件 / 沿用 507 个用例） ok
+2026-11-09T05:14:09Z	ship	ready
+2026-11-09T05:14:46Z	ship	ready
+2026-11-09T05:14:54Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/12
+2026-11-09T05:24:27Z	final	增量（锚点 a465d455d1，重跑 3 个文件 / 沿用 499 个用例） ok
+2026-11-09T05:25:01Z	ship	ready
