@@ -17,11 +17,16 @@
 # 判据（design D7 / D8）：
 #   人类消息 = type=="user" 且 isMeta 非真、isSidechain 非真、userType=="external"、内容是文本而非 tool_result，
 #              且不含 <local-command-stdout> / <task-notification> / [Request interrupted by user] /
-#              <bash-input> / <bash-stdout> / compact 续写注入等非人类形状。
+#              <bash-input> / <bash-stdout> / compact 续写注入等非人类形状；
+#              另含 human 插话附件 = type=="attachment" 且 isSidechain 非真、attachment.type=="queued_command"、
+#              commandMode=="prompt"、origin.kind=="human"（peer / task-notification / coordinator 等一律不算）。
 #   批准     = 含 <command-name>/opsx-apply（或 /opsx-bulk-apply）；或整条 ≤ 40 字且含批准词。
 #   新鲜度   = 该消息时间 ≥ 计划工件最大 mtime（proposal/design/slices.json/specs/**/spec.md）。
 #              tasks.md 不算计划工件：收口勾选 `- [x]` 是执行记账，勾一下就让批准过期会把自家收口拦死。
 #   多条候选取最新一条。
+#   持续授权 = 主链最后一条 goal_status 附件 met=false（会话 /goal 生效中），豁免新鲜度，优先于批准词；
+#              证据时间取最近一次设立（met=false 且 sentinel），截断找不到则取最后一条。
+# 附件形状（queued_command / goal_status）取自 Claude Code v2.1.319 转录。
 # 只读，不改任何文件。兼容 Python 3.8+，只用标准库。
 import argparse
 import glob
@@ -73,18 +78,43 @@ def iso(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def row_time(row):
+    """行时间戳；附件行缺失时退用附件内的 timestamp。取不到返回 None。"""
+    when = parse_ts(row.get("timestamp"))
+    if when is None and isinstance(row.get("attachment"), dict):
+        when = parse_ts(row["attachment"].get("timestamp"))
+    return when
+
+
+def queued_prompt(row):
+    """human 来源的中途插话附件 → prompt 原文（str / list）；其他形状返回 None。"""
+    if row.get("isSidechain"):
+        return None
+    att = row.get("attachment")
+    if not isinstance(att, dict) or att.get("type") != "queued_command":
+        return None
+    if att.get("commandMode") != "prompt" or (att.get("origin") or {}).get("kind") != "human":
+        return None  # 白名单只放 human：peer / task-notification / coordinator / auto-continuation 都不是人
+    return att.get("prompt")
+
+
 def human_text(row):
     """人类文本消息 → 正文；不是人打的返回 None。"""
-    if not isinstance(row, dict) or row.get("type") != "user":
+    if not isinstance(row, dict):
         return None
-    if row.get("isMeta") or row.get("isSidechain"):
+    if row.get("type") == "attachment":
+        content = queued_prompt(row)
+    elif row.get("type") == "user":
+        if row.get("isMeta") or row.get("isSidechain"):
+            return None
+        if row.get("userType") not in (None, "external"):
+            return None
+        message = row.get("message")
+        if not isinstance(message, dict):
+            return None
+        content = message.get("content")
+    else:
         return None
-    if row.get("userType") not in (None, "external"):
-        return None
-    message = row.get("message")
-    if not isinstance(message, dict):
-        return None
-    content = message.get("content")
     if isinstance(content, str):
         text = content
     elif isinstance(content, list):
@@ -125,31 +155,58 @@ def summarize(text):
     return flat if len(flat) <= SUMMARY_LIMIT else flat[:SUMMARY_LIMIT - 1] + "…"
 
 
-def latest_approval(path):
-    """转录里最新一条人类批准 → (datetime, 摘要, 种类)；没有返回 None。"""
+def load_rows(path):
+    """转录 → 按文件顺序的已解析行；坏行跳过，不因单行崩溃。"""
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         lines = fh.read().splitlines()
-    best = None
+    rows = []
     for line in lines:
         line = line.strip()
         if not line:
             continue
         try:
-            row = json.loads(line)
+            rows.append(json.loads(line))
         except ValueError:
-            continue  # 坏行跳过，不因单行崩溃
+            continue
+    return rows
+
+
+def latest_approval(rows):
+    """转录里最新一条人类批准 → (datetime, 摘要, 种类)；没有返回 None。"""
+    best = None
+    for row in rows:
         text = human_text(row)
         if not text:
             continue
         kind = approval_of(text)
         if not kind:
             continue
-        when = parse_ts(row.get("timestamp"))
+        when = row_time(row)
         if not when:
             continue
         if best is None or when > best[0]:
             best = (when, summarize(text), kind)
     return best
+
+
+def active_goal(rows):
+    """主链会话 /goal 生效中 → (设立时间, 摘要)；未设立 / 已结束返回 None。"""
+    last = since = None
+    for row in rows:
+        if not isinstance(row, dict) or row.get("type") != "attachment" or row.get("isSidechain"):
+            continue
+        att = row.get("attachment") or {}
+        if not isinstance(att, dict) or att.get("type") != "goal_status":
+            continue
+        when = row_time(row)
+        if when is None:
+            continue
+        last = (when, att)
+        if att.get("met") is False and att.get("sentinel"):
+            since = when  # 设立事件
+    if last is None or last[1].get("met") is not False:
+        return None  # met=true（达成 / clear）或缺失都不算生效
+    return (since or last[0]), summarize("/goal " + (last[1].get("condition") or "").strip())
 
 
 def plan_mtime(change_dir):
@@ -162,13 +219,19 @@ def plan_mtime(change_dir):
 
 def verdict(change_dir, session):
     """→ (ok, 证据行, 说明)。ok=False 时说明是给人/模型看的拒绝理由。"""
+    rows = load_rows(session)
+    goal = active_goal(rows)
+    if goal:  # 会话 goal 生效 = 持续授权，豁免新鲜度
+        when, quote = goal
+        return True, "%s · %s" % (iso(when), quote), ""
+
     spec_html = os.path.join(change_dir, "spec.html")
     plan_at = plan_mtime(change_dir)
     hint = ("请人类打开飞行计划 %s 亲自确认，然后由人类显式发出 `/opsx-apply %s`（本门禁只认转录里的人类消息，"
             "模型不得自证；人直接回一句「批准」/「起飞」同样成立）。"
             % (spec_html, os.path.basename(os.path.normpath(change_dir))))
 
-    approval = latest_approval(session)
+    approval = latest_approval(rows)
     if not approval:
         return False, "", "未找到人类批准证据（转录 %s 里没有人类发出的 /opsx-apply，也没有批准词）。%s" % (session, hint)
 
