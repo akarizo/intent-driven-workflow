@@ -1,0 +1,21 @@
+<!-- timeline: ISO时间\t事件\t备注（由 hooks 自动追加） -->
+2026-11-09T12:57:25Z	baseline	exit 0, 294.0s ok；verify 推导 5 片
+2026-11-09T13:12:49Z	approve	2026-11-09T13:11:59Z · 起飞 授权提交
+2026-11-09T13:31:06Z	gate	S1 ok
+2026-11-09T13:31:20Z	integrate	wave 1
+2026-11-09T13:45:39Z	gate	S2 ok
+2026-11-09T13:45:39Z	gate	S4 ok
+2026-11-09T13:45:48Z	integrate	wave 2
+2026-11-09T14:02:18Z	gate	S3 ok
+2026-11-09T14:02:18Z	gate	S5 ok
+2026-11-09T14:02:34Z	integrate	wave 3
+2026-11-09T14:20:52Z	fix	blocking=1
+2026-11-09T14:20:52Z	review	findings=26 blocking=1 deferred=25
+2026-11-09T14:20:52Z	final	同树沿用 9a14b07064 ok
+2026-11-09T14:20:54Z	apply-done	blocked=0 blocking=1
+2026-11-09T14:21:27Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-09T14:21:57Z	ship	ready
+2026-11-09T14:22:42Z	ship	ready
+2026-11-09T14:23:09Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/13
+2026-11-09T14:48:15Z	final	增量（锚点 9a14b07064，重跑 44 个文件 / 沿用 201 个用例） ok
+2026-11-09T14:48:26Z	ship	ready

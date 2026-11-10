@@ -51,6 +51,12 @@ metadata:
    `preflight` 同时复核选测范围（与 lint 同一口径：按提供方重算，未声明判红、全选须逐项有理由；内建提供方在此给出 final 的精确预测）；baseline 开跑前也做同一复核，未过不写运行标记、不运行。
    **final 开跑前复核**：final 在跑任何测试之前按提供方重算全选触发项（builtin 用内建规则，cmd 重跑命令），与 approve 提交时的 `gate.scope_full_reason` 对账——有未表态的全选触发项、提供方失败、或理由在批准后被改 → `G2 scope` 红、不跑测试，按「门禁红不收口」处理（回 propose 补理由并重新批准）；`final --full` 豁免（显式全量只会多跑）。
 
+   preflight 绿后运行：
+   ```bash
+   python3 .claude/hooks/flight-doctor.py forecast --change-dir openspec/changes/<name>
+   ```
+   把它的输出（测试成本预告：baseline / final 各走全量还是增量、原因与约耗秒数）原样打印。只预告，不阻断：结论不影响是否起飞。
+
 3. **记录批准事件并提交飞行记录**
    ```bash
    python3 .claude/hooks/timeline.py record approve --change-dir openspec/changes/<name> --note "<批准证据>"
@@ -74,7 +80,9 @@ metadata:
    python3 .claude/hooks/timeline.py record apply-done --change-dir openspec/changes/<name>
    python3 .claude/hooks/session-decompose.py --session <当前会话 jsonl，取 ~/.claude/projects/<slug>/ 下最新> --workflow <Workflow 返回的 Transcript dir> --expect-models '<.flight 里的 models>'
    python3 .claude/hooks/timeline.py report --change-dir openspec/changes/<name>
+   python3 .claude/hooks/flight-doctor.py cost --change-dir openspec/changes/<name>
    ```
+   `cost` 在 timeline report 之后运行，原样打印本 change 的全量 / 增量次数与每次全量的原因归因（必要 / 可避免），恒 exit 0。
    `--expect-models` 机械对账：非 0 → 铁律 11 违规，收口报告点名不符的 agent，并把它作为一条 `severity: HIGH` 追加进 `review-findings.json.blocking`，由 `ship` 机械判 draft。打印飞行记录（含各 agent 实际模型）；把 `{blocked, blocking, deferred, fix}` 原样写入 `openspec/changes/<name>/review-findings.json`（`blocked` 带 `kind: gate | infra`）；删除 `.flight`；跑 `python3 .claude/hooks/slice-gate.py ship --change-dir openspec/changes/<name>`（只读 gate-report.md 每切片最新行 + final 对齐 HEAD + blocking；退出 0 ready / 1 draft；`final 过期` → 重跑 final 再 ship；同树会秒回：代码树、计划、命令都没变且上次绿就沿用结论；内容变了走增量，只重跑受影响的测试）；把门禁绿的切片在 `tasks.md` 里勾选；飞行记录文件单独 `chore(flight)` commit。
 
 6. **不问，直接进入 `/pr-ship`**

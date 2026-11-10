@@ -59,7 +59,8 @@ metadata:
    - 一次性写出全部该建的工件。
    - tasks 阶段额外产出：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 生成的 `tasks.md`。
    - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。部件形态（`test-tiers.json` 顶层是 `parts`）下 `gate.test` 改为等于 `python3 .claude/hooks/test-tiers.py run unit`、不得写 `gate.impacted`，骨架落在某部件的单元层或已选区域。
-   - 选测范围声明（契约 v2）：openspec 根的 `gate-scope.json` 恰为 `{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `python3 <路径>/test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测，按改动选测试范围、可能退化为全选）二选一，计划里的 `gate.scope`（cmd）优先于它。未声明 → lint 判红「未声明选测范围」；本 change 正在建立 `gate-scope.json` 时，按伪触发项 `scope:undeclared` 在 `gate.scope_full_reason` 写理由。cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单文件，一行一条）与 `GATE_SCOPE_CHANGE`（change 目录相对 git 顶层的路径），命令往 `GATE_SCOPE_OUT` 指向的文件写 `{full, triggers, count}`，失败即红；builtin 在进程内预测 final 会不会全选，计划期取不到依赖图锚点时把 owns 内可疑文件列为待定项（可预写理由）。lint 报「选测退化为全选」时，先看触发项是不是工作流自己的元数据改动——能修选测就修选测；不能修再在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），由人类在 spec.html 看着触发项与理由放行；理由以 approve 提交为准，批准后再改会让 final 的开跑前复核判红。
+   - 选测范围声明（契约 v2）：openspec 根的 `gate-scope.json` 恰含 `cmd` 或 `builtin` 之一：`{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `python3 <路径>/test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测，按改动选测试范围、可能退化为全选），另可选 `global` / `blind` / `anchor_max_hops`（见 `.claude/flight-runner-contract.md`），计划里的 `gate.scope`（cmd）优先于它。未声明 → lint 判红「未声明选测范围」；本 change 正在建立 `gate-scope.json` 时，按伪触发项 `scope:undeclared` 在 `gate.scope_full_reason` 写理由。cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单文件，一行一条）与 `GATE_SCOPE_CHANGE`（change 目录相对 git 顶层的路径），命令往 `GATE_SCOPE_OUT` 指向的文件写 `{full, triggers, count}`，失败即红；builtin 在进程内预测 final 会不会全选，计划期取不到依赖图锚点时把 owns 内可疑文件列为待定项（可预写理由）。lint 报「选测退化为全选」时，先看触发项是不是工作流自己的元数据改动——能修选测就修选测；不能修再在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），由人类在 spec.html 看着触发项与理由放行；理由以 approve 提交为准，批准后再改会让 final 的开跑前复核判红。
+   - 新写的 gate.test 包装脚本必须转发 `FLIGHT_PLUGIN_PATH` / `FLIGHT_PYTEST_ARGS`，用 `$GATE_CHANGE` 取 change 名，不写死 change 名（见 `.claude/flight-runner-contract.md`）。
    - 随后：
      ```bash
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>
@@ -82,15 +83,22 @@ metadata:
    配置了测试分层（openspec 根有 `test-tiers.json`）时，baseline 只跑单元层（`gate.test`，带探针判 G10 慢单测 / G11 单测不纯，任一失败即基线红）与 `gate.integration` 选中的区域（verify 之后、检查之前），不走增量（与 `--full` 相同），未选区域不跑；输出带分层耗时 `tier_sec`。
    baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
    脚本自己判断跑全量还是**增量**，并跳过重复的运行：
-   - 自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；
-   - **跨 change** 复用：同一仓库其他 change 跑过的全绿全量（没有预存红），命令指纹相同、代码树之差只有测试文件时同样复用；基线池在 git common dir 下；
+   候选依次是本 change 旧基线 → 锚点 → 基线池：
+   - **旧基线**：自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；旧基线红但测试部分有效（`test_ok` 为真）时按部件复用测试部分，verify / lint / typecheck / 检查照常判定；本 change 目录里不在 gate.test 静态 shell 闭包内的门禁脚本（如只被 gate.lint 引用的）改动不让测试结论失效；
+   - **锚点**（跨 change 也可）：锚点池里命令指纹与分层指纹相同、测到依赖图、未达锚点链上限（`anchor_max_hops`，缺省 5）的锚点，取 |Δ| 最小的；Δ 命中全量触发项（全局文件、`gate-scope.json` 声明的 `global` 等）→ 跳过，理由进 `reuse_skipped`；否则按依赖图只补跑与 final 同一选择集合（依赖与 Δ 相交的测试文件、Δ 里的测试文件、锚点失败所在的文件、盲区与声明的 `blind`），预存红按 nodeid 记进 `test.failed_nodes`，verify 全部重跑；**跨 change 带预存红的结论只经锚点复用**，别人的红一定被重跑、按本次结果记录；
+   - **基线池**（**跨 change**）：同一仓库其他 change 跑过的全绿全量（没有预存红），命令指纹相同、代码树之差只有测试文件时同样复用；基线池在 git common dir 下；
    - 代码树完全没变、命令也没变时，lint / typecheck 沿用上次结论；
    - 全量是直接的 pytest 调用时，只跑若干测试文件的 verify 从全量的 junit 推导，不再单独运行。
    **改完计划后重跑 `slice-gate.py baseline`**，由脚本判全量或增量；模型不自行判断要不要重跑，preflight 会按内容判基线是否过期。
    `--full` 强制全量：仓外环境（数据仓、解释器）变了、被 source 的门禁脚本改了，或 lint 扫描本 change 计划工件目录时用。
    baseline 结束（后台通知）时只报告一行：
-   - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」或「基线绿（增量：复用 <change> 的全量，补跑 n 个测试文件 t 秒；预存红 k 条）」；
+   - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」或「基线绿（增量：复用 <change> 的全量，补跑 n 个测试文件 t 秒；预存红 k 条）」或「基线绿（增量：经锚点 <change>@<commit>，补跑 n 个测试文件 t 秒；预存红 k 条）」；
    - 退出非 0 → **停下报告** stdout 的 `reasons`，并说明：人类修 `gate.test` / `verify` / 环境后重跑本步；修改涉及计划文件（proposal / design / slices.json / specs / 切片包）时重新渲染 spec.html（step 4）并重新批准。
+   报告行之后运行：
+   ```bash
+   python3 .claude/hooks/flight-doctor.py forecast --change-dir openspec/changes/<name>
+   ```
+   把它打印的一行测试成本预告原样转述在报告行后。只预告，不阻断：预告 final 会全量也照常交接，原因与修法供人类审批时参考。
 
 6. **收尾**
    ```bash
