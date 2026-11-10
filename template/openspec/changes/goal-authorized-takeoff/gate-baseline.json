@@ -1,0 +1,66 @@
+{
+  "commit": "4c91dc6a31e80ce45eb786cf17465e8c8516a49b",
+  "at": "2026-11-10T00:59:41Z",
+  "plan_sha": "1731259dbf71a5e1af9e680726e95f97c787d945",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 529.9
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_goal_takeoff.py tests/test_approval_gate.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_install.py tests/test_agents_workflow.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_gate_checks_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_ship_memory_docs.py",
+      "derived": "full"
+    }
+  },
+  "change": "goal-authorized-takeoff",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-goal-as-standing-takeoff-approval.md": "b40b7d814c66bbca89429b6a3f7be2885034c31b",
+    "tests/test_goal_takeoff.py": "c8f35ad594195fdbc4191129d5fa6f62e831f913",
+    "tests/test_goal_takeoff_docs.py": "7c1bfbc02849e161b2293aff367fa2503fd2d672"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "unified-test-result-reuse",
+      "commit": "4c91dc6a31e8",
+      "reason": "有非测试文件改动：template/openspec/adr/DRAFT-baseline-reuse-via-dependency-anchor.md, template/openspec/adr/DRAFT-gate-test-result-handoff-and-runner-contract.md, template/openspec/adr/DRAFT-goal-as-standing-takeoff-approval.md"
+    },
+    {
+      "change": "post-ship-hygiene",
+      "commit": "3bc852cf0d96",
+      "reason": "有非测试文件改动：CLAUDE.md, README.md, docs/WORKFLOW_zh.md, docs/superpowers/backlog/2026-11-09-slice-owns-pinned-tests.md, install.sh, template/.claude/claudemd-standard.md, template/.claude/commands/claudemd-commit.md, template/.claude/commands/clean-after-merged.md"
+    },
+    {
+      "change": "submodule-aware-flight",
+      "commit": "9f0dd125fe40",
+      "reason": "有非测试文件改动：CLAUDE.md, README.md, docs/WORKFLOW_zh.md, docs/superpowers/backlog/2026-11-09-slice-owns-pinned-tests.md, install.sh, template/.claude/agents/integrator.md, template/.claude/agents/slice-executor.md, template/.claude/claudemd-standard.md"
+    },
+    {
+      "change": "scope-guard-enforced",
+      "commit": "325adcf2d51c",
+      "reason": "有非测试文件改动：CLAUDE.md, README.md, docs/WORKFLOW_zh.md, docs/superpowers/backlog/2026-11-09-slice-owns-pinned-tests.md, install.sh, template/.claude/agents/integrator.md, template/.claude/agents/slice-executor.md, template/.claude/claudemd-standard.md"
+    },
+    {
+      "change": "scope-fallback-guard",
+      "commit": "471aa98eb363",
+      "reason": "有非测试文件改动：CLAUDE.md, README.md, docs/WORKFLOW_zh.md, docs/superpowers/backlog/2026-11-09-slice-owns-pinned-tests.md, install.sh, template/.claude/agents/integrator.md, template/.claude/agents/slice-executor.md, template/.claude/claudemd-standard.md"
+    }
+  ]
+}
