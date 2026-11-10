@@ -1,11 +1,8 @@
 """propose 收尾 / apply 自检 / 铁律文本写明会话 /goal（scenario: goal-takeoff-authorization#propose-continues-under-goal、
 #apply-and-iron-rule-name-goal，共 2 条）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
 
-PENDING = pytest.mark.xfail(strict=True, reason="change goal-authorized-takeoff S2 未实现")
 CLAUDE = ROOT / "template" / ".claude"
 
 
@@ -21,7 +18,6 @@ def rule7(text):
     return next(line for line in text.splitlines() if line.startswith("7. "))
 
 
-@PENDING
 def test_propose_continues_under_goal():
     # Given: /opsx-propose 命令与同名 skill
     docs = [read(CLAUDE / "commands" / "opsx-propose.md"), read(CLAUDE / "skills" / "openspec-propose" / "SKILL.md")]
@@ -38,7 +34,6 @@ def test_propose_continues_under_goal():
         assert "即视为批准" not in t
 
 
-@PENDING
 def test_apply_and_iron_rule_name_goal():
     # Given: apply 命令与同名 skill、根 CLAUDE.md 与模板 snippet、README 与 WORKFLOW_zh
     applies = [read(CLAUDE / "commands" / "opsx-apply.md"), read(CLAUDE / "skills" / "openspec-apply-change" / "SKILL.md")]

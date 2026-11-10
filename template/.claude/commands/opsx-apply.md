@@ -22,7 +22,7 @@ description: 飞行模式 apply：批准后从门禁 lint 直跑到 PR，中途�
    ```bash
    python3 .claude/hooks/takeoff-gate.py --change-dir openspec/changes/<name>   # exit 3 = 没有人类批准 / 批准过期
    ```
-   - `exit 0` → stdout 是人类批准证据，原样留着给 step 4 的 approve 事件。
+   - `exit 0` → stdout 是批准证据：人类消息（含中途插话），或会话 `/goal` 生效（人类持续授权，豁免新鲜度，摘要以 `/goal` 开头）。原样留着给 step 4 的 approve 事件。
    - `exit ≠ 0` → **停下报告**：打印 `openspec/changes/<name>/spec.html` 的绝对路径，说明「起飞需要你自己发出 `/opsx-apply <change>`」，**不进入任何后续步骤、不派发任何 agent**。
 
 1. **选 change**
