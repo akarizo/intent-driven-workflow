@@ -6,3 +6,5 @@
 2026-11-10T01:15:37Z	apply-done	blocked=2 blocking=0
 2026-11-10T01:21:05Z	gate	S1 ok
 2026-11-10T01:21:12Z	integrate	wave 1
+2026-11-10T01:23:37Z	gate	S2 ok
+2026-11-10T01:23:45Z	integrate	wave 2
