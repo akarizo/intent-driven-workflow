@@ -1,0 +1,49 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/takeoff-gate.py",
+      "line": 202,
+      "summary": "active_goal 对取不到时间戳的 goal_status 行直接 continue，这一行连 last 也不更新。如果「/goal clear」或「评估达成」那条 met=true 附件恰好既没有行 timestamp 也没有附件 timestamp，last 仍停在之前那条 met=false 上，门禁就继续判持续授权，等于 fail-open。实现与切片包第 2 条「两者都取不到，跳过这一行」一致，所以问题出在包规则本身：goal 是否结束，不应该取决于有没有时间戳。真实转录里出现缺时间戳的概率低，需进一步确认。",
+      "fix": "把「是否生效」和「证据时间」拆开：每条主链 goal_status 都更新 last_att，时间只在取得到时更新 last_when / since。生效判定只看 last_att.get('met') is False；生效但 since 和 last_when 都是 None 时再返回 None（或在证据里标 unknown 时间），保持 fail-closed。顺手在 design D1/D2 补一句这条规则。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_goal_takeoff.py",
+      "line": 89,
+      "summary": "scenario goal-active-approves-without-approval-word 的 Then 要求「证据行含 goal 设立时间」，测试只断言摘要以 /goal 开头，没断言时间。goal-active-waives-freshness 也没验证证据时间取的是设立时刻 16:01:36，而不是最后一条评估 16:47:47。结果是 active_goal 里 since 的整套逻辑（设立事件识别、截断时退用 last）没有任何测试覆盖：把实现改成直接用 last 的时间，5 条用例仍然全绿。",
+      "fix": "按 Then 补断言：第一条断言 stdout 以 goal 附件的时间开头；waives_freshness 断言 stdout 以 '2026-11-09T16:01:36Z · /goal' 开头。另加一条截断用例（只有一条不带 sentinel 的 met=false），断言退用这条的时间。本片规定 MUST NOT 改断言，这些补充应走后续切片或经申报。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/takeoff-gate.py",
+      "line": 206,
+      "summary": "since 只在遇到「met=false 且 sentinel」时更新，遇到 met=true（goal 结束）时不清零。序列「goal A 设立 → A 达成 met=true → 新的 met=false 但没有 sentinel 行」中，证据时间会指向已结束的 goal A 的设立时刻，而摘要取的是最后一条的 condition，时间和摘要对不上。放行结论不受影响，只是飞行记录的证据会误导。",
+      "fix": "在循环里加一行：att.get('met') is True 时令 since = None。这样一个 goal 结束后，旧的设立时间不会被沿用到下一个 goal。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_goal_takeoff.py",
+      "line": 40,
+      "summary": "queued 和 goal 夹具都同时带行 timestamp，queued 还另带附件内 timestamp。row_time 里「行时间戳缺失时退用附件 timestamp」这条分支（切片包第 2、4 条明确要求）没有用例覆盖。",
+      "fix": "补一条用例：queued_command 行去掉顶层 timestamp、只保留附件内的 timestamp，断言 human 插话照样放行，且证据时间等于附件时间。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 2,
+      "summary": "frontmatter description 仍写着「收尾把 spec.html 交给人类审批，起飞需人类自己发 /opsx-apply」。本片新增了 /goal 生效时不交接、直接起飞的分支，命令清单和补全里看到的一句话摘要与正文不再一致。这一行不在切片包列出的改动点里，不阻断。",
+      "fix": "后续片或 PR 收口时在 description 末尾补「（会话 /goal 生效时脚本判定后直接起飞）」。改之前先 grep tests/ 看有没有断言钉住这段 description 的措辞。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 71,
+      "summary": "step 5 仍写「不等它跑完，直接进入 step 6 交接」，而新的 step 6 goal 分支要求「等 baseline 报告一行」再 commit、起飞。字面上两处口径略有出入，好在 step 6 写得更具体，执行时不会走偏。openspec-propose/SKILL.md:79 同一句也是这样。",
+      "fix": "把 step 5 这句改成「不等它跑完，直接进入 step 6（goal 分支在 step 6 内等 baseline 报告）」，命令与 skill 同改。改前同样 grep tests/ 确认没有断言钉住这句原文。"
+    }
+  ],
+  "fix": null
+}

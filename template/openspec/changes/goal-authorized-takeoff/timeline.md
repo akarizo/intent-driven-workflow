@@ -11,3 +11,4 @@
 2026-11-10T01:25:34Z	review	findings=6 blocking=0 deferred=6
 2026-11-10T01:26:10Z	final	增量（锚点 4c91dc6a31，重跑 17 个文件 / 沿用 409 个用例） ok
 2026-11-10T01:26:12Z	apply-done	blocked=0 blocking=0
+2026-11-10T01:27:26Z	ship	ready
