@@ -146,7 +146,7 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main
 
 两个仓库从同一份 `stable-v2.0` 分开维护：
 
-- **本仓（Workflow 版）**：飞行由 Claude Code 的 Workflow 工具调度（`.claude/workflows/opsx-apply.js`），起飞批准 = 你自己发出的 `/opsx-apply`（`takeoff-gate.py` 在会话转录里核验），不需要任何插件。
+- **本仓（Workflow 版）**：飞行由 Claude Code 的 Workflow 工具调度（`.claude/workflows/opsx-apply.js`），起飞批准 = 你自己发出的 `/opsx-apply`（或会话 `/goal` 生效期间的持续授权；`takeoff-gate.py` 在会话转录里核验），不需要任何插件。
 - **Mod 版**：[akarizo/intent-driven-claude-code](https://github.com/akarizo/intent-driven-claude-code)，飞行由 flight 插件的状态机执行（批准带、账本、能力包络、无人值守等）。
 - 两边的通用修复按需互相摘取，PR 里写明来源提交。
 
@@ -317,7 +317,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 
 `<main>` 不靠模型自述：`/opsx-apply` 与 `/pr-ship` 跑 `.claude/hooks/session-model.py` 读会话转录判定（stdout `opus|sonnet|haiku|fable`，exit 3 = 判定不出）。**判定不出不起飞**（需 `/opsx-apply <change> --model=<alias>` 显式指定）；收口 `session-decompose.py --expect-models` 机械对账各 agent 实际模型，不符即非 0，按 draft PR 处置。同日两次实测补充：起飞时模型自己宣告 `fable` 而主模型其实是 Opus；`/opsx-propose` 产出工件后未经人类批准就直冲 `/opsx-apply` 没有停——两处都是"自述式判定"的必然结果，故改为脚本判定。
 
-**两处人类审批不可省**：第一处是**起飞批准**——`.claude/hooks/takeoff-gate.py` 校验会话转录里的**人类消息证据**与新鲜度（PreToolUse hook 注册在 `Workflow|Agent|Task` 上拦未获批准的飞行派发——**它对 `Workflow` 工具是否触发尚未实测**，未触发时由 `/opsx-apply` step 0 的显式自检兜底，exit 3 = 没有批准 / 批准过期），模型自证无效；第二处是 PR review。
+**两处人类审批不可省**：第一处是**起飞批准**——`.claude/hooks/takeoff-gate.py` 校验会话转录里的**人类消息证据**与新鲜度（会话 `/goal` 生效期间视作人类持续授权、豁免新鲜度；人类在模型工作中途插话也算人类消息；PreToolUse hook 注册在 `Workflow|Agent|Task` 上拦未获批准的飞行派发——**它对 `Workflow` 工具是否触发尚未实测**，未触发时由 `/opsx-apply` step 0 的显式自检兜底，exit 3 = 没有批准 / 批准过期），模型自证无效；第二处是 PR review。
 
 > 想用旧的逐 task 阻断式守门？`/opsx-apply --gate=per-task` 走 legacy 路径，见下文「Legacy 模式」。
 

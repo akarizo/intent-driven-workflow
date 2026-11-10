@@ -9,7 +9,7 @@ metadata:
   generatedBy: "1.3.1"
 ---
 
-一次成稿：并行读完全部待建工件的 instruction，再一次性写出全部工件（含切片计划），最后跑一次 `openspec status`。工件写完后渲染审批面板、在后台跑基线门禁，然后硬交接给人类：本 skill 到此结束，起飞由人类自己发出 `/opsx-apply`（`takeoff-gate.py` 机械校验这条批准）。
+一次成稿：并行读完全部待建工件的 instruction，再一次性写出全部工件（含切片计划），最后跑一次 `openspec status`。工件写完后渲染审批面板、在后台跑基线门禁，然后硬交接给人类：本 skill 到此结束，起飞由人类自己发出 `/opsx-apply`（`takeoff-gate.py` 机械校验这条批准）。会话 `/goal` 生效时除外：由 `takeoff-gate.py` 判定后不交接，等 baseline 报告后直接起飞。
 
 **REQUIRED SUB-SKILL：** 建 change 前先用 `openspec-git-discipline` 的 **Worktree Isolation** 节 —— 本 change 的一切产物落在它自己的 `.worktrees/<name>/` worktree 内，主仓库工作区不落产物。
 
@@ -96,7 +96,16 @@ metadata:
    ```bash
    openspec status --change "<name>"
    ```
-   然后**硬交接**（四件事缺一不可）：
+   再跑 `python3 .claude/hooks/takeoff-gate.py --change-dir openspec/changes/<name>`，按结果二选一：
+
+   - **会话 /goal 生效**（exit 0 且 stdout 证据在 ` · ` 之后以 `/goal` 开头）→ **不硬交接**：
+     - 等 baseline 报告一行。绿才继续；红照 step 5 停下报告。
+     - 把计划工件单独 commit（artifacts-only commit）。
+     - 直接按 `/opsx-apply <name>` 的流程起飞，从它的 step 0 开始。
+     - 走哪条分支由脚本判定，模型不自行判断 goal 状态。
+   - **其他情况** → 照下面硬交接。
+
+   **硬交接**（四件事缺一不可）：
 
    1. 打印 `spec.html` 的**绝对路径**（`openspec/changes/<name>/spec.html`，用 `pwd` 拼成绝对路径再打印），请人类打开审阅飞行计划。
    2. 明确一行：**本 skill 到此结束。不得在同一轮继续 `/opsx-apply`；起飞需要你自己发出 `/opsx-apply <name>`（`takeoff-gate.py` 会在转录里核验这条人类批准 + 计划新鲜度，模型自证无效）。**
@@ -105,7 +114,7 @@ metadata:
 
 **Output**
 
-完成后总结：change 名与位置、生成的工件清单、切片数与 wave 数、下一步提示：spec.html 绝对路径 + 「请你自己发出 `/opsx-apply <name>` 起飞」（本 skill 不代跑）。
+完成后总结：change 名与位置、生成的工件清单、切片数与 wave 数、下一步提示：spec.html 绝对路径 + 「请你自己发出 `/opsx-apply <name>` 起飞」（本 skill 不代跑）；走了 goal 分支时改为报告 commit SHA 与已起飞。
 
 **Artifact Creation Guidelines**
 
