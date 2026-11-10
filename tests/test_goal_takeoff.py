@@ -7,11 +7,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-import pytest
-
 from conftest import run_hook
-
-PENDING = pytest.mark.xfail(strict=True, reason="change goal-authorized-takeoff S1 未实现")
 
 LONG_GOAL = ("后续的修订都按你推荐选择最优选择推荐，继续完成，从uat拉取更多的航班进行验证，"
              "至少每个dlib 10-30个，一切稳妥后pr-ship，再发布test环境跑更多的8月份验证，有问题就修，直到逻辑可靠")
@@ -76,7 +72,6 @@ def afa_rows():
     ]
 
 
-@PENDING
 def test_goal_active_approves_without_approval_word(tmp_path):
     # Given: 人类只发过长指令（无 /opsx-apply、无短批准词），随后设立了长条件 goal；计划工件早于 goal
     d = change_dir(tmp_path, "2026-11-09T15:00:00Z")
@@ -94,7 +89,6 @@ def test_goal_active_approves_without_approval_word(tmp_path):
     assert p.stdout.split(" · ", 1)[1].startswith("/goal"), p.stdout
 
 
-@PENDING
 def test_goal_active_waives_freshness(tmp_path):
     # Given: afa 实测序列，计划工件在 16:47:11 又改过（晚于批准与 goal 设立）
     d = change_dir(tmp_path, "2026-11-09T16:47:11Z")
@@ -113,7 +107,6 @@ def test_goal_active_waives_freshness(tmp_path):
     assert h.returncode == 0 and h.stdout.strip() == "", h.stdout
 
 
-@PENDING
 def test_goal_ended_restores_freshness(tmp_path):
     # Given: afa 实测序列与过期的计划 mtime；两种 goal 结束形状（评估达成 / /goal clear）
     d = change_dir(tmp_path, "2026-11-09T16:47:11Z")
@@ -133,7 +126,6 @@ def test_goal_ended_restores_freshness(tmp_path):
         assert "重新批准" in p.stderr
 
 
-@PENDING
 def test_goal_sidechain_ignored(tmp_path):
     # Given: 两份转录只差一处——同一条 met=false 的 goal_status，一份在主链，一份 isSidechain=true；都没有人类批准
     d = change_dir(tmp_path, "2026-11-09T15:00:00Z")
@@ -150,7 +142,6 @@ def test_goal_sidechain_ignored(tmp_path):
     assert ps.returncode != 0, ps.stdout
 
 
-@PENDING
 def test_queued_command_counts_only_human_origin(tmp_path):
     # Given: 计划 00:41 改过；之后只有一条 00:42 的 queued_command「起飞」，没有对应 user 行；五种 origin.kind
     d = change_dir(tmp_path, "2026-11-10T00:41:10Z")
