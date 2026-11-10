@@ -31,7 +31,7 @@ metadata:
    ```bash
    python3 .claude/hooks/takeoff-gate.py --change-dir openspec/changes/<name>   # exit 3 = 没有人类批准 / 批准过期
    ```
-   `exit 0` → stdout 是人类批准证据，留给 step 3 的 approve 事件。`exit ≠ 0` → **停下报告**：打印 `openspec/changes/<name>/spec.html` 的绝对路径，说明「起飞需要你自己发出 `/opsx-apply <change>`」，不进入后续步骤、不派发任何 agent。
+   `exit 0` → stdout 是批准证据：人类消息（含中途插话），或会话 `/goal` 生效（人类持续授权，豁免新鲜度，摘要以 `/goal` 开头）。留给 step 3 的 approve 事件。`exit ≠ 0` → **停下报告**：打印 `openspec/changes/<name>/spec.html` 的绝对路径，说明「起飞需要你自己发出 `/opsx-apply <change>`」，不进入后续步骤、不派发任何 agent。
 
 1. **选 change**
    - 有参数用参数；否则从会话上下文推断；只有一个活跃 change 自动选；歧义 → `openspec list --json` + **AskUserQuestion** 让用户选。

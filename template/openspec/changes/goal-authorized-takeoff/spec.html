@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+goal-authorized-takeoff · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+goal-authorized-takeoff
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">specs</span><span class="chip" data-state="done">adr</span><span class="chip" data-state="done">tasks</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement"><code>/goal</code> 是人类交给会话的持续授权，但起飞门禁（<code>takeoff-gate.py</code>）不认它。2026-11-09 至 11-10，afa 仓库 change <code>tko-ldg-ralt-plus-ground</code>（转录 <code>d2d21d53</code>）实测：</p><p class="why-body">- <strong>11-09 16:01</strong>：人类发出 <code>/goal</code>，条件是「后续的修订都按你推荐选择最优选择推荐，继续完成……一切稳妥后 pr-ship……直到逻辑可靠」。
+- <strong>三次被拦</strong>：模型按 goal 去 UAT 实测，先后三次修订计划（S6 / S7 / S8）。每次计划工件一改，此前的人类批准就「过期」，门禁要人再回「起飞」：
+  - 16:47 被拦，人类 22:59 回「起飞」；
+  - 23:57 被拦，人类 23:58 回「起飞」；
+  - 00:42 被拦，人类 00:45 回「起飞」。
+- <strong>空转</strong>：16:47 被拦后，goal 的 Stop hook 一直判「未达成」。17:36 前后 70 秒内连续空转 16 轮评估，最后进入「Goal paused」。
+- <strong>插话漏判</strong>：00:42 人类在模型工作中途发了一句「起飞」。Claude Code 把它记成 <code>queued_command</code> 附件，不是 <code>user</code> 行，门禁没认，人类 00:45 只好再发一次。</p><p class="why-body">根因：</p><p class="why-body">1. <strong>门禁不认 goal</strong>：批准只认 <code>user</code> 行里的 <code>/opsx-apply</code>，或不超过 40 字、含批准词的短句。goal 记在 <code>goal_status</code> 附件里，条件通常远超 40 字。新鲜度规则对 goal 期间的计划修订照样生效。另一个仓库里，「Goal set: 没问题就起飞，快速交付」这种短条件因为恰好不超过 40 字、又含「起飞」，被当成口头批准放行了。所以 goal 是否放行取决于条件写多长，用户看到的行为前后不一致。
+2. <strong>只看 <code>user</code> 行</strong>：人类在模型工作中途发的消息被记成附件，门禁看不到。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>门禁认 goal</strong>：<code>takeoff-gate.py</code> 新增判据「会话 goal 生效」。</li><li><strong>生效</strong>：转录主链（非 sidechain）里，按文件顺序取最后一条 <code>goal_status</code> 附件，它的 <code>met</code> 为 false。</li><li><strong>生效时</strong>：批准成立，并豁免新鲜度。证据行为 <code>&lt;goal 设立时间&gt; · /goal &lt;条件摘要&gt;</code>。</li><li><strong>结束后</strong>：<code>met</code> 为 true（条件达成后自动清除，或人类执行 <code>/goal clear</code>），回到原判据。</li><li>CLI 模式与 PreToolUse hook 模式用同一套判据。</li><li><strong>中途插话也算人类消息</strong>：<code>queued_command</code> 附件满足 <code>origin.kind == &quot;human&quot;</code> 且 <code>commandMode == &quot;prompt&quot;</code> 时，按人类消息判定，同样套用批准词与新鲜度。其他来源一律不算，包括 <code>peer</code>（其他会话）、<code>task-notification</code>、<code>coordinator</code>、<code>auto-continuation</code>。</li><li><strong>propose 收尾</strong>（<code>/opsx-propose</code> 与 <code>openspec-propose</code> 同改）：先跑 <code>takeoff-gate.py --change-dir</code>。</li><li>证据以 <code>/goal</code> 开头：不硬交接。等 baseline 报告一行，把计划工件单独 commit，然后直接按 <code>/opsx-apply</code> 流程起飞。</li><li>其他情况：照旧硬交接。</li><li><strong>apply step 0</strong>（<code>/opsx-apply</code> 与 <code>openspec-apply-change</code> 同改）：写明 exit 0 的证据也可以来自会话 <code>/goal</code>。</li><li><strong>铁律 7 与说明文档</strong>：根 <code>CLAUDE.md</code>、<code>template/CLAUDE.md.snippet</code>、<code>README.md</code>、<code>docs/WORKFLOW_zh.md</code> 写明「<code>/goal</code> 生效 = 人类持续授权，豁免新鲜度」。</li><li><strong>新 ADR</strong>：部分取代 <code>ADR-DRAFT-gate-evidence-not-self-reported</code> 的决策 4。</li><li><strong>不改</strong>：</li><li>PR review 这道人类审批；</li><li>没有 goal 时的新鲜度规则；</li><li><code>user</code> 行的来源判定（不收紧 <code>origin</code>，用户 2026-11-10 决定）。</li></ul><div class="impact"><span class="tag"><strong>代码</strong>：<code>template/.claude/hooks/takeoff-gate.py</code>。</span><span class="tag"><strong>文档</strong>：</span><span class="tag"><code>template/.claude/commands/opsx-propose.md</code>、<code>template/.claude/skills/openspec-propose/SKILL.md</code>；</span><span class="tag"><code>template/.claude/commands/opsx-apply.md</code>、<code>template/.claude/skills/openspec-apply-change/SKILL.md</code>；</span><span class="tag"><code>CLAUDE.md</code>、<code>template/CLAUDE.md.snippet</code>、<code>README.md</code>、<code>docs/WORKFLOW_zh.md</code>。</span><span class="tag"><strong>ADR</strong>：新增 <code>template/openspec/adr/DRAFT-goal-as-standing-takeoff-approval.md</code>。</span><span class="tag"><strong>测试</strong>：新增 <code>tests/test_goal_takeoff.py</code>、<code>tests/test_goal_takeoff_docs.py</code>。现有 <code>tests/test_approval_gate.py</code> 不改，须保持绿。</span><span class="tag"><strong>下游</strong>：afa 等已安装的仓库要跑 <code>./install.sh --upgrade</code> 才能拿到新门禁。</span><span class="tag"><strong>外部依赖</strong>：依赖 Claude Code 转录字段，已在 v2.1.319 实测：</span><span class="tag"><code>goal_status{met, sentinel, condition}</code>；</span><span class="tag"><code>queued_command{origin.kind, commandMode, prompt}</code>。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>goal-takeoff-authorization</code>：会话 <code>/goal</code> 生效即人类持续授权起飞（豁免新鲜度）；人类中途插话按人类消息判定；propose 收尾与 apply 自检在 goal 生效时不交接给人。</h4><p></p></div><div class="cap-card" data-kind="modified"><span class="cap-kind">Modified</span><h4>无。<code>takeoff-approval</code>（change <code>mechanical-takeoff-gates</code>）没有主 spec（<code>openspec/specs/</code> 不存在），它原有的需求保持不变，本 change 的行为增量以 ADDED 写在新 capability 里。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>goal-takeoff-authorization <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 会话 /goal 生效即为人类持续授权起飞</p><p>会话转录主链上最后一条 <code>goal_status</code> 附件的 <code>met</code> 为 false 时，起飞门禁 SHALL 判批准成立并豁免新鲜度，证据 SHALL 写明 goal 设立时间与 <code>/goal &lt;条件摘要&gt;</code>；goal 达成或被清除（最后一条 <code>met</code> 为 true）后，门禁 MUST 回到原有的人类消息 + 新鲜度判据。
+Feature: /goal 是人亲手交出的授权，门禁不再要人重复回「起飞」
+Rule: 只认 CLI 写下的主链 goal_status 附件，不认模型文本，不认子 agent 转录</p><div class="scenario"><p class="scenario-name">Scenario: goal-active-approves-without-approval-word</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份转录：人类只发过长指令（无 <code>/opsx-apply</code>、无短批准词），随后有一条 <code>goal_status</code> 附件（<code>met: false</code>、<code>sentinel: true</code>、条件为一段超过 40 字的长句），计划工件早于它</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>python3 .claude/hooks/takeoff-gate.py --change-dir &lt;dir&gt; --session &lt;转录&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出码为 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stdout 的证据行含 goal 设立时间，且摘要以 <code>/goal</code> 开头</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: goal-active-waives-freshness</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>人类 15:18 回过「起飞 授权提交」，16:01 设立 goal，此后又有一条 <code>met: false</code> 的评估附件；计划工件在 16:47 又被改过（晚于批准与 goal 设立）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别以 CLI 模式与 hook 模式（<code>Agent</code> 派 <code>slice-executor</code>，prompt 指向该 change）判定</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>CLI 退出码为 0，证据摘要以 <code>/goal</code> 开头</span></li><li><span class="step-key" data-kw="AND">AND</span><span>hook 静默放行（无输出、退出码 0），不再报「批准已过期」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: goal-ended-restores-freshness</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>与上一场景相同的转录与计划 mtime</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>在转录末尾追加一条 <code>met: true</code> 的 <code>goal_status</code>（分别用「评估达成」形状与 <code>/goal clear</code> 形状 <code>met: true, sentinel: true</code>）后再判定</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>追加之前放行；追加之后 CLI 非 0 退出，stderr 含「重新批准」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>两种结束形状结论相同</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: goal-sidechain-ignored</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两份转录，只差一处：同一条 <code>met: false</code> 的 <code>goal_status</code> 附件，一份在主链，一份标着 <code>isSidechain: true</code>；两份都没有人类批准</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别判定</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>主链那份退出码为 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>sidechain 那份非 0 退出——子 agent 转录里的 goal 不代表主会话授权</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 人类中途插话按人类消息判定</p><p>转录里 <code>origin.kind</code> 为 <code>human</code> 且 <code>commandMode</code> 为 <code>prompt</code> 的 <code>queued_command</code> 附件 SHALL 按人类消息参与批准判定（同一批准词与新鲜度规则）；其他来源（<code>peer</code> · <code>task-notification</code> · <code>coordinator</code> · <code>auto-continuation</code>）的 <code>queued_command</code> MUST NOT 构成批准。
+Feature: 人在模型干活时插一句「起飞」，当场就算数
+Rule: 白名单只放行 human，其他会话发来的消息是模型，不是人</p><div class="scenario"><p class="scenario-name">Scenario: queued-command-counts-only-human-origin</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划工件 00:41 改过；转录里没有晚于它的 <code>user</code> 行，只有一条 00:42 的 <code>queued_command</code> 附件（<code>prompt: 起飞</code>）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>附件 <code>origin.kind</code> 为 <code>human</code>、<code>commandMode</code> 为 <code>prompt</code> 时判定；再把同一附件的 <code>origin.kind</code> 分别换成 <code>peer</code> · <code>task-notification</code> · <code>coordinator</code> · <code>auto-continuation</code> 判定</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>human 那份退出码为 0，证据含 00:42 时间与「起飞」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>其余四份都非 0 退出</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: goal 生效时规划收尾不交接、起飞自检写明 goal 证据</p><p><code>/opsx-propose</code> 与 <code>openspec-propose</code> 的收尾 SHALL 先跑 <code>takeoff-gate.py --change-dir</code>，证据为 <code>/goal</code> 时不硬交接，等 baseline 报告后单独 commit 计划工件并直接按 <code>/opsx-apply</code> 流程起飞；否则 MUST 保留原有硬交接。<code>/opsx-apply</code> 与 <code>openspec-apply-change</code> 的 step 0、铁律 7 及说明文档 SHALL 写明会话 <code>/goal</code> 生效是人类持续授权、豁免新鲜度。
+Feature: 文档与门禁同一口径，模型不在 goal 下停下等人
+Rule: 走哪条分支由脚本判，不由模型判；命令与同名 skill 同改</p><div class="scenario"><p class="scenario-name">Scenario: propose-continues-under-goal</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/commands/opsx-propose.md</code> 与 <code>template/.claude/skills/openspec-propose/SKILL.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读两者 step 6「收尾」</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>都写明先跑 <code>takeoff-gate.py --change-dir</code>，证据为 <code>/goal</code> 时「不硬交接」，等 baseline 报告后把计划工件单独 commit，再按 <code>/opsx-apply</code> 起飞</span></li><li><span class="step-key" data-kw="AND">AND</span><span>原硬交接措辞（「本命令到此结束」/「本 skill 到此结束」、spec.html 绝对路径）仍在</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: apply-and-iron-rule-name-goal</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>opsx-apply.md</code> 与 <code>openspec-apply-change/SKILL.md</code> 的 step 0、根 <code>CLAUDE.md</code> 与 <code>template/CLAUDE.md.snippet</code> 的铁律 7、<code>README.md</code> 与 <code>docs/WORKFLOW_zh.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>逐一阅读</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两处 step 0 都写明 exit 0 的证据可以来自会话 <code>/goal</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>两处铁律 7 都写明 <code>/goal</code> 生效即人类持续授权；根 <code>CLAUDE.md</code> 的铁律 7 同时保留「新鲜度」并写明 goal 豁免它</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>README.md</code> 与 <code>docs/WORKFLOW_zh.md</code> 都提到 <code>/goal</code></span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p><strong>现状</strong>：<code>takeoff-gate.py</code> 的批准判据（mechanical-takeoff-gates，design D7 / D8）如下：</p><ul><li><strong>人类消息</strong>：<code>type == &quot;user&quot;</code>，非 meta、非 sidechain，<code>userType</code> 为 external，内容是文本。</li><li><strong>批准</strong>：消息里有 <code>&lt;command-name&gt;/opsx-apply</code>，或整条不超过 40 字且含批准词。</li><li><strong>新鲜度</strong>：批准时间 ≥ 计划工件的最大 mtime。</li></ul><p>这三条由 <code>verdict()</code> 统一判定，CLI 模式（<code>/opsx-apply</code> step 0）与 PreToolUse hook 模式（拦 <code>Workflow</code> / <code>Agent</code> / <code>Task</code> 起飞派发）共用。</p><p><strong>实测形状</strong>：2026-11-10 从 7 份真实转录里提取了 <code>/goal</code> 事件与插话事件的形状（Claude Code v2.1.319）。</p><p><code>goal_status</code> 附件（<code>type == &quot;attachment&quot;</code>、<code>attachment.type == &quot;goal_status&quot;</code>）：</p><p>| 事件 | 附件字段 | 出处 | |---|---|---| | <code>/goal &lt;条件&gt;</code> 设立（空闲时或工作中途） | <code>met: false, sentinel: true, condition</code> | afa <code>d2d21d53</code> 第 3087 行 · stc-foundation <code>6408285e</code> 第 1395 行 | | Stop 评估未达成 | <code>met: false, condition, reason</code> | afa <code>d2d21d53</code> 多处 | | 评估达成（自动清除） | <code>met: true, condition, reason, iterations, …</code> | stc-foundation <code>6408285e</code> 第 2142 行 | | <code>/goal clear</code> | <code>met: true, sentinel: true, condition</code> | stc-foundation <code>fe89e6cc</code> 第 2908 行 · intent-driven-claude-code <code>b78eba23</code> 第 4990 行 | | 连续未达成后暂停 | 不新增附件，只有一条 system「Goal paused · … send a message to continue」 | stc-foundation <code>fe89e6cc</code> 第 2906 行 |</p><p><code>queued_command</code> 附件，即模型工作中途进来的消息。按 <code>origin.kind</code> 统计约 1300 条：</p><p>| <code>origin.kind</code> | 内容 | 是否人打的字 | |---|---|---| | <code>human</code>（<code>commandMode: prompt</code> · <code>humanTurn: true</code>） | 人类插话，如 afa 00:42 的「起飞」 | 是 | | <code>task-notification</code> | 后台任务通知 | 否 | | <code>coordinator</code> | Workflow 协调者续派 | 否 | | <code>auto-continuation</code> | 「Goal set: …」回显 | 否（由 <code>/goal</code> 派生） | | <code>peer</code> | 其他 Claude 会话经 SendMessage 发来 | 否，是<strong>模型</strong> |</p><p>afa 00:42 的「起飞」只留下了 <code>queued_command</code> 附件和一条 <code>queue-operation remove</code>（<code>absorbed_mid_turn</code>），没有对应的 <code>user</code> 行。</p><p><strong>约束</strong>：在役 <code>ADR-DRAFT-gate-evidence-not-self-reported</code> 的决策 4 规定，人类审批证据 = <code>type: &quot;user&quot;</code> 行 + 晚于被批准物。本设计偏离了这两点，见 Open Questions，由新 ADR 部分取代。</p><p><strong>用户决策</strong>（2026-11-10，AskUserQuestion）：</p><ul><li><strong>豁免范围</strong>：goal 生效即放行。</li><li><strong>附带修复</strong>：中途插话也算人类消息。</li><li><strong>不收紧</strong>：非人类 <code>origin</code> 的 <code>user</code> 行，本次不收紧。</li></ul><p>``` C4 · 容器图（轻量 C4 风格；★ 新增判据，◆ 修改）</p><p>[人类] ──/goal &lt;条件&gt;──────────┐ [人类] ──起飞 / /opsx-apply────┤ Claude Code CLI 写入 [人类] ──工作中途插话──────────┤ [其他会话 / 后台任务]──────────┘（peer · task-notification · coordinator：不是人） ▼ [会话转录 ~/.claude/projects/*/&lt;sid&gt;.jsonl] · user 行（type=user） · ★ attachment: goal_status{met, sentinel, condition} · ★ attachment: queued_command{origin.kind, commandMode, prompt} │ 只读 ▼ ◆ takeoff-gate.py · verdict() ① ★ goal 生效？→ 放行（证据 /goal …，豁免新鲜度） ② 人类消息（user 行 + ★ human 插话）里找批准 → 新鲜度判定 ▲ CLI 模式                    ▲ hook 模式 │                              │ ◆ /opsx-apply step 0 自检        [PreToolUse: Workflow | Agent | Task 起飞派发] ◆ /opsx-propose step 6：exit 0 且证据为 /goal → 不交接，等 baseline → commit 工件 → 起飞 ```</p><p><strong>图例与说明</strong>：</p><ul><li><strong>边界</strong>：门禁只读转录与计划工件 mtime，不写任何文件。goal 状态只信 CLI 写下的附件，不信模型文本。</li><li><strong>判定顺序</strong>：goal 优先。goal 生效时不再看批准词与新鲜度；goal 结束后，第 ② 步与现状完全一致，只是人类消息多了一个来源。</li><li><strong>假设</strong>：<code>/goal</code> 只能由人在 CLI 输入，模型没有对应的工具。<code>goal_status</code> 附件由 CLI 写入，不经过模型输出。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong> - <code>/goal</code> 生效期间，起飞门禁零拦截，包括计划修订之后、以及 goal 期间新 propose 的 change。复现 afa 那三次被拦的场景，全部放行。 - goal 达成或 <code>/goal clear</code> 之后，判据与现状完全一致。 - 人类在模型工作中途发出的批准当场有效，不必再发一次。 - 证据可追溯：goal 放行的证据行写进 approve 事件与 <code>.flight</code>，PR review 时看得到授权来自哪条 goal。</p><p><strong>Non-Goals:</strong> - 不改 PR review 这道人类审批（铁律 4 / 7 第二处）。 - 不收紧 <code>user</code> 行的 <code>origin</code>。auto-continuation 的「Goal set: 短条件」仍可能被当成口头批准，与本设计方向一致，不冲突。 - 不判断 goal 条件的语义是否与当前 change 有关，生效即放行（用户决定）。 - 不处理跨会话（<code>--resume</code> 新文件）的 goal 继承。看不到附件就按原判据处理。 - 不改 <code>/pr-ship</code> 及 apply 的其他暂停点。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><strong>理由</strong></summary><p>转录是追加写入的，文件顺序就是事件顺序。附件是 CLI 写下的结构化字段，模型无法通过输出产生它。</p></details><details><summary><strong>备选（否）</strong></summary></details><details><summary>按时间戳排序</summary><p>同一毫秒有多条附件，compact 续写后时间戳会交错。</p></details><details><summary>认 isMeta 文本「A session-scoped Stop hook is now active…」</summary><p>它是注入文本，措辞随版本变化。</p></details><details><summary>认 <code>queue-operation</code> 的「Goal set:」</summary><p>这类行没有 <code>origin</code>，还混着 task-notification。</p></details><details><summary><strong>sidechain 一律忽略</strong></summary><p>子 agent 转录里的同名附件不代表主会话的状态。</p></details><details><summary><strong>证据时间</strong></summary><p>取最近一次设立的时间，即 <code>sentinel: true</code> 且 <code>met: false</code> 的那条。转录被截断、找不到设立行时，退用最后一条 <code>goal_status</code> 的时间。</p></details><details><summary><strong>证据摘要</strong></summary><p><code>/goal &lt;条件&gt;</code>，沿用 <code>summarize()</code> 的 40 字截断。</p></details><details><summary><strong>备选（否）</strong></summary><p>只豁免新鲜度，要求该 change 至少有过一次人类批准。用户否决：goal 本身就是授权，goal 期间新开的 change 也不该停下。</p></details><details><summary><strong>理由</strong></summary><p>goal 生效时直接返回 goal 证据，证据唯一，飞行记录一眼可读。</p></details><details><summary><strong>备选（否）</strong></summary><p>两者取较新的那条。没有收益，还会让证据在「起飞」和「/goal」之间来回跳。</p></details><details><summary><strong>取文本</strong></summary><p><code>prompt</code> 是字符串时直接用；是文本块列表时拼接，含非文本块就整条不算。</p></details><details><summary><strong>复用现有判据</strong></summary><p>沿用 <code>NON_HUMAN_MARKERS</code>、<code>approval_of()</code> 与新鲜度规则。时间戳取行的 <code>timestamp</code>，缺失时取附件内的 <code>timestamp</code>。</p></details><details><summary><strong>为什么用白名单</strong></summary><p><code>peer</code> 来自其他 Claude 会话，本质是模型。认了它就等于模型自证批准，正是在役 ADR 要防的事。</p></details><details><summary><strong>重复不碍事</strong></summary><p>同一插话之后若又落成 <code>user</code> 行，会被算两次，取最新一条，没有副作用。</p></details><details><summary><strong>判定方式</strong></summary><p>step 6 先跑 <code>takeoff-gate.py --change-dir</code>。exit 0 且 stdout 证据在 <code> · </code> 之后以 <code>/goal</code> 开头，就走 goal 分支；否则照旧硬交接，原措辞保留。模型不自行判断 goal 状态。</p></details><details><summary><strong>goal 分支的动作</strong></summary><p>等 baseline 报告一行（preflight 会拒绝仍在跑的基线），计划工件单独 commit，再按 <code>/opsx-apply &lt;name&gt;</code> 的流程起飞。</p></details><details><summary><strong>commit 的授权依据</strong></summary><p>goal 生效即放行（D2），goal 就是人类对「自主推进到收口」的授权。artifacts-only commit 是 apply step 2 的前置条件，不属于越权。</p></details><details><summary><strong>备选（否）</strong></summary><p>只改门禁、propose 仍硬交接。goal 的 Stop hook 会一直推模型往前走，但文档又说「不得在同一轮继续」，两相冲突，正是 afa 那种空转。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[goal 条件与当前 change 无关也放行]</strong> → 这是用户接受的取舍。缓解有三</summary><p>goal 达成或 clear 后恢复原规则；证据行写明 <code>/goal &lt;条件&gt;</code> 并进入 approve 事件与 <code>.flight</code>；PR review 这道人类审批仍在。</p></details><details><summary><strong>[Claude Code 改了附件字段名或语义]</strong> → goal 判不出，门禁回到原判据，结果是拦下而不是放行，属于 fail-closed，方向安全。测试用真实形状作夹具，字段漂移时能在升级后的实测里暴露。</summary></details><details><summary><strong>[<code>--resume</code> 或 fork 出新转录文件，看不到旧的 goal 附件]</strong> → 同上，回到原判据，最坏情况是像今天这样再问一次人。</summary></details><details><summary><strong>[模型用 Bash 改写转录、伪造附件]</strong> → 威胁等同于伪造 <code>user</code> 行，不在本门禁的防御范围内。在役 ADR 已接受「转录是真值源」。</summary></details><details><summary><strong>[goal 暂停（Goal paused）期间仍算生效]</strong> → 暂停时没有清除事件，goal 仍是人类设下的状态。人类发消息即可续跑，或 <code>/goal clear</code> 结束。</summary></details><details><summary><strong>[插话的批准词判定沿用 40 字短句规则]</strong> → 长插话里带「起飞」不算批准，与现状一致，不放宽。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><ul><li><strong>部署</strong>：合并后，下游仓库执行 <code>./install.sh --upgrade</code>，刷新 <code>.claude/hooks/takeoff-gate.py</code> 与命令 / skill 文本。</li><li><strong>兼容</strong>：旧转录没有 <code>goal_status</code> 和 <code>queued_command</code> 附件，判据与现状完全一致。</li><li><strong>回滚</strong>：revert <code>takeoff-gate.py</code> 与文档即可，没有数据迁移。</li></ul></div><div class="design-block"><h3>Open Questions</h3><ul><li><strong>在役 <code>ADR-DRAFT-gate-evidence-not-self-reported</code> 的决策 4 需要部分取代</strong>。决策 4 把人类审批证据限定为 <code>type: &quot;user&quot;</code> 行，且必须晚于被批准物；本设计新增两类证据：</li><li>goal 附件，并豁免新鲜度；</li><li>human 插话附件。</li></ul><p>按 ADR 不可改的规则，新增 <code>DRAFT-goal-as-standing-takeoff-approval.md</code>，只取代决策 4。决策 1–3 继续在役：真值源四类、强制点在 hook、判不出 fail-closed / 异常 fail-open。</p></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody><tr><td class="mono">S1</td><td>takeoff-gate.py 认会话 /goal（主链最后一条 goal_status met=false 即放行、豁免新鲜度）与 human 来源的 queued_command 插话</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/takeoff-gate.py<br>tests/test_goal_takeoff.py</td><td><code>python3 -m pytest -q tests/test_goal_takeoff.py tests/test_approval_gate.py</code></td></tr><tr><td class="mono">S2</td><td>propose 收尾在 /goal 下不硬交接、apply step 0 与铁律 7 / README / WORKFLOW_zh 写明 /goal 持续授权（命令与同名 skill 同改）</td><td>wave 2</td><td>S1</td><td>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>template/.claude/commands/opsx-apply.md<br>template/.claude/skills/openspec-apply-change/SKILL.md<br>CLAUDE.md<br>template/CLAUDE.md.snippet<br>README.md<br>docs/WORKFLOW_zh.md<br>tests/test_goal_takeoff_docs.py</td><td><code>python3 -m pytest -q tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_install.py tests/test_agents_workflow.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_gate_checks_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_ship_memory_docs.py</code></td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>goal-takeoff-authorization#goal-active-approves-without-approval-word</td><td><code>tests/test_goal_takeoff.py::test_goal_active_approves_without_approval_word</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#goal-active-waives-freshness</td><td><code>tests/test_goal_takeoff.py::test_goal_active_waives_freshness</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#goal-ended-restores-freshness</td><td><code>tests/test_goal_takeoff.py::test_goal_ended_restores_freshness</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#goal-sidechain-ignored</td><td><code>tests/test_goal_takeoff.py::test_goal_sidechain_ignored</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#queued-command-counts-only-human-origin</td><td><code>tests/test_goal_takeoff.py::test_queued_command_counts_only_human_origin</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#propose-continues-under-goal</td><td><code>tests/test_goal_takeoff_docs.py::test_propose_continues_under_goal</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>goal-takeoff-authorization#apply-and-iron-rule-name-goal</td><td><code>tests/test_goal_takeoff_docs.py::test_apply_and_iron_rule_name_goal</code></td><td><span class="chip" data-state="missing">missing</span></td></tr></tbody></table><h3>飞行记录</h3><p class="placeholder">尚无飞行记录事件。</p>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 takeoff-gate.py 认会话 /goal（主链最后一条 goal_status met=false 即放行、豁免新鲜度）与 human 来源的 queued_command 插话 （deps: - · verify: <code>python3 -m pytest -q tests/test_goal_takeoff.py tests/test_approval_gate.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 propose 收尾在 /goal 下不硬交接、apply step 0 与铁律 7 / README / WORKFLOW_zh 写明 /goal 持续授权（命令与同名 skill 同改） （deps: S1 · verify: <code>python3 -m pytest -q tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_install.py tests/test_agents_workflow.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_gate_checks_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_ship_memory_docs.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-10 00:59 · 章节 8 · 图示 0 · 任务 2
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
