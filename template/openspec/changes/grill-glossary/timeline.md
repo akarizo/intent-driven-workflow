@@ -4,3 +4,6 @@
 2026-11-13T06:43:15Z	gate	S1 ok
 2026-11-13T06:43:15Z	gate	S2 ok
 2026-11-13T06:43:22Z	integrate	wave 1
+2026-11-13T06:44:39Z	review	findings=4 blocking=0 deferred=4
+2026-11-13T06:45:53Z	final	增量（锚点 e51d43714a，重跑 16 个文件 / 沿用 506 个用例） ok
+2026-11-13T06:45:56Z	apply-done	blocked=0 blocking=0
