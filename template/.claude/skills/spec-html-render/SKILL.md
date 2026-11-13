@@ -33,7 +33,7 @@ python3 .claude/hooks/spec_html.py --change-dir openspec/changes/<change-name>
 - 输出路径缺省 `<change-dir>/spec.html`，`--out PATH` 可覆盖；直接覆盖旧文件，不产生中间件。
 - 模板缺省 `.claude/skills/spec-html-render/templates/spec.html.tmpl`，`--template PATH` 可覆盖。
 - `--now ISO时间`（或环境变量 `SPEC_HTML_NOW`）固定 footer 时间戳；不传则取当前时间。
-- 脚本按模板的 `<!-- block:NAME -->…<!-- /block:NAME -->` 占位契约整段替换：`title` / `change-name` / `meta-chips`（读 `openspec status --change <name> --json`，读不到则按工件文件是否存在判 done/blocked）/ `why` / `what` / `capabilities` / `specs`（Requirement → `.requirement`，Scenario → `.scenario` + GIVEN/WHEN/THEN steps）/ `design` / `diagrams`（```mermaid 块）/ `adrs`（扫 `openspec/adr/`，含未定号的 `DRAFT-*.md`）/ `flight`（slices.json 切片表 + scenario↔test 状态 + timeline.md 事件）/ `tasks` / `footer`。`mockups` 块不生成，保留模板占位。未涉及或工件缺失的块保留原始 placeholder。
+- 脚本按模板的 `<!-- block:NAME -->…<!-- /block:NAME -->` 占位契约整段替换：`title` / `change-name` / `meta-chips`（读 `openspec status --change <name> --json`，读不到则按工件文件是否存在判 done/blocked）/ `why` / `what` / `capabilities` / `glossary`（读 `openspec/glossary.md`，列出 proposal / design / specs 里的避用词命中；没有术语表或没有命中时保留空占位，页面不显示）/ `specs`（Requirement → `.requirement`，Scenario → `.scenario` + GIVEN/WHEN/THEN steps）/ `design` / `diagrams`（```mermaid 块）/ `adrs`（扫 `openspec/adr/`，含未定号的 `DRAFT-*.md`）/ `flight`（slices.json 切片表 + scenario↔test 状态 + timeline.md 事件）/ `tasks` / `footer`。`mockups` 块不生成，保留模板占位。未涉及或工件缺失的块保留原始 placeholder。
 - **失败只 warn，不阻塞主流程**：change-dir 不存在、模板缺失等异常时脚本非 0 退出；调用方（/opsx-propose、/opsx-continue、/spec-html）应捕获后只提示，不让主流程失败。
 
 ## 设计原则
