@@ -515,7 +515,7 @@ PR 被人类合并后跑 `/clean-after-merged [target-branch]`：先 `--ff-only`
 
 | Skill | 目的 |
 | --- | --- |
-| `grill-me` | 「拷问式」交流：用户希望被反问、质疑、压力测试方案时使用（来源 [mattpocock/skills](https://github.com/mattpocock/skills)） |
+| `grill-me` | 「拷问式」交流：用户希望被反问、质疑、压力测试方案时使用；访谈时对照并维护术语表 `openspec/glossary.md`（规范词 + 避用词），spec.html 列出工件里的避用词（来源 [mattpocock/skills](https://github.com/mattpocock/skills)） |
 
 ---
 

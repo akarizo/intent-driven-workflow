@@ -30,6 +30,12 @@ artifacts:
       this in. Each capability listed here will need a corresponding spec file.
 
 
+      When <repo>/openspec/glossary.md exists, read it first. Use each entry's
+      canonical term (the bold one) and do not use the aliases listed on its
+      `避用：` line. New terms are settled in a `grill-me` interview and written
+      back to openspec/glossary.md.
+
+
       Durable architectural decisions worth carrying across changes are
       distilled into ADR files at <repo>/openspec/adr/ by a later step after
       design.
@@ -100,6 +106,10 @@ artifacts:
 
       - Do not create `.feature` files for this artifact. External Gherkin
       linting is outside this schema; `spec.md` is required for OpenSpec merge.
+
+      - Requirement and scenario text MUST use the canonical terms from
+      <repo>/openspec/glossary.md, not the aliases listed on their `避用：`
+      lines; spec.html lists any hits.
 
 
       MODIFIED requirements workflow:

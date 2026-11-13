@@ -1,11 +1,8 @@
 """grill-me 的术语表一节、README 与 schema 引用术语表（scenario: domain-glossary#grill-me-challenges-against-glossary、
 #grill-me-writes-resolved-term-except-on-main、#schema-proposal-and-specs-use-glossary，共 3 条）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
 
-PENDING = pytest.mark.xfail(strict=True, reason="change grill-glossary S2 未实现")
 SKILL = ROOT / "template" / ".claude" / "skills" / "grill-me" / "SKILL.md"
 SCHEMA = ROOT / "template" / "openspec" / "schemas" / "intent-driven" / "schema.yaml"
 
@@ -18,7 +15,6 @@ def glossary_part(text):
     return text[text.index("## 术语表"):]
 
 
-@PENDING
 def test_grill_me_challenges_against_glossary():
     # Given: grill-me 的 SKILL.md 与 README.md
     skill = read(SKILL)
@@ -37,7 +33,6 @@ def test_grill_me_challenges_against_glossary():
     assert "openspec/glossary.md" in row
 
 
-@PENDING
 def test_grill_me_writes_resolved_term_except_on_main():
     # Given: grill-me 的 SKILL.md
     skill = read(SKILL)
@@ -53,7 +48,6 @@ def test_grill_me_writes_resolved_term_except_on_main():
     assert "本项目特有" in part and "实现细节" in part
 
 
-@PENDING
 def test_schema_proposal_and_specs_use_glossary():
     # Given: intent-driven schema.yaml
     schema = read(SCHEMA)
