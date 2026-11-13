@@ -1,0 +1,35 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_spec_html_glossary.py",
+      "line": 30,
+      "summary": "rows() 把表行收成 set，切片包要求的两条行为测试都测不到：一是按 文件→行号→首次出现位置 排序，二是同一行同一个避用词只记一条。以后排序被改坏，或同一行重复出现被记成多条，这 3 条用例都还是绿的。",
+      "fix": "再加一个断言（或一条用例）用 list 而不是 set 比较：同一行放两个避用词，并让其中一个出现两次，断言表行的顺序和条数。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 388,
+      "summary": "word_spans 每行、每个候选词都调一次 re.compile，靠 re 模块的内部缓存（上限 512）兜着。术语表里词数一多就会反复编译，渲染变慢。",
+      "fix": "在 glossary_hits 开头给每个候选词只编译一次正则，存进 candidates 元组；word_spans 改成直接接收编译好的 pattern。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 405,
+      "summary": "围栏判定只认行首的 ```：缩进的围栏（如列表项里的 '   ```'）和 ~~~ 围栏都不跳过，代码块里的避用词会被误报。这和切片包字面一致，只会多报、不影响门禁，所以只是提示。",
+      "fix": "需要时把判定改成 line.lstrip().startswith(('```', '~~~'))，并同步改 design D4 的写法；不改也可接受。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/schemas/intent-driven/schema.yaml",
+      "line": 110,
+      "summary": "specs instruction 新增的 bullet 写成无条件的「Requirement and scenario text MUST use the canonical terms from <repo>/openspec/glossary.md」，没有写「存在时」这个前提。spec Requirement「proposal 与 specs 按术语表用词」原文是「`openspec/glossary.md` 存在时用其中的规范词」，proposal 段也写了 `When ... exists`。项目还没有术语表（懒建，这是常态）时，生成 specs 的模型可能去找一个不存在的文件，或者自己先建一个。",
+      "fix": "把这条改成「When <repo>/openspec/glossary.md exists, requirement and scenario text MUST use its canonical terms, not the aliases listed on their `避用：` lines; spec.html lists any hits.」，和 proposal 段的条件措辞保持一致。不涉及测试锚点，也不会引入 glossary 以外的字样。"
+    }
+  ],
+  "fix": null
+}

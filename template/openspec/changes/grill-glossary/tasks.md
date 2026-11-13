@@ -5,5 +5,5 @@
 
 ## 切片
 
-- [ ] S1 spec_html.py 读 openspec/glossary.md，审批面板列出 proposal / design / specs 里的避用词命中（长者先占、跳过代码、只提示） （deps: - · verify: `python3 -m pytest -q tests/test_spec_html_glossary.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_template_docs.py`）
-- [ ] S2 grill-me 新增术语表一节（对照 · 定下即写 · 默认分支先问 · 格式），schema 的 proposal / specs instruction 引用术语表，README 补一句 （deps: - · verify: `python3 -m pytest -q tests/test_glossary_docs.py tests/test_template_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_docs_iron_rules.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_goal_takeoff_docs.py`）
+- [x] S1 spec_html.py 读 openspec/glossary.md，审批面板列出 proposal / design / specs 里的避用词命中（长者先占、跳过代码、只提示） （deps: - · verify: `python3 -m pytest -q tests/test_spec_html_glossary.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_template_docs.py`）
+- [x] S2 grill-me 新增术语表一节（对照 · 定下即写 · 默认分支先问 · 格式），schema 的 proposal / specs instruction 引用术语表，README 补一句 （deps: - · verify: `python3 -m pytest -q tests/test_glossary_docs.py tests/test_template_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_docs_iron_rules.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_goal_takeoff_docs.py`）
