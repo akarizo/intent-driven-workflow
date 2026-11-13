@@ -3,11 +3,8 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
 import re
 
-import pytest
-
 from conftest import run_hook, write
 
-PENDING = pytest.mark.xfail(strict=True, reason="change grill-glossary S1 未实现")
 NOW = "2026-11-13T00:00:00Z"
 
 GLOSSARY = """
@@ -36,7 +33,6 @@ def rows(section):
     return {tuple(re.sub(r"<[^>]+>", "", c).strip() for c in r) for r in found}
 
 
-@PENDING
 def test_spec_html_lists_avoided_term_hits(tmp_path):
     # Given: 术语表有「切片」（避用：任务、子任务）与「起飞」（避用：上线）；
     #        proposal.md 第 3 行「本次上线拆成三个任务」，specs/x/spec.md 第 5 行「每个子任务独立门禁」
@@ -61,7 +57,6 @@ def test_spec_html_lists_avoided_term_hits(tmp_path):
     }
 
 
-@PENDING
 def test_spec_html_omits_glossary_section_without_hits(tmp_path):
     # Given: 项目 a 没有 openspec/glossary.md（工件里有「上线」）；项目 b 有术语表，但工件里一个避用词都没用
     a = tmp_path / "a" / "openspec" / "changes" / "c"
@@ -81,7 +76,6 @@ def test_spec_html_omits_glossary_section_without_hits(tmp_path):
         assert re.search(r"<!-- block:glossary -->\s*<!-- /block:glossary -->", html)
 
 
-@PENDING
 def test_spec_html_skips_canonical_and_code_hits(tmp_path):
     # Given: 术语表有「飞行计划」（避用：计划）与「切片」（避用：task）；proposal.md 里「飞行计划」在正文，
     #        「计划」只在行内代码与代码块里，tasks.md 只作为文件名出现在正文
