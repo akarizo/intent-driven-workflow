@@ -1,0 +1,62 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ],
+    "full_suite_sec": null
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "spec_html.py 读 openspec/glossary.md，审批面板列出 proposal / design / specs 里的避用词命中（长者先占、跳过代码、只提示）",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/spec_html.py",
+        "template/.claude/skills/spec-html-render/templates/spec.html.tmpl",
+        "template/.claude/skills/spec-html-render/SKILL.md",
+        "tests/test_spec_html_glossary.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_spec_html_glossary.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_template_docs.py",
+      "scenarios": [
+        "domain-glossary#spec-html-lists-avoided-term-hits",
+        "domain-glossary#spec-html-omits-glossary-section-without-hits",
+        "domain-glossary#spec-html-skips-canonical-and-code-hits"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "grill-me 新增术语表一节（对照 · 定下即写 · 默认分支先问 · 格式），schema 的 proposal / specs instruction 引用术语表，README 补一句",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/skills/grill-me/SKILL.md",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "README.md",
+        "tests/test_glossary_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_glossary_docs.py tests/test_template_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_docs_iron_rules.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_goal_takeoff_docs.py",
+      "scenarios": [
+        "domain-glossary#grill-me-challenges-against-glossary",
+        "domain-glossary#grill-me-writes-resolved-term-except-on-main",
+        "domain-glossary#schema-proposal-and-specs-use-glossary"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "domain-glossary#spec-html-lists-avoided-term-hits": "tests/test_spec_html_glossary.py::test_spec_html_lists_avoided_term_hits",
+    "domain-glossary#spec-html-omits-glossary-section-without-hits": "tests/test_spec_html_glossary.py::test_spec_html_omits_glossary_section_without_hits",
+    "domain-glossary#spec-html-skips-canonical-and-code-hits": "tests/test_spec_html_glossary.py::test_spec_html_skips_canonical_and_code_hits",
+    "domain-glossary#grill-me-challenges-against-glossary": "tests/test_glossary_docs.py::test_grill_me_challenges_against_glossary",
+    "domain-glossary#grill-me-writes-resolved-term-except-on-main": "tests/test_glossary_docs.py::test_grill_me_writes_resolved_term_except_on_main",
+    "domain-glossary#schema-proposal-and-specs-use-glossary": "tests/test_glossary_docs.py::test_schema_proposal_and_specs_use_glossary"
+  }
+}
