@@ -40,7 +40,7 @@ ADR_TITLE_RE = re.compile(r"(?m)^#\s+(.+)$")
 
 BLOCK_NAMES = (
     "title", "change-name", "meta-chips", "why", "what", "capabilities",
-    "specs", "design", "diagrams", "adrs", "tasks", "flight", "footer",
+    "glossary", "specs", "design", "diagrams", "adrs", "tasks", "flight", "footer",
 )
 
 
@@ -349,6 +349,97 @@ def scan_adrs(change_dir):
     if drafts:
         parts.append('<h3>待定号（本次新增）</h3><ul>%s</ul>' % "".join(li(e) for e in drafts))
     return "".join(parts) if parts else None
+
+
+# ---------------------------------------------------------------- glossary（只提示）
+
+GLOSSARY_TERM_RE = re.compile(r"^\*\*([^*]+)\*\*\s*[：:]\s*\S")
+GLOSSARY_AVOID_RE = re.compile(r"^避用\s*[：:]\s*(.+)$")
+GLOSSARY_ALIAS_SPLIT_RE = re.compile(r"[、，,/]")
+ASCII_ONLY_RE = re.compile(r"^[\x00-\x7f]+$")
+
+
+def parse_glossary(text):
+    """术语表 → [(规范词, [避用词…])]；避用行归属最近的上一个词条，其余行忽略（design D2）。"""
+    entries = []
+    for line in text.splitlines():
+        m = GLOSSARY_TERM_RE.match(line)
+        if m:
+            entries.append((m.group(1).strip(), []))
+            continue
+        m = GLOSSARY_AVOID_RE.match(line)
+        if m and entries:
+            entries[-1][1].extend(a.strip() for a in GLOSSARY_ALIAS_SPLIT_RE.split(m.group(1)) if a.strip())
+    return entries
+
+
+def glossary_files(change_dir):
+    rels = [n for n in ("proposal.md", "design.md") if os.path.isfile(os.path.join(change_dir, n))]
+    for root, _dirs, files in os.walk(os.path.join(change_dir, "specs")):
+        for f in files:
+            if f.endswith(".md"):
+                rels.append(os.path.relpath(os.path.join(root, f), change_dir).replace(os.sep, "/"))
+    return sorted(rels)
+
+
+def word_spans(line, word):
+    """只含 ASCII 的词整词、不分大小写匹配；其余按子串。"""
+    if ASCII_ONLY_RE.match(word):
+        pat = re.compile(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(word), re.I)
+    else:
+        pat = re.compile(re.escape(word))
+    return [(m.start(), m.end()) for m in pat.finditer(line)]
+
+
+def glossary_hits(change_dir, entries):
+    """逐行找避用词命中 → [(相对路径, 行号, 避用词, 规范词)]（design D4）。"""
+    candidates = []
+    for term, avoids in entries:
+        candidates.append((term, False, term))
+        candidates.extend((a, True, term) for a in avoids)
+    candidates = sorted((c for c in candidates if c[0]), key=lambda c: -len(c[0]))
+    hits = []
+    for rel in glossary_files(change_dir):
+        in_fence = False
+        for no, line in enumerate((read_text(os.path.join(change_dir, rel)) or "").splitlines(), 1):
+            if line.startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            line = re.sub(r"`[^`]*`", lambda m: " " * len(m.group(0)), line)
+            taken, first = [], {}
+            for word, avoided, term in candidates:
+                for s, e in word_spans(line, word):
+                    if any(s < te and ts < e for ts, te in taken):
+                        continue
+                    taken.append((s, e))
+                    if avoided and word not in first:
+                        first[word] = (s, term)
+            for word, (_s, term) in sorted(first.items(), key=lambda kv: kv[1][0]):
+                hits.append((rel, no, word, term))
+    return hits
+
+
+def render_glossary(change_dir):
+    try:
+        text = read_text(os.path.join(project_root(change_dir), "openspec", "glossary.md"))
+        entries = parse_glossary(text) if text else []
+        hits = glossary_hits(change_dir, entries) if entries else []
+    except Exception:
+        return None
+    if not hits:
+        return None
+    body = "".join(
+        "<tr><td><code>%s</code></td><td>%s</td><td>%s</td></tr>" % (esc("%s:%d" % (rel, no)), esc(word), esc(term))
+        for rel, no, word, term in hits
+    )
+    return (
+        '<section id="glossary"><h2><span class="eyebrow">Glossary</span>术语对照（只提示）</h2>'
+        "<p>工件里用了术语表 %s 的避用词，批准前可改成规范词；本节只提示，不影响任何门禁。</p>"
+        '<table class="flight-table"><thead><tr><th>位置</th><th>避用词</th><th>规范词</th></tr></thead>'
+        "<tbody>%s</tbody></table></section>"
+    ) % (esc("openspec/glossary.md"), body)
 
 
 # ---------------------------------------------------------------- tasks.md
@@ -704,6 +795,7 @@ def render(change_dir, template_path, out_path, now_arg):
     blocks["why"] = render_why(proposal)
     blocks["what"] = render_what(proposal)
     blocks["capabilities"] = render_capabilities(proposal)
+    blocks["glossary"] = render_glossary(change_dir)
     blocks["specs"] = render_specs(change_dir)
     blocks["design"] = render_design(design_text)
     blocks["diagrams"] = render_diagrams(design_text)
