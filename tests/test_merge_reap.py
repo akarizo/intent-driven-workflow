@@ -5,14 +5,11 @@
 import json
 import os
 
-import pytest
-
 from conftest import ROOT, commit_all, git, run_hook, write
 from submodule_helpers import SUB, g, git_rc, make_super, run_executor
 from test_clean_after_merged_docs import iron6
 from test_slice_gate import plan, slice_, write_plan
 
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S5 未实现")
 CHANGE = "openspec/changes/c"
 
 
@@ -56,7 +53,6 @@ def listed(git_repo, path):
                                            if x.startswith("worktree ")]
 
 
-@PENDING
 def test_merge_reaps_merged_slice_worktrees(git_repo):
     # Given: 两间切片临时 worktree 各提交了一个文件，里面只剩门禁留下的飞行记录与字节码
     home_repo(git_repo)
@@ -79,7 +75,6 @@ def test_merge_reaps_merged_slice_worktrees(git_repo):
     assert git(git_repo, "branch", "--show-current") == "worktree-c"
 
 
-@PENDING
 def test_merge_keeps_worktree_with_unmerged_work(git_repo):
     # Given: 切片临时 worktree 提交之后，工作树里还有一个不属于飞行记录的未提交文件
     home_repo(git_repo)
@@ -98,7 +93,6 @@ def test_merge_keeps_worktree_with_unmerged_work(git_repo):
     assert git_rc(git_repo, "rev-parse", "-q", "--verify", "refs/heads/worktree-wf_x-1") == 0
 
 
-@PENDING
 def test_merge_never_touches_unrelated_worktrees(git_repo):
     # Given: 除了本片最终那间临时 worktree，还有：上一轮留下的同片 worktree（停在本片较早的提交上）、
     #        另一个 change 的 worktree（HEAD 是 change 分支的祖先，但不是本片的提交）
@@ -124,7 +118,6 @@ def test_merge_never_touches_unrelated_worktrees(git_repo):
     assert listed(git_repo, git_repo)
 
 
-@PENDING
 def test_merge_reap_returns_borrowed_submodule(tmp_path):
     # Given: 带 submodule 的仓库；隔离执行体在临时 worktree 里借出子仓、提交了子仓与父仓（gitlink）、跑过门禁
     env = make_super(tmp_path)
@@ -142,7 +135,6 @@ def test_merge_reap_returns_borrowed_submodule(tmp_path):
     assert g(env.home / SUB, "cat-file", "-t", first.sub_commit) == "commit"
 
 
-@PENDING
 def test_reap_failure_does_not_fail_merge(git_repo):
     # Given: 切片临时 worktree 被锁住（git worktree lock），不带强制参数删不掉
     home_repo(git_repo)
@@ -158,7 +150,6 @@ def test_reap_failure_does_not_fail_merge(git_repo):
     assert any("未回收" in w and "wf_x-1" in w for w in out["warnings"]), out["warnings"]
 
 
-@PENDING
 def test_iron_rule_names_reap_exception():
     # Given: 根 CLAUDE.md 与 template/CLAUDE.md.snippet
     root = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")

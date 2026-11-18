@@ -3,12 +3,9 @@
 骨架：strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import git, run_hook, write
 from test_slice_gate import gate_repo
 
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S5 未实现")
 RED = "2026-11-18T00:00:01Z\tS1\tFAIL\tpython3 -m pytest -q tests/test_mod.py\n"
 GREEN = "2026-11-18T00:00:02Z\tS1\tPASS\tpython3 -m pytest -q tests/test_mod.py\n"
 OTHER = "2026-11-18T00:00:03Z\tS2\tPASS\tpython3 -m pytest -q tests/test_other.py\n"
@@ -24,7 +21,6 @@ def gate(cwd, change_dir="openspec/changes/c"):
     return json.loads(run_hook("slice-gate", "gate", "S1", "--change-dir", change_dir, cwd=cwd).stdout)
 
 
-@PENDING
 def test_gate_reads_rows_written_from_another_worktree(git_repo):
     # Given: 上一轮在别的 worktree 里留下了本片先红后绿的留痕（在共用目录）；本轮的门禁跑在另一间新开的 worktree 里，
     #        那里的 change 目录没有 evidence.log
@@ -44,7 +40,6 @@ def test_gate_reads_rows_written_from_another_worktree(git_repo):
     assert not [x for x in out["failed"] + out["warnings"] if x.startswith("G5")], out
 
 
-@PENDING
 def test_gate_fails_when_hook_alive_but_no_test_run(git_repo):
     # Given: 共用目录里本片的留痕文件存在但没有任何行（hook 在工作，执行体一次测试都没跑过）
     gate_repo(git_repo)
@@ -59,7 +54,6 @@ def test_gate_fails_when_hook_alive_but_no_test_run(git_repo):
     assert out["hooks_missing"] is False
 
 
-@PENDING
 def test_record_merges_slice_rows_into_branch_log(git_repo):
     # Given: 分支上的 evidence.log 已有一行主会话的记录；共用目录里有 S1 的两行与 S2 的一行
     change = gate_repo(git_repo)
@@ -82,7 +76,6 @@ def test_record_merges_slice_rows_into_branch_log(git_repo):
     assert shared_log(git_repo, "S2").read_text(encoding="utf-8") == OTHER
 
 
-@PENDING
 def test_first_round_start_clears_stale_evidence(git_repo):
     # Given: 共用目录里留着上一次飞行的 S1 留痕；当前 worktree 没有标记
     change = gate_repo(git_repo)

@@ -2678,17 +2678,74 @@ def record_ceilings(change_dir, slice_id, rows):
         pass
 
 
-def evidence_state(change_dir, slice_id):
-    """返回 'missing_file' | 'no_rows' | 'red_first' | 'no_red'。"""
-    path = os.path.join(change_dir, EVIDENCE)
-    if not os.path.isfile(path):
+EVIDENCE_DIR = "flight-evidence"  # <git common dir>/flight-evidence/<change>/<S>.log：test-evidence hook 的切片留痕（design D6）
+EVIDENCE_KEEP = 30
+
+
+def _evidence_shared(root, change_dir, slice_id):
+    """共用目录里该片留痕文件的绝对路径（change 名取法同 _ckpt_ref）。"""
+    change = os.path.basename(os.path.abspath(change_dir).rstrip(os.sep))
+    return os.path.join(_pool_dir(root, EVIDENCE_DIR), change, slice_id + ".log")
+
+
+def _evidence_merge(root, change_dir, slice_id, drop=False):
+    """共用目录里该片的行追加进分支上的 evidence.log（整行已有的跳过）；drop=True 随后删掉共用文件。吞 OSError。"""
+    try:
+        src = _evidence_shared(root, change_dir, slice_id)
+        if not os.path.isfile(src):
+            return
+        with open(src, "r", encoding="utf-8", errors="replace") as f:
+            rows = [x if x.endswith("\n") else x + "\n" for x in f if x.strip()]
+        dest = os.path.join(change_dir, EVIDENCE)
+        have = ""
+        if os.path.isfile(dest):
+            with open(dest, "r", encoding="utf-8", errors="replace") as f:
+                have = f.read()
+        seen = set(have.splitlines())
+        new = []
+        for r in rows:
+            if r.rstrip("\n") not in seen:
+                seen.add(r.rstrip("\n"))
+                new.append(r)
+        if new:
+            with open(dest, "a", encoding="utf-8") as f:
+                f.write(("\n" if have and not have.endswith("\n") else "") + "".join(new))
+        if drop:
+            os.remove(src)
+    except (OSError, RuntimeError):
+        pass
+
+
+def _evidence_prune(root):
+    """共用目录下的 change 子目录按修改时间只留最近 EVIDENCE_KEEP 个。"""
+    try:
+        base = _pool_dir(root, EVIDENCE_DIR)
+        subs = [os.path.join(base, d) for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+        for d in sorted(subs, key=os.path.getmtime, reverse=True)[EVIDENCE_KEEP:]:
+            shutil.rmtree(d, ignore_errors=True)
+    except (OSError, RuntimeError):
+        pass
+
+
+def evidence_state(change_dir, slice_id, root=None):
+    """返回 'missing_file' | 'no_rows' | 'red_first' | 'no_red'。
+    行 = 工作树 evidence.log 里本片的行 + 共用目录里本片的行；root 为 None 时只看工作树那份。"""
+    paths = [os.path.join(change_dir, EVIDENCE)]
+    if root:
+        try:
+            paths.append(_evidence_shared(root, change_dir, slice_id))
+        except RuntimeError:
+            pass
+    paths = [p for p in paths if os.path.isfile(p)]
+    if not paths:
         return "missing_file"
     rows = []
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) >= 3 and parts[1] == slice_id:
-                rows.append(parts[2])
+    for path in paths:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 3 and parts[1] == slice_id:
+                    rows.append(parts[2])
     if not rows:
         return "no_rows"
     if "PASS" not in rows:
@@ -3712,6 +3769,13 @@ def cmd_start(args):
         # 首轮起跑：上一次飞行残留的快照不属于本轮，清掉免得被误恢复
         _ckpt_delete_all(root, ref)
         _ckpt_delete(root, _gate_ref(args.change_dir, args.slice))
+        if not (args.continue_from or args.base):
+            # 首轮：上一次飞行留在共用目录里的本片留痕不算本轮的（--base 是旧工作流重派的接续形式，同样保留）
+            try:
+                os.remove(_evidence_shared(root, args.change_dir, args.slice))
+            except OSError:
+                pass
+            _evidence_prune(root)
     # 带 --expect-branch 时起点 = HEAD 与 change 分支的合并基点（接续已做完），分支上的飞行记录提交不算进区间
     base = git(root, "merge-base", "HEAD", args.expect_branch) if args.expect_branch \
         else args.base or git(root, "rev-parse", "HEAD")
@@ -3787,12 +3851,12 @@ def cmd_gate(args):
             for f in sorted(tests):
                 if TEST_FILE_RE.search(f) and os.path.isfile(os.path.join(root, f)) and not set(tiers_matching(f, tiers)) & chosen:
                     failed.append("G12 tiers: %s 不在单元层或本 change 已选区域的 paths 内（挪到对应目录，或在 gate.integration 选上该区域）" % f)
-    ev = evidence_state(args.change_dir, args.slice)
+    ev = evidence_state(args.change_dir, args.slice, root)
     hooks_missing = ev == "missing_file"
     if ev == "missing_file":
         warnings.append("G5 evidence: 无 evidence.log（test-evidence hook 未安装或未触发），本切片留痕无法核对")
     elif ev == "no_rows":
-        failed.append("G5 evidence: evidence.log 无本切片 %s 的测试运行记录（hook 在工作却没跑过测试）" % args.slice)
+        failed.append("G5 evidence: hook 在工作，但本片 %s 没跑过测试（先运行本片的 verify 再过门禁）" % args.slice)
     elif ev == "no_red":
         warnings.append("G5 evidence: 未见 RED 先于 GREEN 的测试运行记录")
     failed.extend(ownership_violations(files, sl.get("owns") or [], change_rel, committed))
@@ -3825,6 +3889,7 @@ def cmd_gate(args):
         err = _gate_save(root, args.change_dir, result)
         if err:
             warnings.append("门禁结论未能留存：%s" % err)
+    _evidence_merge(root, args.change_dir, args.slice)
     append_report(args.change_dir, result)
     record_ceilings(args.change_dir, args.slice, ceilings)
     timeline_record(args.change_dir, "gate", "%s %s" % (gate_note, "ok" if result["ok"] else "red"))
@@ -3865,6 +3930,10 @@ def cmd_record(args):
     if result.get("slice"):
         # 结论已交到 integrator 手里，留存的那份完成使命（不存在时静默）
         _ckpt_delete(os.getcwd(), _gate_ref(args.change_dir, result["slice"]))
+        # 临时 worktree 里的留痕在共用目录，随门禁结论并回分支上的 evidence.log（重复执行幂等）
+        top = _git_top(os.getcwd())
+        if top:
+            _evidence_merge(top, args.change_dir, result["slice"], drop=True)
     if report_has_row(args.change_dir, result.get("slice", ""), result.get("commit", "")):
         print(json.dumps({"recorded": False, "reason": "already recorded"}, ensure_ascii=False))
         return
@@ -4773,6 +4842,114 @@ def _merge_sync_checkout(root, links, warnings):
             warnings.append("merge: %s 同步到 gitlink %s 失败：%s" % (p, target[:10], _first_line(r.stderr, "?")))
 
 
+def _status_entries(root):
+    """git status --porcelain -z --untracked-files=all → [(XY, 路径)]（重命名只取新路径）。"""
+    raw = _run_git(root, "status", "--porcelain", "-z", "--untracked-files=all").stdout
+    out, rename = [], False
+    for e in raw.split("\0"):
+        if rename:
+            rename = False
+            continue
+        if len(e) < 4:
+            continue
+        rename = e[0] in "RC"
+        out.append((e[:2], e[3:]))
+    return out
+
+
+def _flight_dirt(xy, path):
+    """回收时可丢弃的三类：change 目录下的飞行记录、切片标记、未跟踪的字节码。"""
+    parts = path.split("/")
+    if len(parts) >= 3 and parts[-3] == "changes" and parts[-1] in FLIGHT_RECORDS:
+        return True
+    return path == MARKER or (xy == "??" and is_bytecode(path))
+
+
+def _drop_untracked(base, paths):
+    """删未跟踪文件；字节码所在的 __pycache__ 空了一并删。"""
+    for rel in paths:
+        f = os.path.join(base, rel)
+        os.remove(f)
+        d = os.path.dirname(f)
+        if os.path.basename(d) == "__pycache__" and not os.listdir(d):
+            os.rmdir(d)
+
+
+def _reap_one(root, wt, warnings):
+    """回收一间临时 worktree（design D7）；不满足条件只记警告。成功返回 True。"""
+    links = _gitlinks(wt)
+    entries = [(xy, p) for xy, p in _status_entries(wt) if p not in links]
+    keep = [p for xy, p in entries if not _flight_dirt(xy, p)]
+    if keep:
+        warnings.append("未回收 %s：有未提交改动 %s" % (wt, ", ".join(keep[:4])))
+        return False
+    for p in sorted(links):
+        if not _sub_ready(wt, p):
+            continue
+        sub, home_sub = os.path.join(wt, p), os.path.join(root, p)
+        head = _sub_head(wt, p)
+        dirty = _status_entries(sub)
+        why = None
+        if not _sub_ready(root, p):
+            why = "change 家的子仓未填充"
+        elif not head or not _sub_head(root, p) or not _is_ancestor(home_sub, head, _sub_head(root, p)):
+            why = "HEAD %s 未并入 change 家子仓" % (head or "?")[:10]
+        elif [x for xy, x in dirty if not (xy == "??" and is_bytecode(x))]:
+            why = "有未提交改动"
+        if why is None:
+            _drop_untracked(sub, [x for _, x in dirty])
+            r = _sub_git(root, p, "worktree", "remove", sub)
+            if r.returncode != 0:
+                why = _first_line(r.stderr, "git worktree remove 失败")
+            elif not os.path.exists(sub):
+                os.makedirs(sub)  # 未填充的 submodule 是空目录，免得父仓把 gitlink 报成删除
+        if why:
+            warnings.append("未回收 %s：子仓 %s %s" % (wt, p, why))
+            return False
+    for xy, p in entries:
+        if xy == "??":
+            _drop_untracked(wt, [p])
+        else:
+            _run_git(wt, "checkout", "--", p)
+    r = _run_git(root, "worktree", "remove", wt)
+    if r.returncode != 0:
+        warnings.append("未回收 %s：%s" % (wt, _first_line(r.stderr, "git worktree remove 失败")))
+        return False
+    return True
+
+
+def _reap(root, sid, sha, pre, warnings):
+    """merge 合回一片后回收 HEAD 落在本次合入提交里的临时 worktree（design D7）→ 被回收的路径列表。不抛异常。"""
+    reaped = []
+    try:
+        commits = set(git(root, "rev-list", sha, "--not", pre).split())
+        here = os.path.realpath(root)
+        for block in git(root, "worktree", "list", "--porcelain").split("\n\n"):
+            lines = block.splitlines()
+            wt = next((x[len("worktree "):] for x in lines if x.startswith("worktree ")), None)
+            head = next((x[len("HEAD "):] for x in lines if x.startswith("HEAD ")), None)
+            if not wt or os.path.realpath(wt) == here or "bare" in lines or head not in commits:
+                continue
+            if any(x == "locked" or x.startswith("locked ") for x in lines):
+                warnings.append("未回收 %s：已锁定" % wt)
+                continue
+            branch = next((x[len("branch refs/heads/"):] for x in lines if x.startswith("branch refs/heads/")), None)
+            try:
+                if not _reap_one(root, wt, warnings):
+                    continue
+            except Exception as e:  # noqa: BLE001 回收是善后，任何意外都不影响合回结论
+                warnings.append("未回收 %s：%s" % (wt, e))
+                continue
+            reaped.append(wt)
+            if branch and _run_git(root, "rev-parse", "-q", "--verify", "refs/heads/" + branch).stdout.strip() == head:
+                d = _run_git(root, "branch", "-d", branch)
+                if d.returncode != 0:
+                    warnings.append("未回收分支 %s：%s" % (branch, _first_line(d.stderr, "git branch -d 失败")))
+    except Exception as e:  # noqa: BLE001
+        warnings.append("未回收 %s 的临时 worktree：%s" % (sid, e))
+    return reaped
+
+
 def cmd_merge(args):
     """integrator 合回：逐片 merge --no-ff，gitlink 快进直钉 / 分叉在家子仓内合并后钉（design D5）。退出 0 / 1。"""
     pairs = []
@@ -4782,7 +4959,7 @@ def cmd_merge(args):
             die("merge 参数须形如 <S>=<sha>：%r" % a)
         pairs.append((sid.strip(), sha.strip()))
     root = toplevel()
-    merged, failed, warnings = [], [], []
+    merged, failed, warnings, reaped = [], [], [], []
     for p in sorted(_gitlinks(root)):
         if not _sub_ready(root, p):
             continue
@@ -4792,6 +4969,7 @@ def cmd_merge(args):
             failed.append("merge: %s 的检出 %s%s 与 gitlink %s 不一致，先同步" % (
                 p, (head or "?")[:10], busy, (rec or "无")[:10]))
     for sid, sha in ([] if failed else pairs):
+        pre = git(root, "rev-parse", "HEAD")
         r = _run_git(root, "merge", "--no-ff", "--no-commit", "-m", "integrate: " + sid, sha)
         conflicted = set(_unmerged(root))
         if r.returncode != 0 and not conflicted:
@@ -4817,8 +4995,12 @@ def cmd_merge(args):
                 break
         _merge_sync_checkout(root, links, warnings)
         merged.append(sid)
+        reaped.extend(_reap(root, sid, sha, pre, warnings))
     ok = not failed
-    print(json.dumps({"ok": ok, "merged": merged, "failed": failed, "warnings": warnings}, ensure_ascii=False))
+    out = {"ok": ok, "merged": merged, "failed": failed, "warnings": warnings}
+    if reaped:
+        out["reaped"] = reaped
+    print(json.dumps(out, ensure_ascii=False))
     sys.exit(0 if ok else 1)
 
 
