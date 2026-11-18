@@ -1,5 +1,7 @@
 # 切片间接口（规划时的约定；合回后由 integrator 按实际签名刷新）
 
+> wave 1 合回后核对：S1 的签名与 `slice-gate.py` 实际定义一致（`SCOPE_EXTRAS` 含 `inert`；`_scope_extras` / `_never_inert` / `_inert_ctx` / `_inert_paths` / `_recon_anchor` / `_inert_drop` / `_final_fresh(..., data=None)` / `_final_reusable(..., drop=None)` / `_pick_anchor(..., drop=None)` / `_baseline_anchor(..., drop=None)`）；S4 仅改文档。S2、S3 小节仍为规划约定，待其合回后刷新。
+
 ## S1 提供
 
 - `gate-scope.json` 的可选字段 `inert`（字符串数组）；`_scope_extras(change_dir)` 的返回值多一个键 `"inert"`（缺省 `[]`）。
