@@ -7,16 +7,12 @@ import shutil
 import subprocess
 import sys
 
-import pytest
-
 from conftest import HOOKS, commit_all, run_hook
 from final_helpers import (baseline, change_and_commit, final, gate_json, head, latest_anchor, make_repo,
                            timeline_rows)
 from test_final_tests_only import TEST_A2, _nograph
 from test_ledger_baseline import read_ledger
 from test_tiers_parts_gate import setup_parts
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S5 未实现")
 
 NODE_A, NODE_NEW = "tests/test_a.py::test_a", "tests/test_new.py::test_new"
 NEW_TEST = "import time\n\n\ndef test_new():\n    time.sleep(0.3)\n"
@@ -30,7 +26,6 @@ def with_new_test(repo):
     return d
 
 
-@PENDING
 def test_final_full_reports_test_delta(git_repo):
     # Given: change c 有一次全量基线（3 条用例）；之后提交了一个新测试文件
     d = with_new_test(git_repo)
@@ -54,7 +49,6 @@ def test_final_full_reports_test_delta(git_repo):
     assert read_ledger(git_repo, "c", "delta")["commit"] == head(git_repo)
 
 
-@PENDING
 def test_incremental_final_marks_inherited_cases(git_repo):
     # Given: change c 有一次测到依赖图的全量基线；之后提交了一个新测试文件
     d = with_new_test(git_repo)
@@ -72,7 +66,6 @@ def test_incremental_final_marks_inherited_cases(git_repo):
     assert set(latest_anchor(git_repo)["secs"]) == set(led["cases"]) and len(led["cases"]) == 4
 
 
-@PENDING
 def test_tests_only_final_inherits_previous_final_ledger(git_repo):
     # Given: 依赖图测不到的仓库，final 已绿并留下收口账本；之后只提交了 tests/test_a.py 的改动（多一条用例）
     d = _nograph(git_repo)
@@ -95,7 +88,6 @@ def test_tests_only_final_inherits_previous_final_ledger(git_repo):
     assert (out["tests"]["delta"]["added"], out["tests"]["delta"]["removed"]) == (1, 0), out["tests"]
 
 
-@PENDING
 def test_ship_markdown_appends_test_delta_when_fresh(git_repo):
     # Given: change c 的 final 刚跑完且通过，留下了同一 commit 的 delta.json
     d = with_new_test(git_repo)
@@ -117,7 +109,6 @@ def test_ship_markdown_appends_test_delta_when_fresh(git_repo):
     assert set(json.loads(pj.stdout)) == {"ready", "commit", "reasons", "blocked"}, pj.stdout
 
 
-@PENDING
 def test_ledger_failure_does_not_fail_final(git_repo, tmp_path):
     # Given: 一份不含 test-ledger.py 的 hooks 目录副本；change c 已用它跑过 baseline，之后提交了一个新测试文件
     d = make_repo(git_repo)
@@ -140,7 +131,6 @@ def test_ledger_failure_does_not_fail_final(git_repo, tmp_path):
     assert "用例 +" not in timeline_rows(d, "final")[-1]
 
 
-@PENDING
 def test_parts_runs_write_ledger(git_repo):
     # Given: 部件形态：部件 py（pytest）与部件 sh（脚本往 $FLIGHT_JUNIT 写报告）
     d = setup_parts(git_repo)
