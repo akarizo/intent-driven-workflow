@@ -1,11 +1,8 @@
 """test-ledger.py：final 账本对基线账本的对账、时间线片段、Markdown 与建议行
 （scenario: test-ledger#delta-counts-added-removed-slower 等 5 条）。
 骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
-import pytest
 
 from conftest import load_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S3 未实现")
 
 
 def case(sec, m=1, tier=None, outcome="passed"):
@@ -22,7 +19,6 @@ def base_ledger(cases, form="nodeid"):
     return ledger(cases, form=form, commit="b" * 40, phase="baseline")
 
 
-@PENDING
 def test_delta_counts_added_removed_slower():
     # Given: 基线有 a / b / c；全量 final 有 a、变慢的 c、新增的 d 与 e
     tl = load_hook("test-ledger")
@@ -42,7 +38,6 @@ def test_delta_counts_added_removed_slower():
     assert d["advice"] == tl.advice(d)
 
 
-@PENDING
 def test_delta_keeps_unrerun_cases_out_of_removed(tmp_path):
     # Given: 基线三条用例分属三个文件；final 是 impacted，只跑了 tests/test_b.py；tests/test_gone.py 已不存在
     tl = load_hook("test-ledger")
@@ -60,7 +55,6 @@ def test_delta_keeps_unrerun_cases_out_of_removed(tmp_path):
     assert (d["added"], d["removed"], d["unknown"]) == (1, 2, 1), d
 
 
-@PENDING
 def test_delta_handles_missing_or_junit_baseline():
     # Given: 一份 nodeid 形式的 final 账本；一份 junit 形式的基线账本
     tl = load_hook("test-ledger")
@@ -77,7 +71,6 @@ def test_delta_handles_missing_or_junit_baseline():
     assert d2["top_added"] == [["tests.test_a.TestC::test_m", 0.2, None]], d2
 
 
-@PENDING
 def test_segment_and_markdown_are_bounded():
     # Given: 新增 14 条（其中 12 条有耗时，共 8.4 秒）、删除 1 条、变慢 7 条的对账结果
     tl = load_hook("test-ledger")
@@ -109,7 +102,6 @@ def test_segment_and_markdown_are_bounded():
     assert (d["slower_n"], len(d["slower"]), len(d["top_added"]), d["no_sec"]) == (7, 5, 5, 2), d
 
 
-@PENDING
 def test_advice_lines_follow_fixed_rules():
     # Given: 四份对账结果——新增耗时主要在集成层；单元层耗时涨了 6 秒（30%）；三成用例无耗时；以上都不满足
     tl = load_hook("test-ledger")
