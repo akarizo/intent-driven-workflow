@@ -2688,6 +2688,15 @@ def _evidence_shared(root, change_dir, slice_id):
     return os.path.join(_pool_dir(root, EVIDENCE_DIR), change, slice_id + ".log")
 
 
+def _evidence_since(root, change_dir, slice_id):
+    """本片本次飞行的起点（首轮 start 写入的 ISO 时间）；读不到返回 None。"""
+    try:
+        with open(_evidence_shared(root, change_dir, slice_id)[:-4] + ".since", "r", encoding="utf-8") as f:
+            return f.read().strip() or None
+    except (OSError, RuntimeError):
+        return None
+
+
 def _evidence_merge(root, change_dir, slice_id, drop=False):
     """共用目录里该片的行追加进分支上的 evidence.log（整行已有的跳过）；drop=True 随后删掉共用文件。吞 OSError。"""
     try:
@@ -2729,13 +2738,17 @@ def _evidence_prune(root):
 
 def evidence_state(change_dir, slice_id, root=None):
     """返回 'missing_file' | 'no_rows' | 'red_first' | 'no_red'。
-    行 = 工作树 evidence.log 里本片的行 + 共用目录里本片的行；root 为 None 时只看工作树那份。"""
-    paths = [os.path.join(change_dir, EVIDENCE)]
+    行 = 工作树 evidence.log 里本片的行 + 共用目录里本片的行；root 为 None 时只看工作树那份。
+    工作树那份只计不早于本片首轮 start 时刻的行：record 并回分支的上一次飞行的行不算本轮的（design D6）。"""
+    local = os.path.join(change_dir, EVIDENCE)
+    paths = [local]
+    since = None
     if root:
         try:
             paths.append(_evidence_shared(root, change_dir, slice_id))
         except RuntimeError:
             pass
+        since = _evidence_since(root, change_dir, slice_id)
     paths = [p for p in paths if os.path.isfile(p)]
     if not paths:
         return "missing_file"
@@ -2744,7 +2757,7 @@ def evidence_state(change_dir, slice_id, root=None):
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 parts = line.rstrip("\n").split("\t")
-                if len(parts) >= 3 and parts[1] == slice_id:
+                if len(parts) >= 3 and parts[1] == slice_id and not (since and path == local and parts[0] < since):
                     rows.append(parts[2])
     if not rows:
         return "no_rows"
@@ -3774,6 +3787,14 @@ def cmd_start(args):
             try:
                 os.remove(_evidence_shared(root, args.change_dir, args.slice))
             except OSError:
+                pass
+            # 记下本次飞行的起点：分支 evidence.log 里早于它的本片行是上一次飞行并回的，G5 不计
+            try:
+                since = _evidence_shared(root, args.change_dir, args.slice)[:-4] + ".since"
+                os.makedirs(os.path.dirname(since), exist_ok=True)
+                with open(since, "w", encoding="utf-8") as f:
+                    f.write(now_iso() + "\n")
+            except (OSError, RuntimeError):
                 pass
             _evidence_prune(root)
     # 带 --expect-branch 时起点 = HEAD 与 change 分支的合并基点（接续已做完），分支上的飞行记录提交不算进区间

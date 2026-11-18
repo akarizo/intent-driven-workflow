@@ -24,7 +24,7 @@ Rule: 留痕按切片分文件放在共用目录；文件在就说明 hook 在�
 - **AND** `ls tools` 不记
 
 ### Requirement: 门禁跨 worktree 读留痕，记录时并回分支
-切片门禁判 G5 时，本片的留痕行 SHALL 取「所在工作树 `<change>/evidence.log` 里本片的行」与「共用目录里本片文件的行」之和。两处都不存在时判为 hook 未触发：只留警告，`hooks_missing` 为 true。至少一处存在而没有本片的行时 MUST 判红，`failed` 含 `G5 evidence` 并写明 hook 在工作而本片没跑过测试；此时 `hooks_missing` 为 false。有行时「先红后绿」的判定不变。`record` SHALL 在写门禁结论之前把共用目录里该片的行追加进 `<change>/evidence.log`（已有的行不重复追加，原有内容不动），随后删除共用目录里该片的文件；重复执行 MUST 是空操作。首轮 `start`（不带 `--continue`、不带 `--resume-checkpoint`、没有同片标记）SHALL 删除共用目录里该片的留痕文件；两种接续 MUST 保留它。`flight-evidence/` 下只保留最近 30 个 change 的目录。
+切片门禁判 G5 时，本片的留痕行 SHALL 取「所在工作树 `<change>/evidence.log` 里本片的行」与「共用目录里本片文件的行」之和；工作树那份 MUST 只计时间不早于本片首轮 `start` 时刻的行（首轮 `start` 把该时刻记在共用目录本片的 `.since` 文件里，读不到时不过滤），上一次飞行并回分支的行不算本轮的。两处都不存在时判为 hook 未触发：只留警告，`hooks_missing` 为 true。至少一处存在而没有本片的行时 MUST 判红，`failed` 含 `G5 evidence` 并写明 hook 在工作而本片没跑过测试；此时 `hooks_missing` 为 false。有行时「先红后绿」的判定不变。`record` SHALL 在写门禁结论之前把共用目录里该片的行追加进 `<change>/evidence.log`（已有的行不重复追加，原有内容不动），随后删除共用目录里该片的文件；重复执行 MUST 是空操作。首轮 `start`（不带 `--continue`、不带 `--resume-checkpoint`、没有同片标记）SHALL 删除共用目录里该片的留痕文件；两种接续 MUST 保留它。`flight-evidence/` 下只保留最近 30 个 change 的目录。
 Feature: 留痕跟着切片走，不跟着 worktree 走
 Rule: 上一轮留下的算数；合回之后分支上读得到
 
@@ -47,6 +47,13 @@ Rule: 上一轮留下的算数；合回之后分支上读得到
 - **WHEN** 连续两次运行 `record --json <S1 的门禁 JSON>`
 - **THEN** `evidence.log` 的内容恰为原有那一行后接 S1 的两行，没有重复，没有 S2 的行
 - **AND** 共用目录里 S1 的文件已删除，S2 的文件原样还在
+
+#### Scenario: gate-ignores-branch-rows-from-previous-flight
+- **GIVEN** 分支工作树的 `evidence.log` 留着上一次飞行 S1 先红后绿的两行
+- **AND** 本次飞行首轮 `start S1` 之后执行体一次测试都没跑
+- **WHEN** 运行 `gate S1`
+- **THEN** 门禁判红，`failed` 含以 `G5 evidence` 开头并写明「没跑过测试」的一项，`hooks_missing` 为 false
+- **AND** 工作树 `evidence.log` 再追加首轮 `start` 之后的先红后绿两行后，`gate S1` 通过
 
 #### Scenario: first-round-start-clears-stale-evidence
 - **GIVEN** 共用目录里留着上一次飞行的 S1 留痕，当前 worktree 没有切片标记

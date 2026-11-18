@@ -115,6 +115,7 @@
         "slice-evidence-shared#gate-fails-when-hook-alive-but-no-test-run",
         "slice-evidence-shared#record-merges-slice-rows-into-branch-log",
         "slice-evidence-shared#first-round-start-clears-stale-evidence",
+        "slice-evidence-shared#gate-ignores-branch-rows-from-previous-flight",
         "slice-worktree-reap#merge-reaps-merged-slice-worktrees",
         "slice-worktree-reap#merge-keeps-worktree-with-unmerged-work",
         "slice-worktree-reap#merge-never-touches-unrelated-worktrees",
@@ -193,6 +194,7 @@
     "slice-worktree-reap#iron-rule-names-reap-exception": "tests/test_merge_reap.py::test_iron_rule_names_reap_exception",
     "slice-continue#apply-docs-mirror-continue-and-tiers": "tests/test_resume_docs.py::test_apply_docs_mirror_continue_and_tiers",
     "turn-tiers#readme-and-installer-list-four-agents": "tests/test_resume_docs.py::test_readme_and_installer_list_four_agents",
-    "turn-tiers#spec-html-shows-turn-tier": "tests/test_spec_html_turns.py::test_spec_html_shows_turn_tier"
+    "turn-tiers#spec-html-shows-turn-tier": "tests/test_spec_html_turns.py::test_spec_html_shows_turn_tier",
+    "slice-evidence-shared#gate-ignores-branch-rows-from-previous-flight": "tests/test_evidence_shared_gate.py::test_gate_ignores_branch_rows_from_previous_flight"
   }
 }

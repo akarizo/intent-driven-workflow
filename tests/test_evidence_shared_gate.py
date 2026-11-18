@@ -1,5 +1,6 @@
 """门禁读共用目录的留痕、record 并回分支、首轮 start 清残留（scenario: slice-evidence-shared#gate-reads-rows-written-from-another-worktree、
-#gate-fails-when-hook-alive-but-no-test-run、#record-merges-slice-rows-into-branch-log、#first-round-start-clears-stale-evidence，共 4 条）。
+#gate-fails-when-hook-alive-but-no-test-run、#record-merges-slice-rows-into-branch-log、#first-round-start-clears-stale-evidence、
+#gate-ignores-branch-rows-from-previous-flight，共 5 条）。
 骨架：strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。"""
 import json
 
@@ -94,3 +95,28 @@ def test_first_round_start_clears_stale_evidence(git_repo):
 
     # Then: 首轮把残留清掉；两种接续都保留上一轮的留痕
     assert (first, cont, resume) == (False, True, True)
+
+
+def test_gate_ignores_branch_rows_from_previous_flight(git_repo):
+    # Given: 分支上的 evidence.log 留着上一次飞行 S1 先红后绿的两行（record 并回后随分支检出）；
+    #        本次飞行首轮 start S1 之后，执行体一次测试都没跑（共用目录没有本轮的行）
+    change = gate_repo(git_repo)
+    write(change / "evidence.log", RED + GREEN)
+
+    # When: 运行 gate S1
+    out = gate(git_repo)
+
+    # Then: 上一次飞行的行不算本轮的：判红，failed 含 G5「没跑过测试」，hooks_missing 为 false
+    assert out["ok"] is False, out
+    assert any(f.startswith("G5 evidence") and "没跑过测试" in f for f in out["failed"]), out["failed"]
+    assert out["hooks_missing"] is False
+
+    # When: 工作树 evidence.log 再追加本轮首轮 start 之后的先红后绿两行
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(change / "evidence.log", "a", encoding="utf-8") as f:
+        f.write(RED.replace("2026-11-18T00:00:01Z", now) + GREEN.replace("2026-11-18T00:00:02Z", now))
+    out = gate(git_repo)
+
+    # Then: 本轮的行照常计入，门禁通过
+    assert out["ok"] is True, out
