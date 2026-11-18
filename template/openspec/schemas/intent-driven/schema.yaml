@@ -337,7 +337,9 @@ artifacts:
       （`full` 为真）时必须逐个触发项写理由，键须等于 `triggers`；未全选时不得写。
       理由以 approve 提交时的版本为准，批准后再改 → final 复核红，重新批准即重新
       绑定。`gate.scope` 与 `gate.scope_full_reason` 不进 `plan_sha`
-      （改理由不让基线过期）。
+      （改理由不让基线过期）。基线的依赖图未测（`deps_unmeasured`）时触发项里
+      多出伪触发项 `runner:deps-unmeasured`，同样须写理由（或修运行器、配
+      `gate.impacted`），baseline 之前可预写，详见 `.claude/flight-runner-contract.md`。
       测试分层：openspec 根目录下有 `test-tiers.json`（单元层 `unit` +
       集成区域 `regions`，由 `/test-tiers` 生成）时，`gate.test` 必须等于
       `unit.cmd`（基线就是单元层）；`gate.integration`（可选）是本 change

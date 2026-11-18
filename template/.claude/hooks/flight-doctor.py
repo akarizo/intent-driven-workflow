@@ -7,7 +7,8 @@
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
 #   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock]
 #
-# 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用 _interfaces.md「S4 提供」列出的函数；
+# 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用它的 load_plan / load_baseline /
+# final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）。
 # [lock] 同法加载 flight-lock.py，只调用 holders() / lock_dir()（machine-test-lock design D7、D10）。
 # 纯标准库，兼容 Python 3.9。
 import argparse
@@ -40,12 +41,9 @@ COST_CLASSES = (
     ("没有可用锚点", "必要"),
 )
 UNCLASSIFIED = "未分类"
-DEFAULT_MAX_HOPS = 5
 TIMELINE = "timeline.md"
 BASELINE = "gate-baseline.json"
 SCOPE_FILE = "gate-scope.json"
-TIER_FILE = "test-tiers.json"
-CHECKS_FILE = "gate-checks.json"
 ANCHOR_DIR = "flight-anchors"
 DECLARE_KEYS = ("global", "blind", "anchor_max_hops")
 SEC_RE = re.compile(r"exit -?\d+, ([\d.]+)s")
@@ -104,46 +102,6 @@ def _baseline_part(sg, change_dir):
     return {"mode": bl.get("mode") or "full", "why": why or "", "sec": (bl.get("test") or {}).get("sec")}, bl
 
 
-def _final_part(sg, change_dir, data, baseline):
-    gate = data.get("gate") or {}
-    if gate.get("impacted"):
-        return "impacted", "gate.impacted 自己选测"
-    tiers = sg._load_tiers(change_dir)[0]
-    if sg.tiers_is_parts(tiers):
-        return "full", "多部件分层：部件恒全量"
-    test_cmd = gate.get("test")
-    if not test_cmd:
-        return "unknown", "gate.test 未配置（final 将探测测试命令）"
-    root = sg.toplevel(change_dir)
-    change_rel = sg._change_rel(root, change_dir)
-    name = os.path.basename(os.path.realpath(change_dir))
-    akey = sg._anchor_key(root, change_rel, test_cmd, gate)
-    tkey = sg._tiers_key(root, change_dir, tiers)
-    snap_why, pick = None, None
-    try:
-        snap = sg._snapshot(root, change_rel)
-    except RuntimeError as e:
-        snap, snap_why = None, "内容快照失败：%s" % e
-    if snap is not None:
-        head = sg.git(root, "rev-parse", "HEAD")
-        if hasattr(sg, "_scope_extras"):  # S2 合入后才有：按项目声明的 anchor_max_hops 滤锚点
-            hops = sg._scope_extras(change_dir).get("anchor_max_hops") or DEFAULT_MAX_HOPS
-            pick = sg._pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops)
-        else:
-            pick = sg._pick_anchor(root, akey, tkey, snap, head, change_rel, name)
-    base = os.path.dirname(os.path.dirname(os.path.abspath(change_dir)))
-    tier_rel = sg._change_rel(root, os.path.join(base, TIER_FILE))
-    decl = [sg._change_rel(root, os.path.join(base, n)) for n in (SCOPE_FILE, CHECKS_FILE)]
-    bl = baseline if isinstance(baseline, dict) and baseline.get("running") is not True else None
-    why, _ = sg._full_why(root, False, pick, bl, snap_why, gate=gate, tier_rel=tier_rel, decl_rels=decl)
-    un = (bl or {}).get("deps_unmeasured")
-    if why and pick is None and isinstance(un, dict):
-        why = "依赖图未测（%s）：%s" % (un.get("kind"), un.get("why"))
-    if why:
-        return "full", why
-    return "incremental", "锚点 %s，Δ %d 个文件" % (str(pick[0].get("commit") or "")[:10], len(pick[1]))
-
-
 def forecast(change_dir):
     out = {"baseline": {"mode": "unknown", "why": "", "sec": None},
            "final": {"mode": "unknown", "why": "", "sec": None}, "checks": []}
@@ -156,7 +114,7 @@ def forecast(change_dir):
     try:
         data = sg.load_plan(change_dir)
         gate = data.get("gate") or {}
-        out["final"]["sec"] = gate.get("full_suite_sec")
+        out["final"]["sec"] = sg.suite_sec(change_dir, data)
         checks = gate.get("checks") if isinstance(gate.get("checks"), list) else []
         out["checks"] = [c.get("name") for c in checks if isinstance(c, dict) and c.get("name")]
     except (Exception, SystemExit) as e:
@@ -168,7 +126,7 @@ def forecast(change_dir):
         out["baseline"]["why"] = _err(e)
     if data is not None:
         try:
-            out["final"]["mode"], out["final"]["why"] = _final_part(sg, change_dir, data, baseline)
+            out["final"]["mode"], out["final"]["why"] = sg.final_forecast(change_dir, data, baseline)
         except (Exception, SystemExit) as e:
             out["final"]["mode"], out["final"]["why"] = "unknown", _err(e)
     return out

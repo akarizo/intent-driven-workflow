@@ -488,14 +488,16 @@ def test_baseline_writes_gate_baseline(git_repo):
     # When: 运行 slice-gate.py baseline
     p = run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo)
 
-    # Then: 退出 0；gate-baseline.json 的 ok 为 true、commit 为 HEAD、plan_sha 40 位；verify 每片 exit 0；lint.exit 1 且 lines 含规范化行；full_suite_sec 仍写回
+    # Then: 退出 0；gate-baseline.json 的 ok 为 true、commit 为 HEAD、plan_sha 40 位；verify 每片 exit 0；lint.exit 1 且 lines 含规范化行；
+    #       gate-baseline.json 的 full_suite_sec 是数值，slices.json 里没有被写入该值
     assert p.returncode == 0, p.stderr
     bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
     assert bl["ok"] is True and bl["commit"] == git(git_repo, "rev-parse", "HEAD")
     assert len(bl["plan_sha"]) == 40
     assert {k: v["exit"] for k, v in bl["verify"].items()} == {"S1": 0, "S2": 0}
     assert bl["lint"]["exit"] == 1 and any("a.ts(#,#): error TS# x" == l for l in bl["lint"]["lines"])
-    assert json.loads((change / "slices.json").read_text(encoding="utf-8"))["gate"]["full_suite_sec"] is not None
+    assert isinstance(bl["full_suite_sec"], (int, float)) and not isinstance(bl["full_suite_sec"], bool), bl
+    assert json.loads((change / "slices.json").read_text(encoding="utf-8"))["gate"]["full_suite_sec"] is None
 
 
 def test_baseline_flags_red_verify(git_repo):
@@ -528,8 +530,12 @@ def test_preflight_refuses_missing_or_red_baseline(git_repo):
 
 
 def test_preflight_refuses_stale_baseline(git_repo):
-    # Given: baseline 绿之后把 S2 的 verify 改掉（plan_sha 不再匹配）
+    # Given: baseline 绿之后把 S2 的 verify 改掉（plan_sha 不再匹配）；gate.test = true 测不到依赖图，计划预写 runner:deps-unmeasured 理由
     change = _baseline_repo(git_repo)
+    data = json.loads((change / "slices.json").read_text(encoding="utf-8"))
+    data["gate"]["scope_full_reason"] = {"runner:deps-unmeasured": "gate.test 是 true，不跑 pytest，接受 final 全量"}
+    write_plan(change, data)
+    commit_all(git_repo, "reason")
     assert run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo).returncode == 0
     data = json.loads((change / "slices.json").read_text(encoding="utf-8"))
     data["slices"][1]["verify"] = "true && true"

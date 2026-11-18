@@ -303,7 +303,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 - **包装脚本**：会重建子进程环境的 `gate.test` 包装脚本须让被测进程 `PYTHONPATH` 以 `$FLIGHT_PLUGIN_PATH` 开头、把 `$FLIGHT_PYTEST_ARGS` 按 shell 拆词传给 pytest，并用 `$GATE_CHANGE` 取 change 名；直接调 pytest 的项目零改动
 - **测试结果交接**：final 运行检查时注入 `GATE_TEST_RESULT`（本次 final 的逐用例结局、`mode` / `inherited` / `complete`），检查不必自己重跑测试
 - **易变变量**：`FLIGHT_` 与 `GATE_` 前缀的变量每次运行都变，项目缓存键须剔除，建议改用白名单
-- **依赖图未测**：基线按 `not-pytest` / `plugins-dropped` / `plugin-import-failed` / `incomplete` 四类给出原因与修法；`flight-doctor.py forecast` 起飞前预告测试成本（只预告，不阻断），`cost` 收口归因每次全量，`doctor` 由 `install.sh --upgrade` 结束时体检
+- **依赖图未测**：基线按 `not-pytest` / `plugins-dropped` / `plugin-import-failed` / `incomplete` 四类给出原因与修法；未测须表态：选测复核多出伪触发项 `runner:deps-unmeasured`，须修运行器、配 `gate.impacted` 或在 `gate.scope_full_reason` 为它写理由；`flight-doctor.py forecast` 起飞前预告测试成本（只预告，不阻断），`cost` 收口归因每次全量，`doctor` 由 `install.sh --upgrade` 结束时体检
 - **全机测试锁**：baseline / final / `test-tiers.py run` 持独占锁、切片 gate 持共享锁，同一台机器上别的全量在跑时会排队（`FLIGHT_LOCK=off` 关闭，CI 容器已隔离时用）；门禁之外的测试运行用 `flight-lock.py run` 一起排队，细则见 `.claude/flight-runner-contract.md` 第 8 节
 
 #### Workflow 前置条件

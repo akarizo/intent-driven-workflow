@@ -27,9 +27,10 @@
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
 #                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
-#   baseline --change-dir DIR [--full]        起飞前预检：先把 gate-baseline.json 写成运行标记 {running, pid, started}，
+#   baseline --change-dir DIR [--full]        起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
+#                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
-#                                              耗时写回 slices.json.gate.full_suite_sec；退出码按 ok；
+#                                              全量耗时记在 gate-baseline.json 顶层 full_suite_sec（不写 slices.json）；退出码按 ok；
 #                                              结果带 change / mode / snapshot / cmd_key / byproducts；旧基线可复用（cmd_key 相同、
 #                                              Δ 只有 test_*.py 且补跑不红）→ mode incremental：不跑 gate.test，verify 只重跑受影响的片；
 #                                              --full 不复用；运行期间已有文件或测试文件被改 → 红，新出现的非测试文件 → 副产物只警告；
@@ -780,12 +781,6 @@ def load_plan(change_dir):
         return json.load(f)
 
 
-def save_plan(change_dir, data):
-    with open(os.path.join(change_dir, "slices.json"), "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-
-
 def run_cmd_full(cmd, cwd):
     p = subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True)
     return p.returncode, (p.stdout or "") + (p.stderr or "")
@@ -1105,6 +1100,21 @@ def load_baseline(change_dir):
             return json.load(f)
     except (OSError, ValueError):
         return None
+
+
+def _num(v):
+    """数值（int / float，bool 不算）原样返回，否则 None。"""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def suite_sec(change_dir, data=None):
+    """最近一次已知的全量耗时：gate-baseline.json（含运行标记）顶层 full_suite_sec → 计划里旧的 gate.full_suite_sec → None；bool 不算数值。"""
+    bl = load_baseline(change_dir)
+    sec = _num(bl.get("full_suite_sec")) if isinstance(bl, dict) else None
+    if sec is None and data is not None:
+        gate = data.get("gate")
+        sec = _num(gate.get("full_suite_sec")) if isinstance(gate, dict) else None
+    return sec
 
 
 def gate_cmd_verdict(kind, cmd, root, baseline):
@@ -1588,6 +1598,7 @@ SCOPE_FILE = "gate-scope.json"
 SCOPE_TIMEOUT = 300  # 秒，不可配置
 SCOPE_REPORT_FIELDS = ("full", "triggers", "count")
 SCOPE_UNDECLARED = "scope:undeclared"  # 伪触发项：未声明且本 change 建立声明（design D2）
+RUNNER_UNMEASURED = "runner:deps-unmeasured"  # 伪触发项：跑完的基线依赖图未测（plan-hygiene design D3）
 SCOPE_EXTRAS = ("global", "blind", "anchor_max_hops")  # gate-scope.json 的可选字段（unified-test-result-reuse design D5）
 SCOPE_EXTRAS_SHAPE = {"global": "字符串数组", "blind": "字符串数组", "anchor_max_hops": "正整数"}
 SCOPE_DECL_SOURCE = "仓库声明 gate-scope.json"
@@ -1840,6 +1851,70 @@ def _scope_reason_errors(report, reasons, pending=()):
     return errors
 
 
+def _runner_state(gate, change_dir, phase):
+    """runner:deps-unmeasured 的处置（plan-hygiene design D3；lint / preflight / baseline / final 共用）
+    → {"trigger", "pending", "kind"}：配了 gate.impacted 或属设计边界 → 两者皆假；
+    非 baseline 阶段且有跑完的基线 → 带 deps_unmeasured 即触发；否则（无跑完的基线或 baseline 开跑前）待定。"""
+    state = {"trigger": False, "pending": False, "kind": None}
+    if gate.get("impacted") is not None or _builtin_by_design(gate, _load_tiers(change_dir)[0]):
+        return state
+    bl = load_baseline(change_dir)
+    if phase != "baseline" and isinstance(bl, dict) and bl.get("running") is not True:
+        un = bl.get("deps_unmeasured")
+        if isinstance(un, dict):
+            state.update(trigger=True, kind=un.get("kind"))
+        return state
+    state["pending"] = True
+    return state
+
+
+def _with_runner(report, rs):
+    """在提供方报告之上追加 runner:deps-unmeasured：未全选 → 全选且触发项只有它；已全选 → 追加在后。"""
+    if not rs["trigger"]:
+        return report
+    trig = list(report["triggers"]) if report["full"] else []
+    return dict(report, full=True, triggers=trig + [RUNNER_UNMEASURED])
+
+
+def _runner_reason_errors(report, reasons, pending, rs):
+    """_scope_reason_errors + runner 处置（report 已经 _with_runner 并入）：待定项并入 pending；缺的含它时在违规后追加修法。"""
+    pend = list(pending) + ([RUNNER_UNMEASURED] if rs["pending"] else [])
+    errors = _scope_reason_errors(report, reasons, pend)
+    if rs["trigger"] and RUNNER_UNMEASURED not in set(reasons or {}):
+        errors = [e + "（依赖图未测：%s；修法见 .claude/flight-runner-contract.md，或配 gate.impacted）" % (rs["kind"] or "未知")
+                  if "缺理由" in e else e for e in errors]
+    return errors
+
+
+def _runner_hint(gate, change_dir, rs):
+    """静态提示（只提示，不影响退出码；baseline 阶段不调用）：待定（即没有跑完的基线）、gate.test 不是普通测试命令，
+    且命令直接写出的仓库文件及其 shell 静态闭包里没有同时出现两个契约变量 → 一行 runner: 提示；否则 None。"""
+    if not rs["pending"] or _plain_test_cmd(gate.get("test")):
+        return None
+    root = _git_top(os.path.dirname(_scope_decl_path(change_dir)))
+    files = _test_gate_files(root, gate) if root else None
+    if not files:
+        return None
+    text = ""
+    for rel in sorted(files):
+        try:
+            with open(os.path.join(root, rel), "r", encoding="utf-8", errors="replace") as f:
+                text += f.read() + "\n"
+        except OSError:
+            continue
+    if "FLIGHT_PYTEST_ARGS" in text and "FLIGHT_PLUGIN_PATH" in text:
+        return None
+    direct = set()
+    try:
+        direct = {r for r in (_repo_rel(root, t) for t in shlex.split(gate.get("test") or "")) if r}
+    except ValueError:
+        pass
+    named = sorted(f for f in files if f in direct) or sorted(files)
+    return ("runner: gate.test 的 %s 文本里没有同时出现 FLIGHT_PYTEST_ARGS 与 FLIGHT_PLUGIN_PATH，依赖图可能测不到；"
+            "baseline 若测不到依赖图须为 runner:deps-unmeasured 写理由（可预写），修法见 .claude/flight-runner-contract.md"
+            % "、".join(named))
+
+
 def _undeclared_msg(change_dir):
     """未声明选测范围的违规原文（lint / baseline / final 共用）。"""
     return ("未声明选测范围：在 %s 写 {\"builtin\": true}（gate.test 是普通测试命令）"
@@ -1864,10 +1939,21 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     errors.extend(perr)
     if errors or not run_scope:
         return errors, None
+    rs = _runner_state(gate, change_dir, phase)
+    hint = _runner_hint(gate, change_dir, rs) if phase != "baseline" else None
+    errors, note = _lint_scope_provider(gate, change_dir, data, phase, provider, reasons, rs)
+    if note and hint:
+        note += "\n" + hint
+    return errors, note
+
+
+def _lint_scope_provider(gate, change_dir, data, phase, provider, reasons, rs):
+    """_lint_scope 按提供方核对的部分；rs：_runner_state 的结论，并入每个分支的理由核对。"""
     if provider["kind"] is None:
         if not _establishes_decl(data, change_dir):
             return ["scope: " + _undeclared_msg(change_dir)], None
-        errors = _scope_reason_errors({"full": True, "triggers": [SCOPE_UNDECLARED]}, reasons)
+        report = _with_runner({"full": True, "triggers": [SCOPE_UNDECLARED]}, rs)
+        errors = _runner_reason_errors(report, reasons, (), rs)
         return errors, (None if errors else "scope: 未声明选测范围，本 change 建立仓库选测声明（已写理由）")
     if provider["kind"] == "builtin":
         test = gate.get("test")
@@ -1876,7 +1962,8 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
                     "npm test / go test ./... / cargo test），当前是 %s，认不出：自带选测的仓库改用 {\"cmd\": \"<只算范围的命令>\"}"
                     % (test if _nonblank(test) else "空")], None
         report = _builtin_report(_git_top(os.path.dirname(_scope_decl_path(change_dir))), change_dir, data, phase)
-        errors = _scope_reason_errors(report, reasons, report.get("pending") or ())
+        report = _with_runner(report, rs)
+        errors = _runner_reason_errors(report, reasons, report.get("pending") or (), rs)
         if errors:
             return errors, None
         tail = "".join("；" + n for n in report.get("notes") or [])
@@ -1888,7 +1975,8 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     errors, report = _run_scope(provider["cmd"], root, _planned_owns(data), _change_rel(root, change_dir))
     if errors:
         return errors, None
-    errors = _scope_reason_errors(report, reasons)
+    report = _with_runner(report, rs)
+    errors = _runner_reason_errors(report, reasons, (), rs)
     if errors:
         return errors, None
     if report["full"]:
@@ -3554,6 +3642,7 @@ def cmd_gate(args):
     files = committed | uncommitted
 
     gate = data.get("gate") or {}
+    gate["full_suite_sec"] = suite_sec(args.change_dir, data)  # 只供 _g7_timeout 估时，不落盘
     baseline = load_baseline(args.change_dir)
     hold = flight_lock("shared", os.path.basename(os.path.realpath(args.change_dir)), "gate %s" % args.slice,
                        _lock_expect_sec(baseline, gate))  # 共享锁：verify 之前取，G7 之后放（design D3）
@@ -3696,6 +3785,7 @@ def cmd_final(args):
     root = toplevel()
     data = load_plan(args.change_dir)
     gate = data.get("gate") or {}
+    gate["full_suite_sec"] = suite_sec(args.change_dir, data)  # 只供 _g7_timeout 估时，不落盘
     failed, warnings = [], []
     # 先于任何测试运行取证：测的是工作树，合回只带已提交内容
     dirty = _dirty_paths(root, args.change_dir)
@@ -4045,10 +4135,9 @@ def cmd_baseline(args):
     root = toplevel()
     data = load_plan(args.change_dir)
     gate = data.setdefault("gate", {})
-    test_cmd = gate.get("test") or detect_test_cmd(root)
-    if not test_cmd:
-        die("未配置也未探测到全量测试命令")
-    gate["test"] = test_cmd
+    test_cmd = gate.get("test")
+    if not (isinstance(test_cmd, str) and test_cmd.strip()):  # 不探测、不回填（design D1）
+        die("gate.test 未配置：baseline 不探测全量测试命令，gate.test 须显式写出（如 python3 -m pytest -q）")
     # 检查名会拼进 rmtree 的路径：形状先于任何动作校验，非法时不写运行标记，不碰现有 gate-baseline.json
     cerrs = _lint_checks(gate)[0]
     if cerrs:
@@ -4079,9 +4168,15 @@ def cmd_baseline(args):
         key = cmd_key(root, change_rel, test_cmd)
     except RuntimeError as e:  # design D12：不写运行标记，不碰现有 gate-baseline.json
         die("内容快照失败：%s" % e)
+    # 上一次已知的全量耗时（design D1）：写进运行标记供 preflight 估时；内存里的 gate 供 _g7_timeout，不落盘
+    last_sec = suite_sec(args.change_dir, data)
+    gate["full_suite_sec"] = last_sec
     # 运行标记：preflight 据此分辨「还在跑」与「跑到一半中断」，不把半成品当缺基线
+    run_mark = {"running": True, "pid": os.getpid(), "started": now_iso()}
+    if last_sec is not None:
+        run_mark["full_suite_sec"] = last_sec
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
-        json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
+        json.dump(run_mark, f, ensure_ascii=False)
         f.write("\n")
     # 独占锁：运行标记之后、复用候选判定之前取，检查全部结束之后放（design D3）
     hold = flight_lock("exclusive", name, "baseline", _lock_expect_sec(old, gate))
@@ -4130,19 +4225,21 @@ def cmd_baseline(args):
     elif hit is not None:
         ct = src.get("test") or {}
         bl["test"] = {k: ct[k] for k in ("exit", "sec", "failed", "failed_nodes", "failed_form") if k in ct}
+        if isinstance(src.get("deps_unmeasured"), dict):  # 没有新的测量就沿用来源的未测状态（plan-hygiene design D3）
+            bl["deps_unmeasured"] = src["deps_unmeasured"]
         if isinstance(ct.get("failed"), list) and ct["failed"]:
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     elif parts:  # 部件形态（design D8）：不跑 gate.test（驱动命令），逐部件运行单元层；不写锚点
         bl["test"], bl["tiers"], part_wall, out = _baseline_parts(root, tiers, reasons, warnings, hold.info)
-        gate["full_suite_sec"] = bl["test"]["sec"]
+        full_sec = bl["test"]["sec"]
         unit_wall = sum(part_wall.values())
     else:
         t0 = time.time()
         tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True,
                            extra_env=_gate_test_env("baseline", args.change_dir))
         rc, out = tg["rc"], tg["out"]
-        gate["full_suite_sec"] = round(time.time() - t0, 1)
-        bl["test"] = {"exit": rc, "sec": gate["full_suite_sec"]}
+        full_sec = round(time.time() - t0, 1)
+        bl["test"] = {"exit": rc, "sec": full_sec}
         test_ok = rc == 0 or tg["failed"] is not None
         adeps = tg["deps"]
         if adeps is None:
@@ -4284,16 +4381,16 @@ def cmd_baseline(args):
         warnings.extend(warnings_d6)
     except RuntimeError as e:  # design D12：运行标记一定被结果覆盖
         reasons.append("基线结束时内容快照失败：%s；重跑 baseline" % e)
-    # 后台跑期间人可能改了 slices.json：重读当前文件，只写回耗时，不拿开跑时的旧数据整份覆盖
+    # 全量耗时记在基线里（design D1）：全量 = 本次墙钟；增量 = 上一次已知 → 候选记的 → 候选的 test.sec（锚点包装都没有 → None）
+    if hit is not None:
+        full_sec = last_sec
+        if full_sec is None:
+            full_sec = _num(src.get("full_suite_sec"))
+        if full_sec is None:
+            full_sec = _num((src.get("test") or {}).get("sec"))
+    bl["full_suite_sec"] = full_sec
+    # 后台跑期间人可能改了 slices.json：重读当前文件只为判 gate / verify 是否被改；baseline 不写 slices.json
     cur = load_plan(args.change_dir)
-    cg = cur.setdefault("gate", {})
-    if not cg.get("test"):
-        cg["test"] = test_cmd
-    if hit is None:
-        cg["full_suite_sec"] = gate["full_suite_sec"]
-    elif cg.get("full_suite_sec") is None:  # 增量不改已有耗时；本 change 还没有时写候选的（design D9）
-        cg["full_suite_sec"] = (src.get("test") or {}).get("sec")
-    save_plan(args.change_dir, cur)
     bl["plan_sha"] = sha0
     if plan_sha(cur) != sha0:
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
@@ -4340,7 +4437,8 @@ def cmd_baseline(args):
     # 入池（design D5）：只收全绿的全量；带预存红的跨 change 用不上，指纹为空的匹配不到
     if hit is None and bl["ok"] and bl["test"].get("exit") == 0 and key:
         w = _pool_write(root, {k: bl.get(k) for k in
-                               ("change", "commit", "at", "ok", "cmd_key", "snapshot", "byproducts", "test")})
+                               ("change", "commit", "at", "ok", "cmd_key", "snapshot", "byproducts", "test",
+                                "full_suite_sec", "deps_unmeasured")})
         if w:
             warnings.append(w)
             bl["warnings"] = warnings
@@ -4403,8 +4501,8 @@ def _die_running_baseline(change_dir, bl, data):
         mins = "%d" % ((datetime.now(timezone.utc) - started).total_seconds() // 60)
     except ValueError:
         mins = "?"
-    sec = (data.get("gate") or {}).get("full_suite_sec")
-    est = "%s 秒" % sec if isinstance(sec, (int, float)) and not isinstance(sec, bool) else "未知"
+    sec = suite_sec(change_dir, data)  # 运行标记此刻就是 gate-baseline.json
+    est = "%s 秒" % sec if sec is not None else "未知"
     die("基线仍在跑（已 %s 分钟，上次全量约 %s）：等它结束再起飞" % (mins, est))
 
 
@@ -4704,7 +4802,8 @@ def _hash_paths(root, rels):
 
 def _snapshot(root, change_rel):
     """工作区相对 HEAD 的未提交改动 {路径: blob id | None（删除）}；不含字节码、.pytest_cache 与本 change 的计划工件。
-    软链按链接文本取 blob（与 git 树里的表示一致，断链也不抛错，design D1）。git 失败抛 RuntimeError。"""
+    软链按链接文本取 blob（与 git 树里的表示一致，断链也不抛错，design D1）。gitlink 目录记子仓 HEAD 的 commit
+    （子仓未就绪或取不到时记索引里的 sha）；其他目录不记。git 失败抛 RuntimeError。"""
     entries, paths, i = _git_raw(root, ["status", "--porcelain", "-z", "--untracked-files=all"]).split("\0"), set(), 0
     while i < len(entries):
         e = entries[i]
@@ -4716,7 +4815,7 @@ def _snapshot(root, change_rel):
             if i < len(entries) and entries[i]:
                 paths.add(entries[i])
             i += 1
-    snap, present = {}, []
+    snap, present, links = {}, [], _gitlinks(root)
     for p in sorted(paths):
         if _ignored(p) or _plan_file(p, change_rel):
             continue
@@ -4727,7 +4826,9 @@ def _snapshot(root, change_rel):
             present.append(p)
         elif not os.path.exists(full):
             snap[p] = None
-        # 目录（嵌套仓库 / 子模块）不记
+        elif p in links and os.path.isdir(full):
+            snap[p] = (_sub_head(root, p) if _sub_ready(root, p) else None) or links[p]
+        # 其他目录（嵌套仓库）不记
     for p, b in zip(present, _hash_paths(root, present)):
         snap[p] = b
     return snap
@@ -5470,7 +5571,10 @@ def _final_scope_guard(root, change_dir, data, why, triggers):
         failed.extend(_g2_scope(e) for e in errs)
         if report is not None and report["full"]:
             full, trig = True, list(dict.fromkeys(report["triggers"]))
-    unapproved = [t for t in trig if t not in approved]
+    # 基线依赖图未测（plan-hygiene design D3）：追加伪触发项
+    merged = _with_runner({"full": full, "triggers": trig}, _runner_state(gate, change_dir, "final"))
+    full, trig = merged["full"], merged["triggers"]
+    unapproved =[t for t in trig if t not in approved]
     if unapproved:
         failed.append("G2 scope：final 将全量（触发 %s），未在计划期表态：在 propose 期写理由并重新批准，或修复后重跑"
                       % "、".join(unapproved))
@@ -5776,6 +5880,58 @@ def _final_fresh(root, change_dir, final_commit):
     return all(_is_bookkeeping(n, changes_rel) for n in names if n)
 
 
+def final_forecast(change_dir, data, baseline):
+    """final 将怎么跑的预告 → (mode, why)；mode ∈ impacted / full / incremental / unknown。只读，不运行测试。"""
+    gate = data.get("gate") or {}
+    if gate.get("impacted"):
+        return "impacted", "gate.impacted 自己选测"
+    tiers = _load_tiers(change_dir)[0]
+    if tiers_is_parts(tiers):
+        return "full", "多部件分层：部件恒全量"
+    test_cmd = gate.get("test")
+    if not test_cmd:
+        return "unknown", "gate.test 未配置（final 将探测测试命令）"
+    root = toplevel(change_dir)
+    change_rel = _change_rel(root, change_dir)
+    name = os.path.basename(os.path.realpath(change_dir))
+    akey = _anchor_key(root, change_rel, test_cmd, gate)
+    tkey = _tiers_key(root, change_dir, tiers)
+    snap_why, pick = None, None
+    try:
+        snap = _snapshot(root, change_rel)
+    except RuntimeError as e:
+        snap, snap_why = None, "内容快照失败：%s" % e
+    if snap is not None:
+        head = git(root, "rev-parse", "HEAD")
+        hops = _scope_extras(change_dir)["anchor_max_hops"]
+        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops)
+    tier_rel = _change_rel(root, _tiers_path(change_dir))
+    bl = baseline if isinstance(baseline, dict) and baseline.get("running") is not True else None
+    why, _ = _full_why(root, False, pick, bl, snap_why, gate=gate, tier_rel=tier_rel,
+                       decl_rels=_decl_rels(root, change_dir))
+    un = (bl or {}).get("deps_unmeasured")
+    if why and pick is None and isinstance(un, dict):
+        why = "依赖图未测（%s）：%s" % (un.get("kind"), un.get("why"))
+    if why:
+        return "full", why
+    return "incremental", "锚点 %s，Δ %d 个文件" % (str(pick[0].get("commit") or "")[:10], len(pick[1]))
+
+
+def _rerun_forecast(change_dir, data):
+    """ship 的「final 过期」理由后缀：补跑预告；unknown 或预告出错 → 空串（不影响裁决）。"""
+    try:
+        mode, why = final_forecast(change_dir, data, load_baseline(change_dir))
+    except (Exception, SystemExit):
+        return ""
+    if mode == "incremental":
+        return "；补跑将是增量（%s）" % why
+    if mode == "full":
+        return "；补跑将是全量（%s）" % why
+    if mode == "impacted":
+        return "；补跑由 gate.impacted 选测"
+    return ""
+
+
 def cmd_ship(args):
     """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；工作流的 blocked 只作说明。"""
     root = toplevel()
@@ -5802,7 +5958,8 @@ def cmd_ship(args):
         elif not final["ok"]:
             reasons.append("final 红：%s" % final["failed"])
         elif final["commit"] != head[:10] and not _final_fresh(root, args.change_dir, final["commit"]):
-            reasons.append("final 过期：记录 %s，HEAD %s" % (final["commit"], head[:10]))
+            reasons.append("final 过期：记录 %s，HEAD %s" % (final["commit"], head[:10])
+                           + _rerun_forecast(args.change_dir, data))
     # 铁律 4：CRITICAL/HIGH 未闭环不得非 draft —— 与是否飞行模式无关，无条件检查
     blocking = findings.get("blocking") or []
     if blocking:

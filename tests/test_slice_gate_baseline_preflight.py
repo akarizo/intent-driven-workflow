@@ -104,11 +104,13 @@ def test_baseline_keeps_plan_edits_made_while_running(git_repo):
     # When: 运行 slice-gate.py baseline
     p = run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo)
 
-    # Then: 退出 0；slices.json 里 S1 的 owns 保留了 docs/**，且 gate.full_suite_sec 已写入
+    # Then: 退出 0；slices.json 里 S1 的 owns 保留了 docs/**；全量耗时记在 gate-baseline.json，没有写进 slices.json
     assert p.returncode == 0, p.stdout + p.stderr
     data = json.loads((change / "slices.json").read_text(encoding="utf-8"))
     assert "docs/**" in data["slices"][0]["owns"], data["slices"][0]
-    assert isinstance(data["gate"]["full_suite_sec"], (int, float)), data["gate"]
+    bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
+    assert isinstance(bl["full_suite_sec"], (int, float)), bl
+    assert data["gate"]["full_suite_sec"] is None, data["gate"]
 
 
 def test_baseline_red_when_verify_edited_while_running(git_repo):
