@@ -3,12 +3,8 @@
 骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, run_hook, write
 from test_slice_gate import plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S3 未实现")
 
 
 def tier_repo(git_repo, n_src, s1_extra=None, s2_extra=None):
@@ -34,7 +30,6 @@ def waves(git_repo, change):
     return run_hook("slice-gate", "waves", "--change-dir", str(change), cwd=git_repo)
 
 
-@PENDING
 def test_turns_computed_from_owned_files(git_repo):
     # Given: S1 的 owns 展开后在 HEAD 有 8 个现存文件，S2 有 1 个；没有基线
     change = tier_repo(git_repo, 8)
@@ -53,7 +48,6 @@ def test_turns_computed_from_owned_files(git_repo):
     assert turns(git_repo, change)[1] == t2
 
 
-@PENDING
 def test_turns_measured_at_baseline_commit(git_repo):
     # Given: 基线记录的 commit 上 S1 有 8 个现存文件；之后实现又提交了 3 个新文件
     change = tier_repo(git_repo, 8)
@@ -73,7 +67,6 @@ def test_turns_measured_at_baseline_commit(git_repo):
     assert fallback == {"S1": "large", "S2": "standard"}, fallback
 
 
-@PENDING
 def test_turns_upgrade_declared_in_plan(git_repo):
     # Given: S1 展开后有 9 个现存文件（按规模是大片档）；S2 只有 1 个文件但计划里写了 "turns": "large"
     change = tier_repo(git_repo, 9, s2_extra={"turns": "large"})
