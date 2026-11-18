@@ -5,6 +5,7 @@
 change `machine-test-lock` 首飞 S3 因计划漏 owns 被 blocked（S5 / S6 依赖跳过），S1 / S2 / S4 已绿并合回。补计划、重批之后，`/opsx-apply` 与 `openspec-apply-change` skill 都没写「只补飞未完成切片」怎么做。本次的做法是临时的：新开一次 Workflow，`waves: [["S3"],["S5","S6"]]`、`deps` 去掉已绿的依赖；已核实 `slice-gate.py start` 首轮会清掉旧快照、基点取新 HEAD，不会把已合回切片算进越界。
 
 附带：final-gate integrator 已记过 `apply-done`，主会话按 opsx-apply step 6 又记了一次，时间线出现两条 `apply-done`。
+第 2 次（2026-11-18 `ship-rerun-hardening`）：`timeline.md` 里 `06:40:35Z apply-done blocked=0 blocking=1`（工作流 final）与 `06:40:50Z apply-done`（主会话 step 6）各一条。不是补飞场景，所以「谁来记 apply-done」与补飞无关，正常一次飞行就会重复。
 
 ## 建议
 
