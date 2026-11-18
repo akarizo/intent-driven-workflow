@@ -56,6 +56,7 @@ metadata:
    python3 .claude/hooks/flight-doctor.py forecast --change-dir openspec/changes/<name>
    ```
    把它的输出（测试成本预告：baseline / final 各走全量还是增量、原因与约耗秒数）原样打印。只预告，不阻断：结论不影响是否起飞。
+   baseline、final 与切片门禁会排队等全机测试锁（同一台机器同一时刻只有一套全量在跑）；stderr 里的「排队中」不是卡死，时间线会记下排队秒数，详见 `.claude/flight-runner-contract.md` 第 8 节。
 
 3. **记录批准事件并提交飞行记录**
    ```bash

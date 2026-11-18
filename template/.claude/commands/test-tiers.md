@@ -129,6 +129,8 @@ description: 把仓库测试重划分为单元层与集成区域（多语言 mon
 
 `python3 .claude/hooks/test-tiers.py run unit [--part P]`：在每个部件的 `root` 下依次运行其 `unit.cmd`，每部件打印一行「部件 P：exit N · T s」；全部为 0 时退出 0，否则退出 1；分层文件缺失或不合法退出 2。简写形态视作 `root` 为 `.` 的单个部件，同样可用。它是全仓单元层的统一入口，人与 CI 都跑它；部件形态下 `gate.test` 逐字等于它，但门禁不实际执行这条命令，而是逐部件运行并逐部件判定（基线记 `test.parts.<P>`，final 按部件差分，部件命令改动由 preflight 判「基线过期」）。
 
+`run` 与 `probe` 运行期间持全机测试锁（独占），有别的全量在跑时会排队，详见 `.claude/flight-runner-contract.md` 第 8 节。
+
 ## JUnit 契约（G10 逐用例耗时）
 
 - 库每次运行部件单元层都设 `FLIGHT_JUNIT=<临时路径>`：runner 能指定报告路径时，让 `unit.cmd` 把 JUnit XML 写到 `$FLIGHT_JUNIT`；
