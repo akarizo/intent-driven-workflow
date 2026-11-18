@@ -21,3 +21,6 @@
 2026-11-18T09:43:54Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-18T10:07:05Z	ship	draft: final 过期：记录 b94e4a512e，HEAD 2254d33662；补跑将是增量（锚点 b1be3db4be，Δ 26 个文件）; 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-18T10:16:43Z	final	增量（锚点 b1be3db4be，重跑 81 个文件 / 沿用 100 个用例） 测试 551.9s · 检查 schema-validate 1.6s · 排队 0.0s · 负载 3.5→3.4/18 ok
+2026-11-18T10:16:49Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-18T10:17:16Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-18T10:17:28Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/21
