@@ -69,11 +69,12 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    ```bash
    python3 .claude/hooks/slice-gate.py baseline --change-dir openspec/changes/<name>
    ```
-   用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。它跑一次全量测试，把耗时写回 `slices.json.gate.full_suite_sec`；同时跑 lint / typecheck 基线与每片 `verify`，产出 `gate-baseline.json`。
+   用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。
+   它跑一次全量测试，耗时记在 `gate-baseline.json` 里，不改任何计划文件；同时跑 lint / typecheck 基线与每片 `verify`。
    verify 在基线上必须绿（骨架是 strict-xfail）。
    配置了 `gate.checks` 时，baseline 在 verify 之后运行每个检查的 `baseline` 命令，任一红即基线红（照下面的红处理）；代码树没变时按与 lint 相同的条件沿用上次结果。
    配置了测试分层（openspec 根有 `test-tiers.json`）时，baseline 只跑单元层（`gate.test`，带探针判 G10 慢单测 / G11 单测不纯，任一失败即基线红）与 `gate.integration` 选中的区域（verify 之后、检查之前），不走增量（与 `--full` 相同），未选区域不跑；输出带分层耗时 `tier_sec`。
-   baseline 运行期间改计划文件不会被覆盖（结束时只写回耗时）；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
+   baseline 不写计划文件，运行期间改计划不会被覆盖；改的是 gate 命令或某片 `verify` 时基线判红（「重跑 baseline」），按下面的红处理，跑完后须重跑 baseline。
    脚本自己判断跑全量还是**增量**，并跳过重复的运行：
    候选依次是本 change 旧基线 → 锚点 → 基线池：
    - **旧基线**：自上次基线以来代码树只有 `test_*.py` 变了（计划工件不计）、这些文件不含上次全量的预存红、且补跑这些文件不红 → 复用上次的全量结论，只补跑这些测试文件；verify 只重跑受影响的片；旧基线红但测试部分有效（`test_ok` 为真）时按部件复用测试部分，verify / lint / typecheck / 检查照常判定；本 change 目录里不在 gate.test 静态 shell 闭包内的门禁脚本（如只被 gate.lint 引用的）改动不让测试结论失效；
@@ -86,7 +87,8 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    baseline 结束（后台通知）时只报告一行：
    - 退出 0 → 「基线绿（全量 N 秒；预存红 k 条）」或「基线绿（增量：复用 <change> 的全量，补跑 n 个测试文件 t 秒；预存红 k 条）」或「基线绿（增量：经锚点 <change>@<commit>，补跑 n 个测试文件 t 秒；预存红 k 条）」；
    - 退出非 0 → **停下报告** stdout 的 `reasons`，并说明：人类修 `gate.test` / `verify` / 环境后重跑本步；修改涉及计划文件（proposal / design / slices.json / specs / 切片包）时重新渲染 spec.html（step 4）并重新批准。
-   报告行之后运行：
+   报告行之后先重跑一次 `python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>`；因 `runner:deps-unmeasured` 判红（基线的依赖图未测）时二选一：修包装脚本后重跑 baseline，或在 `gate.scope_full_reason` 为它写理由并重渲 spec.html（step 4）。
+   lint 之后运行：
    ```bash
    python3 .claude/hooks/flight-doctor.py forecast --change-dir openspec/changes/<name>
    ```
@@ -110,7 +112,8 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    1. 打印 `spec.html` 的**绝对路径**（`openspec/changes/<name>/spec.html`，用 `pwd` 拼成绝对路径再打印），请人类打开审阅飞行计划。
    2. 明确一行：**本命令到此结束。不得在同一轮继续 `/opsx-apply`；起飞需要你自己发出 `/opsx-apply <name>`（`takeoff-gate.py` 会在转录里核验这条人类批准 + 计划新鲜度，模型自证无效）。**
    3. 说明 baseline 仍在后台跑：跑完前起飞会被 preflight 拒绝（报「仍在跑」），等 baseline 报告一行后再起飞。
-   4. 提示用户在 baseline 报告之后再把工件单独 commit（artifacts-only commit；baseline 结束会改写 `gate-baseline.json` 与 `slices.json` 的耗时）。
+   4. 提示用户在 baseline 报告之后再把工件单独 commit（artifacts-only commit；`gate-baseline.json` 是本次基线的产物，随工件一起入库）。
+      子仓 gitlink 的改动与计划工件同一次提交，baseline 时暂存与否都不影响基线。
 
 **Output**
 

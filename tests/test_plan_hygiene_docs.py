@@ -3,11 +3,7 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 改完文档后去掉标记即解锁。"""
 import re
 
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S4 实现后去掉")
 
 CLAUDE = ROOT / "template" / ".claude"
 PROPOSE = (CLAUDE / "commands" / "opsx-propose.md", CLAUDE / "skills" / "openspec-propose" / "SKILL.md")
@@ -34,7 +30,6 @@ def _tasks_instruction(text):
     return text[at:at + 1 + nxt.start()] if nxt else text[at:]
 
 
-@PENDING
 def test_propose_docs_say_baseline_leaves_plan_alone():
     # Given: template/.claude/commands/opsx-propose.md 与 template/.claude/skills/openspec-propose/SKILL.md
     texts = [_read(p) for p in PROPOSE]
@@ -52,7 +47,6 @@ def test_propose_docs_say_baseline_leaves_plan_alone():
     assert gitlink, [p.name for p in PROPOSE]
 
 
-@PENDING
 def test_docs_describe_runner_statement():
     # Given: 运行器契约文档、README.md、schema.yaml 与 propose 的两份文档
     contract, readme, schema = _read(CONTRACT), _read(README), _read(SCHEMA)
