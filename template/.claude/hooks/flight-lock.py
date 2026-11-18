@@ -205,6 +205,22 @@ def _take(fd, op, wait):
         delay = min(1.0, delay + 0.2)
 
 
+def _clear_stale_holders(hd):
+    """独占拿到 main.lock 之后调用：flock 保证此刻没有别的合法持有者，本进程以外的持有者文件都是残留
+    （持有者被强杀且 pid 被无关进程复用时，_holders_raw 的在世判断清不掉它）。删除失败静默忽略。"""
+    mine = "%d.json" % os.getpid()
+    try:
+        names = os.listdir(hd)
+    except OSError:
+        return
+    for name in names:
+        if name.endswith(".json") and name != mine:
+            try:
+                os.unlink(os.path.join(hd, name))
+            except OSError:
+                pass
+
+
 def _write_holder(d, rec):
     path = os.path.join(d, "holders", "%d.json" % os.getpid())
     tmp = path + ".tmp"
@@ -248,6 +264,8 @@ def _acquire(mode, change, label, expect_sec):
             return Hold(mode, "timeout", waited=time.time() - t0, why=wait.why)
         os.close(gate)  # 放闸口
         fds.remove(gate)
+        if mode == "exclusive":
+            _clear_stale_holders(hd)
         now = time.time()
         holder_file = _write_holder(d, {
             "pid": os.getpid(), "mode": mode, "change": change, "label": label,

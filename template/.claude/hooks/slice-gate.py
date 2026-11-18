@@ -71,6 +71,7 @@ import argparse
 import fnmatch
 import glob
 import hashlib
+import importlib.util
 import json
 import os
 import posixpath
@@ -1314,6 +1315,78 @@ def part_tier_verdicts(name, res, rerun, allow):
     return failed, warnings
 
 
+_FLIGHT_LOCK_MOD = None  # flight-lock.py 模块对象；加载失败时为原因字符串（只加载一次）
+
+
+def _load_flight_lock():
+    """按路径加载同目录的 flight-lock.py（同 flight-doctor.py 的 load_gate）。→ 模块，或失败原因（str）。"""
+    global _FLIGHT_LOCK_MOD
+    if _FLIGHT_LOCK_MOD is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flight-lock.py")
+        try:
+            if not os.path.isfile(path):
+                raise FileNotFoundError("flight-lock.py 缺失：%s" % path)
+            spec = importlib.util.spec_from_file_location("flight_lock", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _FLIGHT_LOCK_MOD = mod
+        except Exception as e:
+            _FLIGHT_LOCK_MOD = "flight-lock 加载失败：%s: %s" % (type(e).__name__, e)
+    return _FLIGHT_LOCK_MOD
+
+
+class _NoLock:
+    """flight-lock 不可用时的替身：state = unavailable，release 什么也不做。"""
+
+    def __init__(self, mode, why):
+        self.info = {"mode": mode, "state": "unavailable", "waited": 0.0, "why": why, "load": None, "cores": None}
+
+    def release(self):
+        pass
+
+
+def flight_lock(mode, change="", label="", expect_sec=None):
+    """按路径加载同目录的 flight-lock.py 并 acquire；文件缺失、加载失败或意外抛错 →
+    返回 state = unavailable 的替身（有 .info 与空的 .release()）。"""
+    mod = _load_flight_lock()
+    if isinstance(mod, str):
+        return _NoLock(mode, mod)
+    try:
+        return mod.acquire(mode, change=change, label=label, expect_sec=expect_sec)
+    except Exception as e:
+        return _NoLock(mode, "flight-lock 异常：%s: %s" % (type(e).__name__, e))
+
+
+def _lock_note(info):
+    """时间线锁片段：能加载到 flight-lock 就用它的 note，否则按同一格式拼「未加锁（原因）」。"""
+    mod = _load_flight_lock()
+    if not isinstance(mod, str):
+        try:
+            return mod.note(info)
+        except Exception:
+            pass
+    return "未加锁（%s）" % ((info or {}).get("why") or "锁不可用")
+
+
+def _lock_expect_sec(baseline, gate):
+    """持有上限的依据（design D5）：基线的 test.sec，读不到退 gate.full_suite_sec，都没有 → None。"""
+    for v in ((((baseline or {}).get("test") or {}) if isinstance(baseline, dict) else {}).get("sec"),
+              (gate or {}).get("full_suite_sec")):
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return v
+    return None
+
+
+def _time_verdicts(failed, warnings, lock_info):
+    """lock_info["state"] == "timeout" 时，把以 "G10 slow unit test" 开头的失败项挪进 warnings，
+    原文保留并在末尾加「（排队放弃后未持锁，时间类判定降为警告：<why>）」；其他状态原样返回。"""
+    if not isinstance(lock_info, dict) or lock_info.get("state") != "timeout":
+        return failed, warnings
+    tag = "（排队放弃后未持锁，时间类判定降为警告：%s）" % (lock_info.get("why") or "")
+    slow = [f for f in failed if f.startswith("G10 slow unit test")]
+    return [f for f in failed if f not in slow], list(warnings) + [f + tag for f in slow]
+
+
 def part_tier_verdict(top, name, part, res, allow):
     """有 G10 候选时整部件再 run_part 一次取 secs 作 rerun（拿不到 → None，按确认处理），再交给 part_tier_verdicts。
     → (failed, warnings, extra_sec)；extra_sec = 重跑墙钟（没重跑为 0）。"""
@@ -1329,7 +1402,7 @@ def part_tier_verdict(top, name, part, res, allow):
 PARTS_FULL_WHY = "多部件分层：增量未支持（依赖图只认 pytest）"
 
 
-def _baseline_parts(top, tiers, reasons, warnings):
+def _baseline_parts(top, tiers, reasons, warnings, lock_info=None):
     """部件形态 baseline 的单元层（design D8）：逐部件 run_part、判 G10 / G11；可度量的红记 failed 并警告，
     不可度量的红与 G10 / G11 失败进 reasons。→ (test 记录, tiers 记录, {部件: 单元层墙钟（含重跑）}, 红部件的输出)。"""
     allow = tiers.get("slow_allow") or {}
@@ -1346,6 +1419,7 @@ def _baseline_parts(top, tiers, reasons, warnings):
             else:
                 reasons.append("部件 %s 单元层在基线上红（exit %d；按退出码判：%s）" % (name, res["rc"], res["why"]))
         f10, w10, extra = part_tier_verdict(top, name, part, res, allow)
+        f10, w10 = _time_verdicts(f10, w10, lock_info)
         reasons.extend(f10)
         warnings.extend(w10)
         recs[name], wall[name] = rec, res["sec"] + extra
@@ -1355,7 +1429,7 @@ def _baseline_parts(top, tiers, reasons, warnings):
     return test, {"parts": measured}, wall, "\n".join(outs)
 
 
-def _final_parts(top, tiers, gate, baseline, failed, warnings):
+def _final_parts(top, tiers, gate, baseline, failed, warnings, lock_info=None):
     """部件形态 final（design D8）：逐部件核对基线记录的 cmd 后 run_part → 按基线 failed 差分 → G10 / G11；
     已选区域在所属部件 root 下运行并差分。失败 / 警告追加进 failed / warnings。→ ({部件: 单元层墙钟（含重跑）}, {区域: 墙钟})。"""
     allow = tiers.get("slow_allow") or {}
@@ -1372,6 +1446,7 @@ def _final_parts(top, tiers, gate, baseline, failed, warnings):
         failed.extend([f2] if f2 else [])
         warnings.extend([w2] if w2 else [])
         f10, w10, extra = part_tier_verdict(top, name, part, res, allow)
+        f10, w10 = _time_verdicts(f10, w10, lock_info)
         failed.extend(f10)
         warnings.extend(w10)
         wall[name] = res["sec"] + extra
@@ -3478,11 +3553,13 @@ def cmd_gate(args):
         warnings.append("工作树有未提交改动：%s" % ", ".join(stray[:8]))
     files = committed | uncommitted
 
+    gate = data.get("gate") or {}
+    baseline = load_baseline(args.change_dir)
+    hold = flight_lock("shared", os.path.basename(os.path.realpath(args.change_dir)), "gate %s" % args.slice,
+                       _lock_expect_sec(baseline, gate))  # 共享锁：verify 之前取，G7 之后放（design D3）
     rc, tail = run_cmd(sl["verify"], root)
     if rc != 0:
         failed.append("G1 verify: exit %d\n%s" % (rc, tail))
-    gate = data.get("gate") or {}
-    baseline = load_baseline(args.change_dir)
     for key in ("lint", "typecheck"):
         cmd = gate.get(key)
         if cmd:
@@ -3519,6 +3596,7 @@ def cmd_gate(args):
     failed.extend(gitlink_violations(root))
     durations = {} if tiers is not None else None
     v7, _, _, w7 = scenario_status(root, data, {args.slice}, durations=durations)
+    hold.release()
     failed.extend(v7)
     warnings.extend(w7)
     v8, ceilings = ceiling_rows(root, base)
@@ -3527,15 +3605,18 @@ def cmd_gate(args):
     result = {"slice": args.slice, "ok": not failed, "commit": git(root, "rev-parse", "HEAD"), "base": base,
               "failed": failed, "warnings": warnings, "hooks_missing": hooks_missing,
               "ceilings": [[rel, ln, limit, up] for rel, ln, limit, up in ceilings],
-              "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files))}
-    gate_note = args.slice
+              "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files)),
+              "lock": hold.info}
+    segs = []  # 切片 id 之后、结论词之前的片段，以 · 连接（design D8）
     if durations is not None:
         ts = tier_seconds(durations, tiers)
         if tiers_is_parts(tiers):
             ts["parts"] = _tier_parts_sec(root, tiers, durations)
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
-        gate_note = "%s %s" % (args.slice, _tier_note(ts))
+        segs.append(_tier_note(ts))
+    segs.append(_lock_note(hold.info))
+    gate_note = " ".join(x for x in (args.slice, " · ".join(s for s in segs if s)) if x)
     if result["ok"]:
         warnings.extend(anchor_submodules(root, base, args.change_dir, args.slice))
         err = _gate_save(root, args.change_dir, result)
@@ -3643,6 +3724,8 @@ def cmd_final(args):
         timeline_record(args.change_dir, "final", "同树沿用 %s ok" % short)
         print(json.dumps(result, ensure_ascii=False))
         sys.exit(0)
+    # 独占锁：G7 实跑之前取，检查结束之后放（design D3）
+    hold = flight_lock("exclusive", name, "final", _lock_expect_sec(load_baseline(args.change_dir), gate))
     durations = {} if tiers is not None else None
     unit_wall, region_wall, part_wall = 0.0, {}, {}
     v7, total, passed, w7 = scenario_status(root, data, durations=durations)
@@ -3671,7 +3754,7 @@ def cmd_final(args):
         if aerrs:  # 部件形态：探针适配器自检记录不符 → 跳过单元层与区域（design D8）
             failed.append("G2 tiers：%s；先跑 lint 修好" % "；".join(aerrs))
         elif tiers_is_parts(tiers):  # 部件形态（design D8）：不跑 gate.test（驱动命令）、不取锚点、不写锚点
-            part_wall, region_wall = _final_parts(root, tiers, gate, baseline, failed, warnings)
+            part_wall, region_wall = _final_parts(root, tiers, gate, baseline, failed, warnings, hold.info)
             unit_wall = sum(part_wall.values())
             inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
         elif not test_cmd:
@@ -3785,6 +3868,7 @@ def cmd_final(args):
                         probe = {n: r for n, r in probe.items() if n.split("::", 1)[0] in unit_files}
                     f10, w10 = _unit_tier_verdict(root, gate, {"probe": probe, "probe_why": pr.get("probe_why")},
                                                   tiers.get("slow_allow") or {})
+                    f10, w10 = _time_verdicts(f10, w10, hold.info)
                     failed.extend(f10)
                     warnings.extend(w10)
                 rerun = sorted(set(run_sel).union(*[hit.get(r) or [] for r in run_regions or []]))
@@ -3817,6 +3901,7 @@ def cmd_final(args):
                 warnings.extend([w2] if w2 else [])
                 if tiers is not None:
                     f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+                    f10, w10 = _time_verdicts(f10, w10, hold.info)
                     unit_wall = time.time() - t0
                     failed.extend(f10)
                     warnings.extend(w10)
@@ -3897,10 +3982,12 @@ def cmd_final(args):
         warnings.append("G9 检查未跑：G2 scope 复核未过，表态并重新批准后重跑 final")
     elif checks:
         failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx))
+    hold.release()
     result = {"slice": "final", "ok": not failed, "commit": head,
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
-              "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total)}
+              "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total),
+              "lock": hold.info}
     if dirty:
         result["dirty"] = True
     if scope_info is not None:
@@ -3920,7 +4007,7 @@ def cmd_final(args):
         else:
             result["summary"] += "；全量（%s）" % inc["full_why"]
             inc_note = "全量（%s）" % inc["full_why"]
-    final_note = "ok" if result["ok"] else "red"
+    segs = []  # 「全量（…）/ 增量（…）」之后、结论词之前的片段，以 · 连接（design D8）
     if durations is not None:
         ts = tier_seconds(durations, tiers)
         if not v7:  # G7 红时全量与区域未跑，只报 G7 部分
@@ -3929,9 +4016,10 @@ def cmd_final(args):
             ts["parts"] = _tier_parts_sec(root, tiers, durations, part_wall, region_wall)
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
-        final_note = "%s %s" % (_tier_note(ts), final_note)
-    if inc_note:  # 结论词恒在末尾（timeline.py 按末尾取结论）
-        final_note = "%s %s" % (inc_note, final_note)
+        segs.append(_tier_note(ts))
+    segs.append(_lock_note(hold.info))
+    # 结论词恒在末尾（timeline.py 按末尾取结论）
+    final_note = " ".join(x for x in (inc_note, " · ".join(s for s in segs if s), "ok" if result["ok"] else "red") if x)
     if cur_snap is not None:  # 每次实跑结束（绿或红）都写记录，供下次同树沿用（design D6）
         entry = {"commit": head, "snapshot": cur_snap, "fps": fps, "result": result}
         green = None if result["ok"] else _last_green(rec)
@@ -3988,6 +4076,8 @@ def cmd_baseline(args):
     with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump({"running": True, "pid": os.getpid(), "started": now_iso()}, f, ensure_ascii=False)
         f.write("\n")
+    # 独占锁：运行标记之后、复用候选判定之前取，检查全部结束之后放（design D3）
+    hold = flight_lock("exclusive", name, "baseline", _lock_expect_sec(old, gate))
     # 有分层文件时恒走全量：G10 / G11 要单元层探针，复用的旧结果没有（design D5）
     nocand = args.full or tiers is not None
     extras = _scope_extras(args.change_dir)  # blind / global / anchor_max_hops（unified-test-result-reuse D5 / D6）
@@ -4036,7 +4126,7 @@ def cmd_baseline(args):
         if isinstance(ct.get("failed"), list) and ct["failed"]:
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     elif parts:  # 部件形态（design D8）：不跑 gate.test（驱动命令），逐部件运行单元层；不写锚点
-        bl["test"], bl["tiers"], part_wall, out = _baseline_parts(root, tiers, reasons, warnings)
+        bl["test"], bl["tiers"], part_wall, out = _baseline_parts(root, tiers, reasons, warnings, hold.info)
         gate["full_suite_sec"] = bl["test"]["sec"]
         unit_wall = sum(part_wall.values())
     else:
@@ -4061,6 +4151,7 @@ def cmd_baseline(args):
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
         if tiers is not None:
             f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            f10, w10 = _time_verdicts(f10, w10, hold.info)
             reasons.extend(f10)
             warnings.extend(w10)
             unit_wall = time.time() - t0
@@ -4175,6 +4266,8 @@ def cmd_baseline(args):
             reasons.append(_check_msg("check %s 在基线上超时（%s 秒）" % (cname, c.get("timeout_sec")), log, cout))
         elif crc != 0:
             reasons.append(_check_msg("check %s 在基线上红（exit %d）" % (cname, crc), log, cout))
+    hold.release()
+    bl["lock"] = hold.info  # 放锁之后赋值：load[1] 才有值；入池与锚点只挑固定键，不带它
     # 运行期间的改动（design D6）
     s1, byproducts, n_valid = None, [], len(reasons)
     try:
@@ -4262,6 +4355,9 @@ def cmd_baseline(args):
             full_reason)
         if derived:
             note += "；verify 推导 %d 片" % derived
+    lk = _lock_note(bl["lock"])  # 三种备注末尾各接锁片段（design D8）
+    if lk:
+        note += "；" + lk
     timeline_record(args.change_dir, "baseline", note)
     print(json.dumps(dict(bl, test_cmd=test_cmd, tail=_tail(out)), ensure_ascii=False))
     sys.exit(0 if bl["ok"] else 1)
