@@ -6,13 +6,10 @@ import shutil
 import subprocess
 import sys
 
-import pytest
-
 from conftest import HOOKS
 from final_helpers import PY, TEST_A, baseline, change_and_commit, gate_json, latest_anchor, make_repo
 from test_tiers_gate import HOOKS_OK, PURE, setup_tiers
 
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S4 未实现")
 
 NODE_A, NODE_B, NODE_C = "tests/test_a.py::test_a", "tests/test_b.py::test_b", "tests/test_c.py::test_c"
 # 只把 --junitxml 传给 pytest、丢掉 -p 插件参数的包装脚本（与 tests/test_runner_contract.py 的 DROPPING 同形）
@@ -39,7 +36,6 @@ def strip_anchor_secs(repo):
         f.write_text(json.dumps(entry, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-@PENDING
 def test_full_baseline_writes_ledger_and_summary(git_repo):
     # Given: gate.test 是直接的 pytest 调用，共 3 条用例
     d = make_repo(git_repo)
@@ -61,7 +57,6 @@ def test_full_baseline_writes_ledger_and_summary(git_repo):
     assert set(latest_anchor(git_repo)["secs"]) == {NODE_A, NODE_B, NODE_C}
 
 
-@PENDING
 def test_anchor_baseline_inherits_seconds(git_repo):
     # Given: change c 有一次测到依赖图的全量基线；之后提交了 src/a.py 的改动
     d = make_repo(git_repo)
@@ -87,7 +82,6 @@ def test_anchor_baseline_inherits_seconds(git_repo):
     assert out2["ledger"]["no_sec"] == 2, out2["ledger"]
 
 
-@PENDING
 def test_reused_baseline_keeps_source_ledger(git_repo):
     # Given: gate.test 是丢掉插件参数的包装脚本；change c 已有一次全量基线；之后只改了一个测试文件
     d = make_repo(git_repo, extra={"tools/gate.sh": DROPPING}, gate_extra={"test": "bash tools/gate.sh"})
@@ -110,7 +104,6 @@ def test_reused_baseline_keeps_source_ledger(git_repo):
         assert led["cases"][cid] == dict(first["cases"][cid], m=0), (cid, led["cases"][cid])
 
 
-@PENDING
 def test_tiered_baseline_attributes_tiers(git_repo):
     # Given: 配了分层文件：单元层一条用例，已选区域 hooks 两条用例
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {"tests/integration/hooks/test_h.py": HOOKS_OK})
@@ -129,7 +122,6 @@ def test_tiered_baseline_attributes_tiers(git_repo):
     assert (tiers["unit"]["cases"], tiers["hooks"]["cases"]) == (1, 2), tiers
 
 
-@PENDING
 def test_ledger_failure_does_not_fail_baseline(git_repo, tmp_path):
     # Given: 一份不含 test-ledger.py 的 hooks 目录副本
     d = make_repo(git_repo)
