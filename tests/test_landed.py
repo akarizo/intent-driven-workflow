@@ -1,14 +1,9 @@
 """slice-gate.py landed：列出已落地的切片（scenario: retakeoff-landed#landed-lists-green-merged-slices、
-#landed-excludes-slice-whose-plan-changed，共 2 条）。
-骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
+#landed-excludes-slice-whose-plan-changed，共 2 条）。"""
 import json
-
-import pytest
 
 from conftest import commit_all, run_hook, write
 from test_slice_gate import plan, slice_
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S3 未实现")
 
 
 def flown_repo(repo):
@@ -44,7 +39,6 @@ def edit_plan(change, sid, **fields):
     write(change / "slices.json", json.dumps(data, ensure_ascii=False, indent=1))
 
 
-@PENDING
 def test_landed_lists_green_merged_slices(git_repo):
     # Given: S1 的最新门禁行是绿的且 commit 在分支历史里；S2 的最新门禁行是红的；S3 的门禁行是绿的但 commit 不在对象库
     change, sha = flown_repo(git_repo)
@@ -59,7 +53,6 @@ def test_landed_lists_green_merged_slices(git_repo):
     assert out == {"S1": sha[:10]}, out
 
 
-@PENDING
 def test_landed_excludes_slice_whose_plan_changed(git_repo):
     # Given: S1、S2 的门禁行都是绿的且 commit 在分支历史里
     change, sha = flown_repo(git_repo)
