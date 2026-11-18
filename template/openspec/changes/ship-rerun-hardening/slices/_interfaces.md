@@ -1,5 +1,6 @@
 # 切片间接口（规划时的约定；合回后由 integrator 按实际签名刷新）
 
+> wave 3 合回后核对：S3 的 `TESTS_ONLY` / `_tests_only_pick(root, change_dir, data, rec, baseline, cur_snap, head, fps, tiers, drop)` / `final_forecast(change_dir, data, baseline)` 与 `slice-gate.py` 实际定义一致；S4 小节仍为规划约定。
 > wave 2 合回后核对：S2 的 `_lint_inert(gate, change_dir)` 与 `slice-gate.py` 实际定义一致，`flight-doctor.py` 有 `_inert_recon` 且 `DECLARE_KEYS` 含 `inert`；S3 小节仍为规划约定。
 > wave 1 合回后核对：S1 的签名与 `slice-gate.py` 实际定义一致（`SCOPE_EXTRAS` 含 `inert`；`_scope_extras` / `_never_inert` / `_inert_ctx` / `_inert_paths` / `_recon_anchor` / `_inert_drop` / `_final_fresh(..., data=None)` / `_final_reusable(..., drop=None)` / `_pick_anchor(..., drop=None)` / `_baseline_anchor(..., drop=None)`）；S4 仅改文档。S3 小节待其合回后刷新。
 
