@@ -17,6 +17,8 @@
 - lint 通过时可能多打印一行以 `runner:` 开头的提示（stderr）。
 - 增量基线（非锚点复用）沿用来源的 `deps_unmeasured`；基线池条目多一个键 `deps_unmeasured`。
 
+- 实际签名核对（wave 2 合回）：`RUNNER_UNMEASURED` 已定义；`_lint_scope(gate, change_dir, run_scope, data=None, phase="lint")`、`_final_scope_guard(root, change_dir, data, why, triggers)` 存在；基线池条目键含 `deps_unmeasured`，与上列一致。
+
 ## S3 提供
 
 - `final_forecast(change_dir, data, baseline) -> (mode, why)`（`slice-gate.py`）：`mode` ∈ `impacted` / `full` / `incremental` / `unknown`，文字与原 `flight-doctor.py` 的 `_final_part` 相同。
