@@ -14,3 +14,6 @@
 2026-11-18T02:38:38Z	gate	S5 ok
 2026-11-18T02:38:38Z	gate	S6 ok
 2026-11-18T02:38:45Z	integrate	wave 2
+2026-11-18T02:40:48Z	review	findings=8 blocking=0 deferred=8
+2026-11-18T02:46:41Z	final	全量（Δ 含全局文件：tests/conftest.py） 测试 318.6s · 检查 schema-validate 3.9s · 排队 0.0s · 负载 3.8→3.6/18 ok
+2026-11-18T02:46:44Z	apply-done	blocked=0 blocking=0
