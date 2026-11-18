@@ -1599,8 +1599,8 @@ SCOPE_TIMEOUT = 300  # 秒，不可配置
 SCOPE_REPORT_FIELDS = ("full", "triggers", "count")
 SCOPE_UNDECLARED = "scope:undeclared"  # 伪触发项：未声明且本 change 建立声明（design D2）
 RUNNER_UNMEASURED = "runner:deps-unmeasured"  # 伪触发项：跑完的基线依赖图未测（plan-hygiene design D3）
-SCOPE_EXTRAS = ("global", "blind", "anchor_max_hops")  # gate-scope.json 的可选字段（unified-test-result-reuse design D5）
-SCOPE_EXTRAS_SHAPE = {"global": "字符串数组", "blind": "字符串数组", "anchor_max_hops": "正整数"}
+SCOPE_EXTRAS = ("global", "blind", "inert", "anchor_max_hops")  # gate-scope.json 的可选字段（unified-test-result-reuse design D5；inert：ship-rerun-hardening D1）
+SCOPE_EXTRAS_SHAPE = {"global": "字符串数组", "blind": "字符串数组", "inert": "字符串数组", "anchor_max_hops": "正整数"}
 SCOPE_DECL_SOURCE = "仓库声明 gate-scope.json"
 PLAIN_TEST_CMDS = ("npm test", "go test ./...", "cargo test")
 
@@ -1661,9 +1661,9 @@ def _scope_extra_ok(key, val):
 
 
 def _scope_extras(change_dir):
-    """gate-scope.json 的可选字段 → {"global": [glob], "blind": [glob], "anchor_max_hops": int}（design D5 / D6）；
-    文件缺失、读不出、字段缺失或形状错误都取缺省（空、空、ANCHOR_MAX_HOPS）；形状错误由 _scope_decl 报。"""
-    out = {"global": [], "blind": [], "anchor_max_hops": ANCHOR_MAX_HOPS}
+    """gate-scope.json 的可选字段 → {"global": [glob], "blind": [glob], "inert": [glob], "anchor_max_hops": int}（design D5 / D6）；
+    文件缺失、读不出、字段缺失或形状错误都取缺省（空、空、空、ANCHOR_MAX_HOPS）；形状错误由 _scope_decl 报。"""
+    out = {"global": [], "blind": [], "inert": [], "anchor_max_hops": ANCHOR_MAX_HOPS}
     try:
         with open(_scope_decl_path(change_dir), "r", encoding="utf-8") as f:
             obj = json.load(f)
@@ -3803,7 +3803,8 @@ def cmd_final(args):
     fps = _final_fps(root, change_rel, data, tiers)
     # 同树沿用（design D6）：不运行 G7 及其后的任何东西
     rec = _final_rec_read(root, name)
-    if not args.full and _final_reusable(root, rec, cur_snap, head, change_rel, fps):
+    idrop, ictx = _inert_drop(root, args.change_dir, data)  # inert（ship-rerun-hardening D2）：同树沿用与取锚点共用
+    if not args.full and _final_reusable(root, rec, cur_snap, head, change_rel, fps, drop=idrop):
         prev, short = rec["result"], str(rec["commit"])[:10]
         result = {"slice": "final", "ok": True, "commit": head, "failed": [], "warnings": warnings,
                   "scenarios": prev.get("scenarios"), "summary": "%s；同树沿用 %s" % (prev.get("summary"), short),
@@ -3861,8 +3862,11 @@ def cmd_final(args):
             pick, hcap = None, None
             if not args.full and cur_snap is not None:
                 pick = (_impacted_anchor(root, rec, baseline, cur_snap, head, change_rel, name, fps) if imp
-                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name, khops))
+                        else _pick_anchor(root, akey, tkey, cur_snap, head, change_rel, name, khops, drop=idrop))
                 hcap = None if imp else _hops_cap(root, akey, tkey, pick, khops)
+                if pick is not None and not imp and ictx["inert"]:  # 依赖图优先（ship-rerun-hardening D3）
+                    warnings.extend("inert 声明与依赖图矛盾：%s 被测试文件 %s 依赖，本次按依赖图处理" % c
+                                    for c in _inert_paths(root, pick[1], ictx, pick[0])[1])
             rgate = dict(gate, test=test_cmd)  # gate.test 为空时用探测出的命令：增量判定与重跑同一口径
             tier_rel, decl = _change_rel(root, _tiers_path(args.change_dir)), _decl_rels(root, args.change_dir)
             why, wpy = _full_why(root, args.full, pick, baseline, snap_why, impacted=bool(imp), gate=rgate,
@@ -4185,7 +4189,8 @@ def cmd_baseline(args):
     extras = _scope_extras(args.change_dir)  # blind / global / anchor_max_hops（unified-test-result-reuse D5 / D6）
     akey = _anchor_key(root, change_rel, test_cmd, gate)
     acand = None if nocand else _baseline_anchor(root, akey, s0, git(root, "rev-parse", "HEAD"), change_rel, name,
-                                                 extras["anchor_max_hops"])
+                                                 extras["anchor_max_hops"],
+                                                 drop=_inert_drop(root, args.change_dir, data, recon=False)[0])
     cands = _baseline_candidates(root, old, key, name, nocand, acand)
     # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用。
     # 旧基线 snapshot 缺失时它不进候选，须排除锚点包装 / 池候选的 None is None 误判（design D7：经锚点 verify 全部重跑）
@@ -4938,10 +4943,11 @@ def _baseline_candidates(root, old, key, name, full, anchor=None):
     return cands + _pool_candidates(root, key)
 
 
-def _baseline_anchor(root, akey, cur_snap, head, change_rel, name, max_hops):
+def _baseline_anchor(root, akey, cur_snap, head, change_rel, name, max_hops, drop=None):
     """基线的锚点候选（unified-test-result-reuse design D7 / D6）：measured、无分层、hops < max_hops 里 |Δ| 最小的
-    → {"via": "anchor", "pick": (锚点, Δ)}；有锚点但都用不上 → {"via": "anchor", "skip": 理由}；池里没有 → None。"""
-    pick = _pick_anchor(root, akey, None, cur_snap, head, change_rel, name, max_hops)
+    → {"via": "anchor", "pick": (锚点, Δ)}；有锚点但都用不上 → {"via": "anchor", "skip": 理由}；池里没有 → None。
+    drop 透传给 _pick_anchor（ship-rerun-hardening D2）。"""
+    pick = _pick_anchor(root, akey, None, cur_snap, head, change_rel, name, max_hops, drop=drop)
     if pick is not None:
         return {"via": "anchor", "pick": pick}
     if _hops_cap(root, akey, None, None, max_hops) is not None:
@@ -5349,15 +5355,20 @@ def _final_rec_write(root, name, rec):
     return None
 
 
-def _final_reusable(root, rec, cur_snap, head, change_rel, fps):
-    """记录绿、指纹全等、记录树与当前树（strict Δ 去掉记账文件）相同 → True。"""
+def _final_reusable(root, rec, cur_snap, head, change_rel, fps, drop=None):
+    """记录绿、指纹全等、记录树与当前树（strict Δ 去掉记账文件，再经 drop 去掉生效的 inert 路径）相同 → True。"""
     if cur_snap is None or not isinstance(rec, dict) or (rec.get("result") or {}).get("ok") is not True:
         return False
     if rec.get("fps") != fps:
         return False
     d = _delta(root, rec, cur_snap, head, change_rel, True, strict=True)
+    if d is None:
+        return False
     changes_rel = change_rel.rsplit("/", 1)[0] if "/" in change_rel else ""
-    return d is not None and not [p for p in d if not _is_bookkeeping(p, changes_rel)]
+    rest = [p for p in d if not _is_bookkeeping(p, changes_rel)]
+    if rest and drop is not None:
+        rest = drop(rest)
+    return not rest
 
 
 def _last_green(rec):
@@ -5398,13 +5409,16 @@ def _anchor_hops(entry, max_hops):
     return max_hops if entry.get("source") == "final-incremental" else 0
 
 
-def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name, max_hops=ANCHOR_MAX_HOPS):
-    """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None；hops >= max_hops 的锚点不可用（design D6）。"""
+def _pick_anchor(root, key, tkey, cur_snap, head, change_rel, name, max_hops=ANCHOR_MAX_HOPS, drop=None):
+    """可用锚点里 |Δ| 最小者（同样小取最新）→ (anchor, Δ) | None；hops >= max_hops 的锚点不可用（design D6）。
+    drop（_inert_drop 的结果）给了时每个候选的 Δ 先去掉对它生效的 inert 路径再比大小（ship-rerun-hardening D2）。"""
     best = None
     for cand in _anchor_candidates(root, key, tkey):  # 由新到旧：严格更小才替换
         if _anchor_hops(cand, max_hops) >= max_hops:
             continue
         d = _delta(root, cand, cur_snap, head, change_rel, cand.get("change") == name)
+        if d is not None and drop is not None:
+            d = drop(d, cand)
         if d is not None and (best is None or len(d) < len(best[1])):
             best = (cand, d)
     return best
@@ -5782,6 +5796,7 @@ def _try_reuse(root, change_dir, data, cand, cur_snap, key, rerun_cache, own=Fal
     if refs is not None:  # design D10：本 change 目录里 gate.test 闭包之外的门禁脚本不影响测试结论
         tdelta = [p for p in delta if not p.startswith(change_rel + "/") or is_test_path(p) or p in refs
                   or any(p.startswith(r + "/") for r in refs)]
+    tdelta = _inert_drop(root, change_dir, data, recon=False)[0](tdelta)  # ship-rerun-hardening D2
     other = [p for p in tdelta if not fnmatch.fnmatchcase(p.rsplit("/", 1)[-1], "test_*.py")]
     if other:
         return None, "有非测试文件改动：%s" % ", ".join(other[:8]), False
@@ -5869,15 +5884,92 @@ def _is_bookkeeping(rel, changes_rel):
     return len(parts) == 2 and parts[1] in BOOKKEEPING
 
 
-def _final_fresh(root, change_dir, final_commit):
+def _never_inert(rel, ctx):
+    """永不按 inert 处理的路径 → 类别文字 | None（ship-rerun-hardening D2）：测试路径（is_test_path）/ 全局文件（_global_file）/
+    声明的 global / changes 根下 / 声明文件。"""
+    if is_test_path(rel):
+        return "测试路径"
+    if _global_file(rel):
+        return "全局文件"
+    if any(fnmatch.fnmatchcase(rel, g) for g in ctx["global"]):
+        return "声明的 global"
+    if rel.startswith(ctx["changes_rel"] + "/"):
+        return "changes 根下"
+    if rel in ctx["decl"].values():
+        return "声明文件"
+    return None
+
+
+def _inert_ctx(root, change_dir):
+    """→ {"inert": [glob], "global": [glob], "changes_rel": <changes 根相对路径>, "decl": {三份声明文件的相对路径}}。"""
+    extras = _scope_extras(change_dir)
+    scope_rel, checks_rel = _decl_rels(root, change_dir)
+    return {"inert": list(extras["inert"]), "global": list(extras["global"]),
+            "changes_rel": _change_rel(root, os.path.dirname(os.path.abspath(change_dir))),
+            "decl": {"scope": scope_rel, "checks": checks_rel, "tiers": _change_rel(root, _tiers_path(change_dir))}}
+
+
+def _inert_paths(root, paths, ctx, anchor=None):
+    """paths 中按 inert 生效的子集 → (set, 矛盾 [(路径, 测试文件)])（ship-rerun-hardening D2 / D3）。
+    匹配用 fnmatch.fnmatchcase（与 global / blind 相同）；anchor 给了时，被任一测试文件依赖
+    （deps 的值 ∪ 其 _shell_closure，与 _final_select 同口径）的路径不生效，记为矛盾。"""
+    hit = [p for p in paths if any(fnmatch.fnmatchcase(p, g) for g in ctx["inert"]) and _never_inert(p, ctx) is None]
+    if not hit:
+        return set(), []
+    used, memo = {}, {}
+    for f, v in sorted(((anchor or {}).get("deps") or {}).items()):
+        for p in set(v) | _shell_closure(root, v, memo):
+            used.setdefault(p, []).append(f)
+    conflicts = [(p, f) for p in hit for f in used.get(p, [])]
+    return {p for p in hit if p not in used}, conflicts
+
+
+def _recon_anchor(root, change_dir, data):
+    """对账用的锚点：与本计划同命令指纹（_anchor_key）、同分层指纹、测到依赖图的最新一条（_anchor_candidates 的第一个）；
+    没有、或 gate.test 缺失、或取指纹出错 → None。"""
+    gate = (data or {}).get("gate") or {}
+    if not gate.get("test"):
+        return None
+    try:
+        change_rel = _change_rel(root, change_dir)
+        akey = _anchor_key(root, change_rel, gate["test"], gate)
+        tkey = _tiers_key(root, change_dir, _load_tiers(change_dir)[0])
+        cands = _anchor_candidates(root, akey, tkey, limit=1)
+    except (RuntimeError, OSError, ValueError, SystemExit):
+        return None
+    return cands[0] if cands else None
+
+
+def _inert_drop(root, change_dir, data=None, recon=True):
+    """→ (drop, ctx)；drop(delta, anchor=None) 返回去掉生效路径后的 delta。
+    没声明 inert 时 drop 原样返回、不读锚点池。anchor 缺省用 _recon_anchor（recon=False 时不用）。"""
+    ctx = _inert_ctx(root, change_dir)
+    if not ctx["inert"]:
+        return (lambda delta, anchor=None: delta), ctx
+    memo = {}
+
+    def drop(delta, anchor=None):
+        if anchor is None and recon:
+            if "anchor" not in memo:
+                memo["anchor"] = _recon_anchor(root, change_dir, data)
+            anchor = memo["anchor"]
+        eff = _inert_paths(root, delta, ctx, anchor)[0]
+        return [p for p in delta if p not in eff]
+
+    return drop, ctx
+
+
+def _final_fresh(root, change_dir, final_commit, data=None):
     """final 行的 commit 与 HEAD 的树之差只含 changes 根下任一 change 的记账文件（或为空）→ 新鲜（design D6）；
+    其余路径全部按 inert 生效（ship-rerun-hardening D2，对账锚点见 _recon_anchor）也算新鲜；
     不要求祖先关系；任一 git 调用失败（commit 不存在等）→ 不新鲜。"""
     try:
         names = git(root, "diff", "--name-only", final_commit, "HEAD").splitlines()
     except RuntimeError:
         return False
     changes_rel = os.path.relpath(os.path.dirname(os.path.abspath(change_dir)), root).replace(os.sep, "/")
-    return all(_is_bookkeeping(n, changes_rel) for n in names if n)
+    rest = [n for n in names if n and not _is_bookkeeping(n, changes_rel)]
+    return not rest or not _inert_drop(root, change_dir, data)[0](rest)
 
 
 def final_forecast(change_dir, data, baseline):
@@ -5904,7 +5996,8 @@ def final_forecast(change_dir, data, baseline):
     if snap is not None:
         head = git(root, "rev-parse", "HEAD")
         hops = _scope_extras(change_dir)["anchor_max_hops"]
-        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops)
+        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops,
+                            drop=_inert_drop(root, change_dir, data, recon=False)[0])
     tier_rel = _change_rel(root, _tiers_path(change_dir))
     bl = baseline if isinstance(baseline, dict) and baseline.get("running") is not True else None
     why, _ = _full_why(root, False, pick, bl, snap_why, gate=gate, tier_rel=tier_rel,
@@ -5957,7 +6050,7 @@ def cmd_ship(args):
             reasons.append("final 未运行")
         elif not final["ok"]:
             reasons.append("final 红：%s" % final["failed"])
-        elif final["commit"] != head[:10] and not _final_fresh(root, args.change_dir, final["commit"]):
+        elif final["commit"] != head[:10] and not _final_fresh(root, args.change_dir, final["commit"], data):
             reasons.append("final 过期：记录 %s，HEAD %s" % (final["commit"], head[:10])
                            + _rerun_forecast(args.change_dir, data))
     # 铁律 4：CRITICAL/HIGH 未闭环不得非 draft —— 与是否飞行模式无关，无条件检查

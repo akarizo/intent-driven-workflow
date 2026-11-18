@@ -5,14 +5,10 @@ ship-rerun-decision#claude-md-commit-with-inert-keeps-ship-fresh，共 7 条）�
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL, commit_all, run_hook, write
 from final_helpers import baseline, change_and_commit, final, make_repo
 from test_runner_contract import DROPPING
 from test_runner_statement import REASON
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S1 实现后去掉")
 
 
 def _decl(repo, **extra):
@@ -33,7 +29,6 @@ def _ship(repo, d):
     return json.loads(p.stdout.strip().splitlines()[-1])
 
 
-@PENDING
 def test_inert_shape_checked(git_repo):
     # Given: gate-scope.json 的 inert 写成了字符串而不是数组
     _decl(git_repo, inert="docs/**")
@@ -47,7 +42,6 @@ def test_inert_shape_checked(git_repo):
     assert "inert 须是字符串数组" in p.stderr, p.stderr
 
 
-@PENDING
 def test_claude_md_commit_with_inert_keeps_ship_fresh(git_repo):
     # Given: gate-scope.json 声明 inert ["CLAUDE.md"]；final 已绿；之后只提交了 CLAUDE.md 的改动
     _decl(git_repo, inert=["CLAUDE.md"])
@@ -62,7 +56,6 @@ def test_claude_md_commit_with_inert_keeps_ship_fresh(git_repo):
     assert not [r for r in res["reasons"] if "过期" in r], res["reasons"]
 
 
-@PENDING
 def test_final_reuses_same_tree_across_inert_change(git_repo):
     # Given: 声明 inert ["CLAUDE.md"]；final 已绿；之后只提交了 CLAUDE.md 的改动
     _decl(git_repo, inert=["CLAUDE.md"])
@@ -79,7 +72,6 @@ def test_final_reuses_same_tree_across_inert_change(git_repo):
     assert "同树沿用" in out["summary"], out
 
 
-@PENDING
 def test_baseline_reuse_ignores_inert_change(git_repo):
     # Given: 依赖图测不到的仓库（包装脚本丢掉插件参数，计划已表态），声明 inert ["docs/**"]；
     #        baseline 跑过一次全量；之后只提交了 docs/notes.md
@@ -98,7 +90,6 @@ def test_baseline_reuse_ignores_inert_change(git_repo):
     assert second["incremental"]["source"] == "own" and second["incremental"]["rerun_files"] == [], second
 
 
-@PENDING
 def test_anchor_delta_drops_inert_path(git_repo):
     # Given: 声明 inert ["assets/**"]；基线测到了依赖图；assets/logo.bin 没有任何用例读它；之后只提交了它的改动
     _decl(git_repo, inert=["assets/**"])
@@ -115,7 +106,6 @@ def test_anchor_delta_drops_inert_path(git_repo):
     assert inc.get("rerun") == [], inc
 
 
-@PENDING
 def test_inert_never_covers_test_files_added_later(git_repo):
     # Given: 声明 inert ["extras/**"]，声明时该目录下只有说明文件；final 已绿；之后提交了新的测试文件 extras/test_new.py
     _decl(git_repo, inert=["extras/**"])
@@ -130,7 +120,6 @@ def test_inert_never_covers_test_files_added_later(git_repo):
     assert [r for r in res["reasons"] if "final 过期" in r], res["reasons"]
 
 
-@PENDING
 def test_graph_wins_when_inert_contradicts(git_repo):
     # Given: 基线测到 tests/test_b.py 读 data/b.json；之后才把 data/** 声明成 inert，并提交了 data/b.json 的改动
     d = make_repo(git_repo)
