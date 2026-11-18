@@ -1,11 +1,7 @@
 """命令文档镜像 wave 集成检查与跨片修复（scenario: wave-fix#apply-docs-mirror-wave-check-and-fix、
 #pr-ship-doc-lists-cross-slice-fixes、#readme-describes-wave-guard，共 3 条）。
 骨架：strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S5 未实现")
 
 CMD = ROOT / "template" / ".claude" / "commands"
 APPLY_DOCS = (CMD / "opsx-apply.md", ROOT / "template" / ".claude" / "skills" / "openspec-apply-change" / "SKILL.md")
@@ -15,7 +11,6 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-@PENDING
 def test_apply_docs_mirror_wave_check_and_fix():
     # Given: opsx-apply.md 与同名 skill
     texts = {p.name + ":" + p.parent.name: read(p) for p in APPLY_DOCS}
@@ -29,7 +24,6 @@ def test_apply_docs_mirror_wave_check_and_fix():
         assert any("waves" in line and "review-findings.json" in line for line in text.splitlines()), name
 
 
-@PENDING
 def test_pr_ship_doc_lists_cross_slice_fixes():
     # Given: pr-ship.md
     text = read(CMD / "pr-ship.md")
@@ -41,7 +35,6 @@ def test_pr_ship_doc_lists_cross_slice_fixes():
     assert "wave 集成检查红" in text and "slice-gate.py wave-check" in text
 
 
-@PENDING
 def test_readme_describes_wave_guard():
     # Given: README.md
     text = read(ROOT / "README.md")
