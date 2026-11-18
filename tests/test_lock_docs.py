@@ -1,11 +1,8 @@
 """随模板下发的全机测试锁说明
 （scenario: machine-test-lock#contract-documents-machine-test-lock、#commands-and-skills-mention-queueing）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S6 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
 
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S6 未实现")
 CLAUDE = ROOT / "template" / ".claude"
 CONTRACT = CLAUDE / "flight-runner-contract.md"
 DOCS = {
@@ -22,7 +19,6 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-@PENDING
 def test_contract_documents_machine_test_lock():
     # Given: 运行器契约文档
     text = read(CONTRACT)
@@ -42,7 +38,6 @@ def test_contract_documents_machine_test_lock():
         assert any(h.startswith("## %d. " % n) for h in heads), n
 
 
-@PENDING
 def test_commands_and_skills_mention_queueing():
     # Given: opsx-apply / opsx-propose 的命令与同名 skill、test-tiers.md、README.md
     texts = {name: read(path) for name, path in DOCS.items()}
