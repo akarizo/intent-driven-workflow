@@ -47,11 +47,18 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
    产出写成独立 commit：`docs(memory): 沉淀本轮知识（+N / −M）`。写完跑 `python3 .claude/hooks/claudemd-lint.py` 与 `python3 .claude/hooks/memory-lint.py`，须全绿；红了当场减，减完再提交。没有可沉淀的条目时不产生 commit，在 Output Summary 记「无」。
 
-   飞行模式（`slices.json` 存在）下，沉淀 commit 之后重跑：
+   飞行模式（`slices.json` 存在）下，沉淀 commit 之后先裁决、再决定要不要重跑：
    ```bash
-   python3 .claude/hooks/slice-gate.py final --change-dir openspec/changes/<name>
+   python3 .claude/hooks/slice-gate.py ship --change-dir openspec/changes/<name>
    ```
-   原因：ship 裁决只容忍 final 之后出现记账文件，CLAUDE.md 不在其列。
+   - reasons 里没有 `final 过期` → 不重跑 final。出现这种结果有两种情形：沉淀只动了记账文件；或仓库在 `gate-scope.json` 的 `inert` 里声明了这些路径。
+   - reasons 里有 `final 过期` → 重跑：
+     ```bash
+     python3 .claude/hooks/slice-gate.py final --change-dir openspec/changes/<name>
+     ```
+     该理由后面的补跑预告已写明这次是增量还是全量。
+
+   要不要重跑由 `ship` 的输出决定，模型不自行判断。
 
    较大差异条目（删除或反转既有含义 / 矛盾 / 动铁律或核心约束 / 写全局 `~/.claude/CLAUDE.md`）不落盘，交给 step 6 写进 PR 正文，由人在 PR review 时裁决。
 

@@ -38,7 +38,7 @@ exec python3 -m pytest -q tests "${args[@]}"
 | 字段 | 含义 |
 |---|---|
 | `change` / `commit` / `at` | 本次 final 的 change、commit、时间 |
-| `mode` | `full` / `incremental` / `impacted` |
+| `mode` | `full` / `incremental` / `impacted` / `tests-only` |
 | `cmd` / `cmd_key` | gate.test 命令与它的指纹 |
 | `nodes` | `{仓库相对 nodeid: outcome}`，outcome 取 `passed` / `failed` / `error` / `skipped` / `xfailed` / `xpassed`；`impacted` 或依赖图未测时为 `null` |
 | `inherited` | 沿用锚点结论的用例数；全量为 0；`impacted` 为 `null` |
@@ -49,6 +49,7 @@ exec python3 -m pytest -q tests "${args[@]}"
 - **用法**：
   - 只要实跑结果的检查（例如统计真实耗时、只信本次执行的结局）看 `mode == "full"`，否则跳过或降级；
   - 要逐用例结局的检查读 `nodes`，先看 `complete` 为真；`inherited > 0` 表示其中有沿用锚点的结论；
+  - `tests-only` 表示没有依赖图、只重跑了上次绿 final 之后改动的测试文件：`nodes` 与 `inherited` 为 `null`，`complete` 为假；
   - 不要再从项目缓存或 junit 自行拼结局——增量时 junit 不完整。
 
 ## 4. 易变变量与项目缓存键
@@ -83,15 +84,21 @@ exec python3 -m pytest -q tests "${args[@]}"
 | `global` | 仓库相对路径 glob 的字符串数组 | Δ 中有路径匹配 → final 与经锚点的基线都自动全量，原因点名该 glob；内建选测把它当全选触发项 |
 | `blind` | 测试文件 glob 的字符串数组 | 匹配的现存测试文件每次增量都重跑（依赖图看不见的依赖） |
 | `anchor_max_hops` | 正整数，缺省 5 | 锚点链上限：由增量推出的锚点 `hops` 逐代 +1，`hops` ≥ 上限的锚点不再作候选，下一次回到全量 |
+| `inert` | 仓库相对路径 glob 的字符串数组，无缺省 | 这些路径的改动不影响测试结论——ship 的新鲜度、final 的同树沿用与 Δ、baseline 的复用判定都不计它们；依赖图测到时与它对账，矛盾即判红 |
 
 形状不合法时 lint 与 preflight 判红并点名字段。
+
+**`inert` 的边界**：
+- **永不按 `inert` 处理的五类路径**：测试路径、全局文件、`global` 命中的路径、`changes/` 下的路径、`gate-scope.json` / `gate-checks.json` / `test-tiers.json`——即使匹配 glob 也照常计入改动；glob 匹配到已跟踪的测试路径、全局文件或 `global` 路径时 lint 判红。
+- **依赖图测到时对账**：有测试文件依赖了匹配 `inert` 的路径 → lint / preflight 判红并点名路径与测试文件；final 运行时仍按依赖图重跑依赖它的测试并警告。
+- **依赖图没测到时无法对账**：声明只能靠人在 PR 里审；起飞前的「基线过期」判定与 lint / typecheck 结论的沿用不看 `inert`。
 
 ## 7. 接入步骤
 
 1. **改包装脚本**：按第 1 节转发两个变量，用 `$GATE_CHANGE` 代替写死的 change 名；项目缓存键按第 4 节剔除 `FLIGHT_` / `GATE_`。
 2. **跑 baseline，确认依赖图测到**：`slice-gate.py baseline --full` 后基线 warnings 没有「依赖图未测」，或 `flight-doctor.py doctor` 的 `[runner]` 为 0；未测且暂不接入的，须按第 5 节写理由才能起飞。
 3. **对账**：baseline 之后提交一处改动，跑 `slice-gate.py final`（增量）留下结果文件副本，再在同一棵树上跑 `slice-gate.py final --full`，两份结果文件的 `nodes` 逐条一致才算接通。
-4. **声明 global / blind**：对账不一致的来源（依赖图看不见的配置、数据、插件目录）写进 `gate-scope.json` 的 `global`；只能靠每次重跑兜住的测试写进 `blind`；必要时调 `anchor_max_hops`。
+4. **声明 global / blind / inert**：对账不一致的来源（依赖图看不见的配置、数据、插件目录）写进 `gate-scope.json` 的 `global`；只能靠每次重跑兜住的测试写进 `blind`；与测试无关、却会让 final 过期或退回全量的路径（记忆文件、文档、迁移脚本）写进 `inert`；必要时调 `anchor_max_hops`。
 5. **检查改读结果文件**：`gate.checks` 的 `final` 命令改读 `$GATE_TEST_RESULT`，不再自己重跑测试或拼 junit。
 
 ## 8. 全机测试锁
