@@ -374,7 +374,7 @@ PY
 # 复制：库自有文件 vs 用户数据
 # ---------------------------------------------------------------------------
 # .claude/：库代码，升级时刷新（但保留用户的 ADR 风格 preferences.md 与用户数据 settings.json）
-# 递归复制已覆盖 commands/ · skills/（含 legacy/）· agents/（slice-executor / integrator / code-reviewer）
+# 递归复制已覆盖 commands/ · skills/（含 legacy/）· agents/（4 个 agent：slice-executor / slice-executor-large / integrator / code-reviewer）
 # · workflows/（opsx-apply.js 飞行调度器）· hooks/（含 slice-gate.py 等飞行门禁），--upgrade 时一并刷新
 copy_tree "$TEMPLATE_SRC/.claude"  "$TARGET/.claude"  "$UPGRADE" "preferences.md settings.json"
 # openspec/：只按清单下发种子，绝不覆盖用户数据
@@ -507,7 +507,7 @@ cat <<EOF
     · 预算中性  python3 .claude/hooks/claudemd-lint.py --diff-gate --base HEAD --msg-file <f>
     · pre-commit / commit-msg 片段见 .claude/claudemd-standard.md §13b
   - 16 个 skill 见 .claude/skills/（含 test-driven-development、spec-html-render；legacy/ 下 1 个旧的逐 task 守门 skill）
-  - 3 个 agent 见 .claude/agents/（slice-executor / integrator / code-reviewer；模型按角色显式路由：执行体与评审员 = 会话主模型（session-model.py 判定），integrator = sonnet）
+  - 4 个 agent 见 .claude/agents/（slice-executor / slice-executor-large / integrator / code-reviewer；模型按角色显式路由：执行体与评审员 = 会话主模型（session-model.py 判定），integrator = sonnet）
   - apply 默认飞行模式（slices.json 切片 + wave 并行 + slice-gate.py 门禁 + 评审离路径）；旧的逐 task 守门用 /opsx-apply --gate=per-task
   - 分级门禁：中级+ 改源码前必须 /opsx-propose 建 5 工件；mini 先 /opsx-mini 留痕（hook 见 .claude/hooks/，需 python3）
   - PreToolUse takeoff-gate 拦未获人类批准的飞行派发（校验会话转录里的人类消息证据与新鲜度，模型自证无效；对 Workflow 工具是否触发待实测，未触发时由 /opsx-apply step 0 自检兜底）
