@@ -128,3 +128,28 @@ exec python3 -m pytest -q tests "${args[@]}"
 - **放弃等待**：排队方发现持有者超过持有上限即放弃（状态 `timeout`），这一次不加锁继续跑，G10 慢单测降为警告（原文保留并注明原因）；`off` 与平台不支持（`unavailable`）时同样不加锁，但 G10 照常判。
 - **留痕**：输出 JSON 的 `lock` 字段；时间线备注里的「排队 Ns · 负载 起→止/核数」；final 备注里的「测试 Ns · 检查 <名> Ns」；`flight-doctor.py cost` 归因排队与收口秒数，`doctor` 的 `[checks]` `[lock]` 两段体检。排队期间 stderr 打印「排队中」与在等谁，不是卡死。
 - **已知限制**：共享方之间不限流；不保证先来先到；多用户之间互不可见（锁目录在各自主目录下）。
+
+## 9. 测试账本
+
+baseline 与 final 每次跑测试都留一份逐用例账本，收口时与基线对账，打印「测试变更」。只报告，不判红。
+
+- **在哪**：`<git common dir>/flight-ledger/<change>/` 下三份文件 `baseline.json` / `final.json` / `delta.json`（对账结果，带 final 的 commit），各自覆盖写；不进仓库，跨 worktree 共用；写入时只保留最近 30 个 change 的目录。入库的只有摘要：`gate-baseline.json` 的 `ledger` 段（不含逐用例数据）。
+- **每条用例四个字段**：
+
+  | 字段 | 含义 |
+  |---|---|
+  | `o` | 结局：`passed` / `failed` / `error` / `skipped` / `xfailed` / `xpassed`，未知为 `null` |
+  | `s` | 秒（setup + call + teardown，保留 3 位小数）；取不到为 `null`，不估算 |
+  | `t` | 层：`unit` 或区域名（按分层文件归层）；没有分层文件或文件不在任何层为 `null` |
+  | `m` | 1 = 本次实测，0 = 沿用 |
+
+- **耗时的来源**：依赖图测到 → 依赖图插件记的耗时，用例 id 为 nodeid；依赖图没测到 → junit 的 `time`，用例 id 为 `classname::name`。一份账本只用一种 id 形式。包装脚本只要按第 1 节转发 `$FLIGHT_PYTEST_ARGS`（其中的 `--junitxml`）就有耗时。
+- **沿用**：增量运行里没重跑的用例沿用锚点（或来源账本）的结局与耗时，记 `m=0`；升级前写的锚点没有耗时，沿用的用例耗时记 `null`，跑一次全量后补齐。
+- **看账本**：
+  - `python3 .claude/hooks/test-ledger.py show --change-dir <dir> [--phase baseline|final] [--tier <层>] [--top N] [--json]`：按耗时由大到小列用例；
+  - `python3 .claude/hooks/test-ledger.py delta --change-dir <dir> [--markdown|--json]`：打印已存的对账结果；
+  - 两者只读，退出码 0 有账本 / 1 没有 / 2 参数不可用；`flight-doctor.py doctor` 的 `[tests]` 段打印最新账本摘要与最近 5 个 change 的测试变更。
+- **测试变更**（final 对基线账本对账）：新增、删除、变慢、各层前后的用例数与耗时；增量运行没覆盖到的用例记「未重测」，不算删除。出现在三处：final 输出 JSON 的 `tests`、时间线 final 备注里的 `用例 +A/-R（新增 Xs）`、PR 正文的「## 测试变更」（`ship --markdown` 在 `delta.json` 的 commit 与最后一条 final 对得上时附出）。
+- **只报告**：账本与对账不判红，阈值（变慢、建议行）只决定打印什么；账本写不成只留一条「测试账本未写：<原因>」警告，不影响门禁结论。
+- **不落账**：切片 `gate`、final 的 G7 红 / 选测复核未过、同树沿用的 final。
+- **已知限制**：切片门禁不留账；部件形态只有单元层、没有部件维度；账本只在产生它的机器上（基线账本不在本机时对账为空并给出原因）。

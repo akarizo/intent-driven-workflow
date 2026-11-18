@@ -27,7 +27,8 @@
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
 #                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
-#   baseline --change-dir DIR [--full]        起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
+#                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
+#   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              全量耗时记在 gate-baseline.json 顶层 full_suite_sec（不写 slices.json）；退出码按 ok；
@@ -38,12 +39,14 @@
 #                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
+#                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
 #                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
 #                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
 #                                              分层文件存在时已选区域的基线 regions.<name>.cmd 须等于分层文件当前 cmd，否则基线过期
+#   ship     --change-dir DIR [--markdown]    draft / ready 裁决；--markdown 时 delta.json 的 commit 对得上最后一条 final 行才附「## 测试变更」
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -317,6 +320,7 @@ _blind = set()
 _files = set()
 _keys = {}
 _nodes = []
+_secs = {}  # 仓库相对 nodeid → 秒（setup + call + teardown）
 _edges = {}
 _fxcur = [None]  # 正在 setup 的 session / package 级 fixture 名（只执行一次，读到的文件归全部使用者）
 _fx = {}
@@ -434,13 +438,16 @@ def _rootdir():
 def pytest_runtest_logreport(report):
     if _nested():
         return
+    head, sep, rest = report.nodeid.partition("::")
+    key = _keys.get(report.nodeid) or _abs_rel(os.path.normpath(os.path.join(_rootdir(), head)))
+    nid = None if key is None else key + sep + rest
+    if nid is not None:  # 逐用例耗时：setup + call + teardown 累加
+        _secs[nid] = _secs.get(nid, 0.0) + (getattr(report, "duration", 0.0) or 0.0)
     out = _outcome(report)
     if out is None:
         return
-    head, sep, rest = report.nodeid.partition("::")
-    key = _keys.get(report.nodeid) or _abs_rel(os.path.normpath(os.path.join(_rootdir(), head)))
-    if key is not None:
-        _nodes.append([key + sep + rest, out])
+    if nid is not None:
+        _nodes.append([nid, out])
 
 
 def _chain(path):
@@ -557,6 +564,7 @@ def pytest_sessionfinish(session):
         recs.append({"file": key, "deps": sorted(d), "test": True})
     recs += [{"file": k, "blind": True} for k in sorted(_blind)]
     recs += [{"node": n, "outcome": o} for n, o in _nodes]
+    recs += [{"sec_node": n, "sec": round(s, 4)} for n, s in sorted(_secs.items())]  # 键不能叫 node：_read_deps 会当结局
     if getattr(session.config, "workerinput", None) is None:  # 会话结束标记只由外层 controller 写（xdist worker 不写）
         recs.append({"flight_deps": "end"})
     _emit(recs)
@@ -891,8 +899,9 @@ def _flight_plugins(tmp, env, root, deps):
 def _read_deps(path):
     """读依赖图 jsonl（path 与各进程的 path.<pid>）→ ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
     没有开跑记录、没有会话结束标记（外层 controller 的 sessionfinish 末尾写）或有坏行（写入被中断，整条记录丢失）→ 不可度量；
-    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
-    started, ended, deps, blind, files, nodes = False, False, {}, set(), set(), {}
+    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先；
+    另返回 "secs": {nodeid: 秒}（sec_node 记录，同一用例多条取最大值）。"""
+    started, ended, deps, blind, files, nodes, secs = False, False, {}, set(), set(), {}, {}
     d, base = os.path.split(path)
     try:
         names = sorted(n for n in os.listdir(d or ".") if n == base or n.startswith(base + "."))
@@ -924,6 +933,11 @@ def _read_deps(path):
             if nodes.get(rec["node"]) not in ("FAILED", "ERROR"):
                 nodes[rec["node"]] = rec.get("outcome")
             continue
+        if isinstance(rec.get("sec_node"), str):
+            sec = _num(rec.get("sec"))
+            if sec is not None:
+                secs[rec["sec_node"]] = max(secs.get(rec["sec_node"], 0.0), float(sec))
+            continue
         f = rec.get("file")
         if not isinstance(f, str):
             continue
@@ -938,7 +952,7 @@ def _read_deps(path):
     if not ended:
         return None, "依赖图记录不完整（会话未正常结束）"
     return {"deps":{f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(blind),
-            "files": sorted(files), "nodes": nodes}, None
+            "files": sorted(files), "nodes": nodes, "secs": secs}, None
 
 
 def _deps_merge(a, b):
@@ -958,7 +972,8 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml 并恒加载防护插件 flight_guard（design D1）。
     返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
           "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
-          "deps": {"deps", "blind", "files", "nodes"} | None, "deps_why": str | None, "deps_kind": str | None}；
+          "deps": {"deps", "blind", "files", "nodes", "secs"} | None, "deps_why": str | None, "deps_kind": str | None}；
+    deps 的 secs = {nodeid: 秒}（逐用例耗时，口径同 nodes）。
     deps=True 时另加载依赖图插件（design D2）；deps=False 时 deps / deps_why / deps_kind 恒为 None。
     依赖图没测到时 deps_kind 是 not-pytest / plugins-dropped / plugin-import-failed / incomplete 之一，deps_why 带修法
     （unified-test-result-reuse design D4）。加载插件时另导出契约变量 FLIGHT_PLUGIN_PATH（插件目录）与
@@ -1024,6 +1039,13 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
                                     else "plugins-dropped" if ran else "not-pytest")
                 if res["deps_kind"] != "incomplete":
                     res["deps_why"] = DEPS_KIND_WHY[res["deps_kind"]]
+        if cwd is None:  # 逐用例观测（test-ledger design D3）：部件运行（带 cwd）由 run_part 自己上报
+            if res["deps"] is not None:
+                _ledger_observe("nodeid", res["deps"]["nodes"], res["deps"].get("secs"))
+            else:
+                j_out, j_secs = _junit_cases(junit)
+                if j_out is not None:
+                    _ledger_observe("junit", j_out, j_secs)
         if rc == 0:
             try:
                 res["cases"] = {tc.get("classname") or "" for tc in ET.parse(junit).getroot().iter("testcase")}
@@ -1250,6 +1272,25 @@ def _junit_secs(paths, root, name):
     return secs if parsed else None
 
 
+def _junit_cases(path):
+    """解析一份 junit → ({classname::name: passed|failed|error|skipped}, {id: 秒}) | (None, None)（文件不存在 / 解析失败）；
+    time 解析不了的用例不记耗时。"""
+    try:
+        tree = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return None, None
+    outcomes, secs = {}, {}
+    for tc in tree.iter("testcase"):
+        tid = "%s::%s" % (tc.get("classname") or "", tc.get("name") or "")
+        outcomes[tid] = ("failed" if tc.find("failure") is not None else "error" if tc.find("error") is not None
+                         else "skipped" if tc.find("skipped") is not None else "passed")
+        try:
+            secs[tid] = float(tc.get("time"))
+        except (TypeError, ValueError):
+            pass
+    return outcomes, secs
+
+
 def run_part(top, name, part, probe=True):
     """在 <top>/<root> 下运行部件单元层 → {"rc", "out", "failed", "why", "sec", "probe", "probe_why", "secs", "secs_why"}，
     id 均相对顶层；不记依赖图。部件写了 unit.probe（且 probe=True）→ 运行适配器 probe.cmd 包住 unit.cmd，按退出码判；
@@ -1278,6 +1319,7 @@ def run_part(top, name, part, probe=True):
         res["secs"], res["secs_why"] = None, None
         if res["probe"] is not None:
             res["secs"] = {n: float(r.get("sec") or 0.0) for n, r in res["probe"].items()}
+            _ledger_observe("nodeid", {}, res["secs"], tier="unit")
             return res
         res["secs"] = _junit_secs([junit], root, name) if os.path.isfile(junit) else None
         pattern = unit.get("junit")
@@ -1289,6 +1331,8 @@ def run_part(top, name, part, probe=True):
         if res["secs"] is None:
             res["secs_why"] = "没有逐用例耗时（探针无记录、$FLIGHT_JUNIT 未写%s）" % (
                 "、unit.junit 无本次运行的报告" if pattern else "、未配 unit.junit")
+    if res["secs"] is not None:  # 部件结局未知，只报耗时
+        _ledger_observe("nodeid", {}, res["secs"], tier="unit")
     return res
 
 
@@ -1325,6 +1369,25 @@ def part_tier_verdicts(name, res, rerun, allow):
     return failed, warnings
 
 
+_LEDGER_OBS = []  # 本进程门禁实测的逐用例观测（test-ledger design D2 / D3）：只采集、不落盘
+
+
+def _ledger_observe(form, outcomes, secs, tier=None):
+    """追加一条观测 {"form": "nodeid" | "junit", "outcomes": {id: 结局}, "secs": {id: 秒}[, "tier"]}；任何异常都吞掉。"""
+    try:
+        obs = {"form": form, "outcomes": dict(outcomes or {}), "secs": dict(secs or {})}
+        if tier is not None:
+            obs["tier"] = tier
+        _LEDGER_OBS.append(obs)
+    except Exception:
+        pass
+
+
+def ledger_observations():
+    """观测表的浅拷贝。"""
+    return list(_LEDGER_OBS)
+
+
 _FLIGHT_LOCK_MOD = None  # flight-lock.py 模块对象；加载失败时为原因字符串（只加载一次）
 
 
@@ -1343,6 +1406,61 @@ def _load_flight_lock():
         except Exception as e:
             _FLIGHT_LOCK_MOD = "flight-lock 加载失败：%s: %s" % (type(e).__name__, e)
     return _FLIGHT_LOCK_MOD
+
+
+_LEDGER_MOD = None  # test-ledger.py 模块对象；加载失败时为原因字符串（只加载一次）
+
+
+def _ledger_mod():
+    """按路径加载同目录的 test-ledger.py（同 _load_flight_lock）。→ 模块，或失败原因（str）。"""
+    global _LEDGER_MOD
+    if _LEDGER_MOD is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test-ledger.py")
+        try:
+            if not os.path.isfile(path):
+                raise FileNotFoundError("test-ledger.py 缺失：%s" % path)
+            spec = importlib.util.spec_from_file_location("test_ledger", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _LEDGER_MOD = mod
+        except Exception as e:
+            _LEDGER_MOD = "test-ledger 加载失败：%s: %s" % (type(e).__name__, e)
+    return _LEDGER_MOD
+
+
+def _ledger_commit(root, name, meta, tiers, universe=None, source=None, rerun_files=None):
+    """→ (账本 | None, 警告 | None)。meta = {"commit", "phase", "mode", "lock"}；内部补上 change 与 at。
+    整体包在 try 里：模块不可用或任何异常 → (None, "测试账本未写：<原因>")。"""
+    try:
+        mod = _ledger_mod()
+        if isinstance(mod, str):
+            return None, "测试账本未写：%s" % mod
+        tier_of = None
+        if tiers is not None:
+            tier_of = lambda f: (tiers_matching(f, tiers, root) or [None])[0]  # noqa: E731
+        led = mod.build(dict(meta, change=name, at=now_iso()), ledger_observations(), universe, source,
+                        rerun_files, root, tier_of)
+        mod.save(root, name, meta["phase"], led)
+        return led, None
+    except Exception as e:
+        return None, "测试账本未写：%s: %s" % (type(e).__name__, e)
+
+
+def _ledger_secs(led):
+    """账本存在且 id_form 为 nodeid → {nodeid: 秒}（锚点的 secs）；否则 None。"""
+    mod = _ledger_mod()
+    if led is None or isinstance(mod, str) or led.get("id_form") != "nodeid":
+        return None
+    return mod.secs_of(led)
+
+
+def _ledger_source(root, change, commit):
+    """本 change 的基线账本且其 commit 等于 commit → 该账本（复用旧基线时的来源）；否则 None。"""
+    mod = _ledger_mod()
+    if isinstance(mod, str) or not change:
+        return None
+    led = mod.load(root, change, "baseline")
+    return led if led is not None and led.get("commit") == commit else None
 
 
 class _NoLock:
@@ -3079,8 +3197,7 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, pr
         env.update(extra_env or {})
         sec_out = os.path.join(tmp, "seconds.jsonl")
         env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
-        if isinstance(durations, dict):
-            env["FLIGHT_G7_SEC"] = sec_out
+        env["FLIGHT_G7_SEC"] = sec_out  # 恒取逐用例耗时（进观测表）
         dout = _flight_plugins(tmp, env, root, True) if isinstance(deps_out, dict) else None
         flight = ["-p", "flight_guard", "-p", "flight_deps"] if dout else []
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
@@ -3116,12 +3233,16 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, pr
         if os.path.isfile(out):
             with open(out, "r", encoding="utf-8") as f:
                 outcomes = [tuple(json.loads(line)) for line in f if line.strip()]
-        if isinstance(durations, dict) and os.path.isfile(sec_out):
+        run_secs = {}
+        if os.path.isfile(sec_out):
             with open(sec_out, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         nid, sec = json.loads(line)
-                        durations[nid] = durations.get(nid, 0.0) + sec
+                        run_secs[nid] = run_secs.get(nid, 0.0) + sec
+                        if isinstance(durations, dict):
+                            durations[nid] = durations.get(nid, 0.0) + sec
+        _ledger_observe("nodeid", outcomes, run_secs)  # outcomes 是 [(nodeid, 结局)]，在 _ledger_observe 内转 dict
         if dout:
             parsed, _ = _read_deps(dout)
             if parsed is not None:
@@ -3823,6 +3944,7 @@ def cmd_final(args):
     durations = {} if tiers is not None else None
     unit_wall, region_wall, part_wall = 0.0, {}, {}
     v7, total, passed, w7 = scenario_status(root, data, durations=durations)
+    _LEDGER_OBS.clear()  # G7 只跑 scenario 用例：其观测不进收口账本，否则没重跑的用例会被误记成实测
     failed.extend(v7)
     warnings.extend(w7)
     baseline = load_baseline(args.change_dir)
@@ -3835,6 +3957,9 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     inc = None
+    # 收口账本（test-ledger design D6 / D9）：只在本次确实跑了套件时落账；lrerun 与对账共用
+    led, lrerun = None, None
+    lmeta = {"commit": head, "phase": "final", "mode": None, "lock": hold.info.get("state")}
     test_sec, check_secs = None, {}  # gate.test 三选一分支的秒数（不含区域）与各项检查的秒数（design D8）
     sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
     final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
@@ -3852,6 +3977,8 @@ def cmd_final(args):
             part_wall, region_wall = _final_parts(root, tiers, gate, baseline, failed, warnings, hold.info)
             unit_wall = sum(part_wall.values())
             inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
+            led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
+            warnings.extend([lwarn] if lwarn else [])
         elif not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
         else:
@@ -3911,9 +4038,11 @@ def cmd_final(args):
                     rdir = None
                     warnings.append("测试结果文件目录不可用（检查拿不到 GATE_TEST_RESULT）：%s" % e)
             t0 = time.time()
+            lmode = None  # 实跑了套件的分支（落账的 mode）；复核未过时保持 None，不落账
             if sfail:  # 复核未过：跳过测试运行，不写锚点
                 failed.extend(sfail)
             elif tonly is not None:  # 无图退路：只重跑改动的测试文件，不挂依赖图与探针、不写锚点（D5 / D6）
+                lmode = TESTS_ONLY
                 green, delta, files = tonly
                 outcomes, rc, text, timed_out = [], 0, "", False
                 if files:
@@ -3932,6 +4061,7 @@ def cmd_final(args):
                        "rerun": files, "rerun_tests": len({n for n, _ in outcomes}), "inherited_tests": None}
                 tres = {"mode": TESTS_ONLY, "inherited": None, "fails": fails}
             elif why is None and imp:  # gate.impacted 代替内建选测（design D8）
+                lmode = "impacted"
                 anchor, delta = pick
                 with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
                     tg = run_test_gate(imp, root, extra_env=dict(_final_env(final_ctx, tmp), **genv),
@@ -3948,6 +4078,7 @@ def cmd_final(args):
                        "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta),
                        "rerun": None, "rerun_tests": None, "inherited_tests": None}
             elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
+                lmode = "incremental"
                 anchor, delta = pick
                 sel = _final_select(root, anchor, delta, extras["blind"])
                 run_sel, unit_files, hit = sel, set(), {}
@@ -4018,6 +4149,7 @@ def cmd_final(args):
                 anchor_part["hops"] = _anchor_hops(anchor, khops) + 1  # 链长（design D6）
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）
+                lmode = "full"
                 tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True, extra_env=genv,
                                    keep_junit=rjunit)
                 f2, w2 = (_nodes_verdict(tg, bt.get("failed_nodes")) if bt.get("failed_form") == "nodes"
@@ -4087,10 +4219,24 @@ def cmd_final(args):
                                         if full_run or n.split("::", 1)[0] not in rfiles}
                                 kept.update(rn)
                                 anchor_part["nodes"] = dict(sorted(kept.items()))
+            if lmode is not None:  # 收口账本（test-ledger design D6）：区域跑完之后、写锚点之前
+                lmod, lsrc = _ledger_mod(), None
+                if lmode in (TESTS_ONLY, "incremental"):
+                    lrerun = inc["rerun"]
+                if lmode == TESTS_ONLY and not isinstance(lmod, str):  # 来源 = 上一份收口账本，须在覆盖写之前读
+                    prev = lmod.load(root, name, "final")
+                    lsrc = prev if prev is not None and prev.get("commit") == tonly[0].get("commit") else None
+                elif lmode == "incremental" and not isinstance(lmod, str):
+                    lsrc = lmod.from_anchor(pick[0])
+                led, lwarn = _ledger_commit(root, name, dict(lmeta, mode=lmode), tiers,
+                                            universe=(anchor_part["nodes"] or None) if nodes_ok and anchor_part else None,
+                                            source=lsrc, rerun_files=lrerun)
+                warnings.extend([lwarn] if lwarn else [])
             if cur_snap is not None and anchor_part is not None:
+                # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
                                              byproducts=byproducts, cmd_key=akey, tiers_key=tkey,
-                                             tiers_detail=_tiers_detail(tiers)))
+                                             tiers_detail=_tiers_detail(tiers), secs=_ledger_secs(led)))
                 if w:
                     warnings.append(w)
             if tres is not None and rdir is not None:  # 结果交接（design D1）：gate.test 判定之后、检查之前
@@ -4153,6 +4299,17 @@ def cmd_final(args):
         segs.append("测试 %.1fs" % test_sec)
     if check_secs:
         segs.append("检查 " + " / ".join("%s %.1fs" % kv for kv in check_secs.items()))
+    if led is not None:  # 对账（test-ledger design D7 / D8 / D10）：只报告，不影响 ok / failed / 退出码
+        lmod = _ledger_mod()
+        result["tests"] = dict(lmod.summary(led), delta=None, why=None)
+        try:
+            d, dwhy = lmod.delta(lmod.load(root, name, "baseline"), led, lrerun, root)
+            if d is not None:
+                lmod.save(root, name, "delta", d)
+                segs.append(lmod.segment(d))
+            result["tests"].update(delta=d, why=dwhy)
+        except Exception as e:
+            result["tests"]["why"] = "对账失败：%s: %s" % (type(e).__name__, e)
     segs.append(_lock_note(hold.info))
     # 结论词恒在末尾（timeline.py 按末尾取结论）
     final_note = " ".join(x for x in (inc_note, " · ".join(s for s in segs if s), "ok" if result["ok"] else "red") if x)
@@ -4438,6 +4595,26 @@ def cmd_baseline(args):
     bl["test_ok"] = test_ok and len(reasons) == n_valid
     # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
     # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）；部件形态不写锚点（design D8）
+    # 基线账本（test-ledger design D1 / D4）：写锚点之前落账，基线红也照落；部件形态同样落账（mode parts）
+    led, lwarn, lmod = None, None, _ledger_mod()
+    lmeta = {"commit": bl["commit"], "phase": "baseline", "mode": "incremental", "lock": hold.info.get("state")}
+    if parts:
+        led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
+    elif hit is None:
+        led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="full"), tiers,
+                                    universe=_nodes_lower(adeps["nodes"]) if adeps is not None else None)
+    elif apart is not None:
+        led, lwarn = _ledger_commit(root, name, lmeta, tiers, universe=apart.get("nodes") or None,
+                                    source=None if isinstance(lmod, str) else lmod.from_anchor(src["pick"][0]),
+                                    rerun_files=hit["rerun_files"])
+    elif hit is not None:  # 复用旧基线 / 基线池：来源账本在 save 覆盖之前读
+        led, lwarn = _ledger_commit(root, name, lmeta, tiers,
+                                    source=_ledger_source(root, src.get("change"), src.get("commit")),
+                                    rerun_files=hit["rerun_files"])
+    if lwarn:
+        warnings.append(lwarn)
+    if led is not None:
+        bl["ledger"] = lmod.summary(led)
     if hit is None and not parts:
         measured = adeps is not None and not deps_un and not deps_whys and not reasons
         if deps_un:
@@ -4456,13 +4633,16 @@ def cmd_baseline(args):
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "nodes": _nodes_lower(ad.get("nodes")), "deps_kind": deps_un[0][0] if deps_un else None,
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
+            # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
+            "secs": _ledger_secs(led) if measured else None,
             "measured": measured, "source": "baseline", "hops": 0})
         if w:
             warnings.append(w)
     elif apart is not None:  # 经锚点的增量基线（design D7）：写新锚点，hops = 来源 + 1；基线无效时 measured false
+        # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
         w = _anchor_write(root, dict(apart, change=name, commit=bl["commit"], at=now_iso(), snapshot=s1,
                                      byproducts=byproducts, cmd_key=akey, tiers_key=None, tiers_detail=None,
-                                     measured=apart["measured"] and not reasons))
+                                     measured=apart["measured"] and not reasons, secs=_ledger_secs(led)))
         if w:
             warnings.append(w)
     if warnings:
@@ -6144,10 +6324,12 @@ def _rerun_forecast(change_dir, data):
 
 
 def cmd_ship(args):
-    """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；工作流的 blocked 只作说明。"""
+    """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；另读 delta.json（只用于 --markdown）；
+    工作流的 blocked 只作说明。"""
     root = toplevel()
     head = git(root, "rev-parse", "HEAD")
     reasons = []
+    final = None
     findings = {}
     fpath = os.path.join(args.change_dir, "review-findings.json")
     if os.path.isfile(fpath):
@@ -6185,6 +6367,14 @@ def cmd_ship(args):
         if blocked:
             parts.append("### 飞行中记 blocked 的切片\n\n" + "\n".join(
                 "- %s（%s）：%s" % (b.get("slice", "?"), b.get("kind", "infra"), b.get("reason", "")) for b in blocked))
+        try:  # 「测试变更」（test-ledger design D8）：delta.json 对得上 final 行的 commit 才附；任何异常 → 不附
+            lmod = _ledger_mod()
+            if final is not None and not isinstance(lmod, str):
+                d = lmod.load(root, os.path.basename(os.path.realpath(args.change_dir)), "delta")
+                if d is not None and str(d.get("commit"))[:10] == final["commit"]:
+                    parts.append(lmod.render(d))
+        except Exception:
+            pass
         print("\n\n".join(parts))
     else:
         print(json.dumps(result, ensure_ascii=False))

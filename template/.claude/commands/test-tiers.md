@@ -194,3 +194,4 @@ G12 照常校验。非 pytest 部件按退出码判，不做逐条失败差分�
 - 口径：G7 实跑 scenario 测试时按用例文件归层累加每个用例 setup + call + teardown 耗时；baseline / final 里单元层运行（含探针回退重跑与 G10 候选重跑）与每个已选区域 `cmd` 运行计墙钟；lint、typecheck、verify、`gate.checks` 不计；
 - 输出位置：`summary` 末尾追加「单元 X.Xs · 集成 Y.Ys」，飞行记录（timeline 备注）在结论词之前插入同样文字；baseline 同时写进 `gate-baseline.json`；
 - 未配置分层时没有 `tier_sec`，输出不变。
+- 测试账本按分层文件给每条用例归层（`unit` 或区域名），没有分层文件时账本不分层（层记 `null`）；细则见 `.claude/flight-runner-contract.md` 第 9 节。
