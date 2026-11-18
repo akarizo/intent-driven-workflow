@@ -69,6 +69,11 @@ exec python3 -m pytest -q tests "${args[@]}"
 
 体检：`python3 .claude/hooks/flight-doctor.py doctor` 的 `[runner]` 节按类别统计在途 change 的基线。
 
+**未测须表态**：本 change 的基线带 `deps_unmeasured` 时，选测复核多一个伪触发项 `runner:deps-unmeasured`。
+- 出路三条：按上表修好后重跑 baseline；配 `gate.impacted`；或在计划的 `gate.scope_full_reason` 为它写理由（显示在 spec.html，以 approve 提交为准）。
+- 不写理由：lint / preflight 判红，final 开跑前复核判 `G2 scope` 红。
+- 基线跑出来之前可以预写；内建声明下的非 pytest 运行器与部件形态不要求。
+
 ## 6. `gate-scope.json` 的可选字段
 
 `<openspec 根>/gate-scope.json` 恰含 `cmd` 或 `builtin` 之一，另可选：
@@ -84,7 +89,7 @@ exec python3 -m pytest -q tests "${args[@]}"
 ## 7. 接入步骤
 
 1. **改包装脚本**：按第 1 节转发两个变量，用 `$GATE_CHANGE` 代替写死的 change 名；项目缓存键按第 4 节剔除 `FLIGHT_` / `GATE_`。
-2. **跑 baseline，确认依赖图测到**：`slice-gate.py baseline --full` 后基线 warnings 没有「依赖图未测」，或 `flight-doctor.py doctor` 的 `[runner]` 为 0。
+2. **跑 baseline，确认依赖图测到**：`slice-gate.py baseline --full` 后基线 warnings 没有「依赖图未测」，或 `flight-doctor.py doctor` 的 `[runner]` 为 0；未测且暂不接入的，须按第 5 节写理由才能起飞。
 3. **对账**：baseline 之后提交一处改动，跑 `slice-gate.py final`（增量）留下结果文件副本，再在同一棵树上跑 `slice-gate.py final --full`，两份结果文件的 `nodes` 逐条一致才算接通。
 4. **声明 global / blind**：对账不一致的来源（依赖图看不见的配置、数据、插件目录）写进 `gate-scope.json` 的 `global`；只能靠每次重跑兜住的测试写进 `blind`；必要时调 `anchor_max_hops`。
 5. **检查改读结果文件**：`gate.checks` 的 `final` 命令改读 `$GATE_TEST_RESULT`，不再自己重跑测试或拼 junit。
