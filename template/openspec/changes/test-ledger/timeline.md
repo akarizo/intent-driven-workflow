@@ -19,3 +19,4 @@
 2026-11-18T09:23:36Z	review	findings=22 blocking=0 deferred=22
 2026-11-18T09:33:20Z	final	增量（锚点 b1be3db4be，重跑 76 个文件 / 沿用 174 个用例） 测试 555.4s · 检查 schema-validate 2.8s · 排队 0.0s · 负载 8.4→5.2/18 ok
 2026-11-18T09:33:46Z	apply-done	blocked=0 blocking=0
+2026-11-18T09:34:35Z	ship	ready

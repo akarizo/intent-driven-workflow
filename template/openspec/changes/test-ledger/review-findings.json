@@ -1,0 +1,161 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 118,
+      "summary": "账本按 junit 形式合成（有 junit 观测、没给 universe）而来源是 nodeid 形式（例如 from_anchor 的产物）时，来源里的 nodeid 会原样并进账本。_file_of 按 junit 规则拆 'tests/test_a.py::test_a' 时恰好能试出 tests/test_a.py，所以这条用例被当作沿用而保留，账本里 junit 与 nodeid 两种 id 混在一起，complete 还是 True。已用一次定向抽查确认：build(..., source=from_anchor(...), 观测为 junit, rerun_files=['tests/test_b.py']) 得到 id_form=junit、complete=True，cases 为 ['tests.test_b::test_b', 'tests/test_a.py::test_a']。spec 没规定这种组合怎么处理，S4/S5 会不会这样调用还需进一步确认，但 id_form 的契约已经被破坏，S3 对账时会把同一用例当成两条。",
+      "fix": "在 build 里统一来源的形式：来源 id_form 为 nodeid（或缺省）而账本是 junit 时，先用 _to_junit 把 src_cases 的键换成 junit 再并集合、取 o/s；反过来（junit 来源、nodeid 账本）换算有损，直接把 src_cases 当空处理，让 complete 如实变为 False。补一条测试：junit 观测加 from_anchor 来源时，账本 id 全是 junit 形式。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 42,
+      "summary": "_outcome 把认不出的结局一律转小写保留（例如 'RERUN' 变成 'rerun'），而 spec.md 写的是结局统一成 passed/failed/error/skipped/xfailed/xpassed，未知为 null。实现照的是切片包的说法（其余转小写），两份工件互相不一致。",
+      "fix": "二选一后统一：要么在 _outcome 里设白名单 {passed, failed, error, skipped, xfailed, xpassed}，其余返回 None；要么改 spec 的措辞，与切片包对齐。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 109,
+      "summary": "多条观测是按字段合并的：后来的观测没带 tier，或者没有该用例的耗时时，前一条观测的 tier / 秒数会保留下来。严格说这与“后来的覆盖先前的”不一致，语义有歧义。",
+      "fix": "如果本意是整条覆盖：后来的观测含该用例时，先清掉 obs_tier / secs 里这个 cid 的旧值再写入。如果本意是按字段合并：在文件头注释或 design 里写明。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 265,
+      "summary": "_show 调 git 时没捕获 OSError。git 不在 PATH 里时会直接抛 FileNotFoundError 并打出 traceback，而不是按约定退出 2；ledger_dir 已经对 OSError 做了处理，两处做法不一致。",
+      "fix": "用 try/except OSError 包住这次 subprocess.run，出错时打印“git 不可用”并 return 2。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3184,
+      "summary": "_pytest_outcomes 读 FLIGHT_G7_SEC 时把同一 nodeid 的多行耗时相加。G7 插件经 argv 的 -p 加载，xdist 下 worker 与 controller（收到转发的 report）各在 teardown 写一行，进观测表的耗时会翻倍。依赖图插件这边已在 _read_deps 用取最大值处理了同一情形，G7 这条路径没做。翻倍正好踩中 design 的变慢判据 F ≥ B×2，xdist 仓库里经增量重跑的用例会被系统性误报为变慢。（需进一步确认：本机未装 pytest-xdist，未能实跑验证；tests/ 里也没有 xdist 用例）",
+      "fix": "只给观测用的 run_secs 改成按 nodeid 取最大值：run_secs[nid] = max(run_secs.get(nid, 0.0), sec)，与 _read_deps 的 sec_node 口径一致。durations 的累加照旧，不改既有判定。也可以在 G7 插件里跳过 xdist controller 收到的转发 report（带 report.node 的那些），但这会动到 durations 的现有含义，不建议在本片做"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1319,
+      "summary": "run_part 在探针有记录时提前返回，这条路径（pytest 部件走内置探针，或适配器部件配了 probe）的上报没有测试。test_part_adapter_run_is_observed 只走到末尾的 junit 路径。另外两条约束也没有用例钉住：run_test_gate 带 cwd 时 MUST NOT 上报；_plain 回退时外层不重复上报",
+      "fix": "在 tests/test_ledger_capture.py（或后续切片）补两条断言：一是带 probe 的部件运行一次 run_part，观测表恰好多一条且 tier 为 unit、secs 等于返回值的 secs；二是 run_test_gate(..., cwd=子目录) 运行前后 ledger_observations() 长度不变"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1282,
+      "summary": "_junit_cases 以 classname::name 为键直接覆盖。pytest 遇到 call 失败且 teardown 报错时，会为同一用例写两个 testcase 元素：第一个带 failure，第二个带 error。后一个覆盖前一个后，结局从 failed 变成 error，耗时也只剩 teardown 那一段，call 的耗时丢了",
+      "fix": "同一 tid 的耗时累加，即 secs[tid] = secs.get(tid, 0.0) + t；结局按 failed > error > skipped > passed 的优先级保留更严重的那个，不要直接覆盖"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 152,
+      "summary": "「增量运行没覆盖到的用例记『未重测』，不算删除」把 design D7 的删除判定说窄了。按 D7，在 B 不在 F 的用例只要满足以下任一条就算删除：F 是全量或部件形态、用例所在文件已不存在、用例所在文件在本次重跑清单里。所以增量运行里文件被删掉或文件被重跑的用例要算删除。照现在的写法，读者会以为增量运行一律只记「未重测」",
+      "fix": "改成：「在基线不在 final 的用例，只要 final 是全量 / 部件形态、文件已删或文件在本次重跑清单里，就算删除；其余（典型是 `gate.impacted` 只跑了选测）记「未重测」，不算删除。」"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 136,
+      "summary": "「入库的只有摘要：`gate-baseline.json` 的 `ledger` 段」和同节第 152 行、design D4 对不上。D4 写明入库可追溯的载体还有 final 时间线里的「用例 +A/-R」片段（timeline.md 入库），另外 PR 正文也会贴「## 测试变更」。说「只有」不准确",
+      "fix": "改成：「入库的只有摘要：`gate-baseline.json` 的 `ledger` 段与 final 时间线备注里的一小段（都不含逐用例数据）」，或者干脆删掉「只有」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 238,
+      "summary": "给了 root 时，「定不出文件」（f is None）和「文件已不存在」被当成同一种情况，都算删除。junit 形式下 _file_of 找不到任何候选文件就返回 None；只要 pytest 的 rootdir 不是仓库根（classname / nodeid 是相对子项目的），在 impacted 模式下，基线里所有没重跑的用例都会被算成删除，而不是未重测。这正是 D7 想避免的误报。字面上符合 spec 的「文件在 root 下不存在」，但两者的语义混在了一起。需进一步确认真实调用场景下 rootdir 是否恒等于仓库根",
+      "fix": "把「定不出文件」与「文件确实不存在」分开：f is None 时计入 unknown，只有 f 求得且 os.path.isfile 为假才算删除。如果 junit 形式需要识别「整条路径都不存在」，可以检查 classname 的第一段目录是否存在于 root 下，再判删除。补一条 rootdir≠root 的用例钉住"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 238,
+      "summary": "不给 root、两边都是 junit 形式时，类内用例（如 tests.test_a.TestC::test_old）用 _file_of 的最长候选求文件，得到 tests/test_a/TestC.py，和 rerun_files 里的 tests/test_a.py 对不上。被重跑文件里消失的用例因此记成 unknown，不算删除（已定向抽查：removed=0, unknown=1）。S5 调用时会传 root，所以当前不触发",
+      "fix": "root 为 None 时，用 classname 从长到短的所有候选与 rerun 求交，命中任一就算在重跑清单里；也可以在 docstring 注明「junit 形式下 rerun 判定依赖 root」"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 271,
+      "summary": "对账结果多了一个 slower_tiers 键，切片包第 2 步的返回结构和 design D7/D8 都没有声明它。这个结果会原样写进 delta.json 和 final 输出 JSON 的 tests.delta，等于持久化契约悄悄多了一个字段。切片包只授权了 added_by_tier 这一个附带键",
+      "fix": "在 design D7/D8（或 _interfaces.md 的 S3 一节）补一行，说明 slower_tiers 与 slower 一一对应、只供 advice 规则 2 使用；或者在 summary 里申报这次偏离，让后续切片 / ship 渲染方知道这个键存在"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 292,
+      "summary": "advice 规则 1 只在 top_added（前 TOP_N 条）里找第一条非 unit 用例。新增的 unit 用例单条更慢、但集成用例总耗时更高时（例如 5 条 1s 的 unit 对 10 条 0.6s 的集成），前 5 条全是 unit，建议行就没有「最慢 <id>」后缀，点名的作用随之失效",
+      "fix": "delta 里另记「最慢的新增非 unit、非 - 用例」（id、秒），advice 优先用它；也可以接受现状，在注释里说明后缀可能缺省"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4568,
+      "summary": "落账相关的几处调用放在了 _ledger_commit 的 try 之外：经锚点分支在参数位置直接算 lmod.from_anchor(src[\"pick\"][0])，后面的 lmod.summary(led) 和锚点里的 _ledger_secs(led) 也都不在 try 里。按现有 test-ledger.py 的实现，这几个函数对 build 产出的账本和锚点结构都不会抛错，所以眼下不是 bug。但 spec 和 design 第 72 行要求「账本出任何问题都只留一条警告」，这个保证现在要靠这些函数自身不出错来维持；以后 test-ledger.py 一改，异常就会冒到 cmd_baseline，baseline 中断，gate-baseline.json 停在运行标记状态。",
+      "fix": "把 from_anchor 的计算移进 _ledger_commit，例如加一个参数 anchor=src[\"pick\"][0]，在 try 里换算成 source；summary 也在 _ledger_commit 里算好，作为第三个返回值带出来；_ledger_secs 内部加 try/except，出错时返回 None。这样所有对外部模块的调用都在同一层兜底里。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3947,
+      "summary": "申报的偏离（G7 之后 _LEDGER_OBS.clear()）本身合理：G7 只跑 scenario 用例，不清空的话增量和无图退路里没重跑的用例会被误记成 m=1。我核对过，lint/typecheck 走 run_cmd_full，baseline 的 verify 也走 run_cmd_full，都不上报观测，所以别的 caller 没有同类泄漏。不足有两点：一是 cmd_final 直接操作模块级全局表，绕过了 _ledger_observe / ledger_observations 这组封装；二是 design.md D6 没有记下这条「G7 观测不进收口账本」的规则，以后改动 G7 或观测采集的人看不到这个约束。",
+      "fix": "在 _ledger_observe 旁加一个 _ledger_reset() 小函数，cmd_final 改成调用它；在 design.md D6 补一句：G7 scenario 运行的观测在落账前丢弃，增量时没重跑的 scenario 用例按来源继承（m=0）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4304,
+      "summary": "lmod.summary(led) 在 try 之外。切片包第 2 步要求对账与存盘包在 try 里，结果只报告、不影响退出码；summary 一旦抛异常（例如账本结构被别的切片改坏），final 会在写 final 记录和 gate-report 之前直接崩掉，违背「只报告」。按当前 test-ledger.py 的实现，这条路径实际几乎不会触发，属于防御性建议。",
+      "fix": "把 result[\"tests\"] = dict(lmod.summary(led), ...) 挪进同一个 try；except 分支在 result 里还没有 tests 时先写成 {\"delta\": None, \"why\": \"对账失败：…\"}。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 31,
+      "summary": "文件头 baseline 那一行的空格被顺手删掉一个（[--full] 后由 8 个空格变成 7 个），说明列和上下行不再对齐。这处改动与本片无关，违反最小改动。",
+      "fix": "恢复原来的 8 个空格，使「起飞前预检」与其他子命令的说明列对齐。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6374,
+      "summary": "（需进一步确认是否属于设计取舍）同树沿用的 final 不落账，也不更新 delta.json。如果在只改了 bookkeeping / inert 路径的新 commit 上重跑 final 并命中同树沿用，最后一条 final 行的 commit 会变成新 commit，与 delta.json 的 commit 对不上，ship --markdown 的「## 测试变更」就静默消失，而测试结论其实没变。这符合切片包字面要求，但 PR 正文会出现「有时有、有时没有」的现象。",
+      "fix": "二选一：同树沿用时把上一份 delta.json 的 commit 一并视为有效（例如 ship 比对时同时接受 final 记录里 incremental.from 指向的 commit）；或者在 design D8 里写明「同树沿用后不附测试变更」是预期行为。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 475,
+      "summary": "读账本出错的情况会被当成没有账本。tl.load() 在 JSON 损坏、读不了文件时都返回 None（S1 的 load 吞掉了 ValueError 和 OSError），所以账本文件明明在、只是读坏了，[tests] 这一节打印的是「没有账本数据：本机还没有带账本的 baseline / final」，原因写错了。spec 要求「读账本出错时该节只打印一行说明」，这条路径没走到。根因在 S1 的 load 契约，不在本 diff 的范围里，需进一步确认是否要在本片处理",
+      "fix": "选账本前先用 os.path.isfile 查 <ledger_dir>/<change>/<phase>.json 在不在。文件在但 load 返回 None 时，打印「  test-ledger.py 不可用：账本 <change>/<phase> 读不了」；或者改成在 S1 加一个能区分「缺失」和「损坏」的读取接口"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 474,
+      "summary": "subprocess.run([\"git\", ...]) 没有处理 OSError。本机没装 git 时抛 FileNotFoundError，被 doctor() 外层的 try 接住，打印的是「test-ledger.py 不可用：[Errno 2] ... 'git'」，把 git 的问题算到了 test-ledger.py 头上",
+      "fix": "在 doctor_tests 里用 try/except OSError 包住 rev-parse 调用，出错时同样返回「  不在 git 仓库，跳过」，或者单独打印「  git 不可用：<原因>」；也可以改用 load_gate().git / _git_top，复用现有的错误处理"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 498,
+      "summary": "跨模块直接调用 test-ledger.py 的私有函数 tl._sort_key，以后 S1 改这个函数名或排序语义时，这里会悄悄坏掉。文件头注释写了用到它，但接口摘要把它列为私有",
+      "fix": "在 test-ledger.py 里公开一个排序函数（例如 sort_key 或 slowest(ledger, n)），这里改为调用公开名；不在本片 owns 内的话记进 backlog"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 505,
+      "summary": "`for r in (_last_segment(d, tl),)` 是单元素元组的写法，只是为了在推导式里绑定一个变量，读起来费劲",
+      "fix": "改成普通循环：for name, d in changes: r = _last_segment(d, tl); if r: recent.append((r[0], name, r[1]))"
+    }
+  ],
+  "fix": null
+}
