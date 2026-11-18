@@ -3,11 +3,7 @@
 骨架：strict xfail，断言是真实的；切片 S6 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S6 未实现")
 
 HEADER = "<!-- timeline: ISO时间\\t事件\\t备注（由 hooks 自动追加） -->\n"
 BIG = "tests/integration/hooks/test_h.py::test_big"
@@ -38,7 +34,6 @@ def section(text, head="[tests]"):
     return out
 
 
-@PENDING
 def test_doctor_tests_lists_tiers_and_slowest(git_repo):
     # Given: 在途 change c 存有一份 final 账本：单元层 12 条共 3.0 秒，区域 hooks 2 条（9.0 秒与无耗时各一条）
     add_change(git_repo, "c")
@@ -63,7 +58,6 @@ def test_doctor_tests_lists_tiers_and_slowest(git_repo):
     assert 1 <= len(slow) <= 10 and BIG in slow[0], slow
 
 
-@PENDING
 def test_doctor_tests_lists_recent_change_deltas(git_repo):
     # Given: c1 / c2 的时间线各有一条带「用例 +A/-R（新增 Xs）」片段的 final 行，c3 的 final 行没有片段
     add_change(git_repo, "c1", "2026-11-18T01:00:00Z\tfinal\t全量（没有可用锚点） 测试 10.0s · 用例 +3/-1（新增 2.5s） · 排队 0.0s ok\n")
@@ -82,7 +76,6 @@ def test_doctor_tests_lists_recent_change_deltas(git_repo):
     assert not any("c3" in l for l in sec), sec
 
 
-@PENDING
 def test_doctor_tests_explains_missing_ledger(git_repo):
     # Given: 本机没有任何账本，openspec 根没有 test-tiers.json
     add_change(git_repo, "c")
