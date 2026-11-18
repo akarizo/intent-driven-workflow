@@ -3,12 +3,8 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL, commit_all, run_hook
 from final_helpers import baseline, make_repo
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S2 实现后去掉")
 
 
 def _decl(repo, **extra):
@@ -27,7 +23,6 @@ def _doctor(repo):
     return run_hook("flight-doctor", "doctor", "--openspec-root", str(repo / "openspec"), cwd=repo)
 
 
-@PENDING
 def test_lint_rejects_inert_matching_test_or_global_files(git_repo):
     # Given: inert 写了 ["tests/**", "*.ini"]：前者匹配到测试文件，后者匹配到全局文件 pytest.ini
     _decl(git_repo, inert=["tests/**", "*.ini"])
@@ -42,7 +37,6 @@ def test_lint_rejects_inert_matching_test_or_global_files(git_repo):
     assert any("*.ini" in l and "pytest.ini" in l and "全局文件" in l for l in _lines(p.stderr, "inert")), p.stderr
 
 
-@PENDING
 def test_lint_reconciles_inert_with_dependency_graph(git_repo):
     # Given: 基线测到 tests/test_b.py 读 data/b.json；之后把 data/** 声明成 inert
     d = make_repo(git_repo)
@@ -60,7 +54,6 @@ def test_lint_reconciles_inert_with_dependency_graph(git_repo):
         assert any("data/b.json" in l and "tests/test_b.py" in l for l in _lines(p.stderr, "inert")), p.stderr
 
 
-@PENDING
 def test_inert_consistent_with_graph_passes_lint(git_repo):
     # Given: 基线测到了依赖图，没有任何用例触及 scripts/helper.sh；之后把 scripts/** 声明成 inert
     d = make_repo(git_repo)
@@ -75,7 +68,6 @@ def test_inert_consistent_with_graph_passes_lint(git_repo):
     assert p.returncode == 0, p.stderr
 
 
-@PENDING
 def test_doctor_lists_inert_and_conflicts(git_repo):
     # Given: 仓库 A 声明了 inert ["data/**"] 但还没有任何锚点；随后基线测到 tests/test_b.py 读 data/b.json
     _decl(git_repo, inert=["scripts/**"])
