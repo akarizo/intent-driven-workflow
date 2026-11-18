@@ -14,10 +14,14 @@
 #   waves    --change-dir DIR                 只打印 waves JSON（不跑选测命令、不判未声明）
 #   scope-seed --openspec-root DIR           DIR/gate-scope.json 已有 → 保留；否则历史 slices.json 的 gate.test 全可识别 → 种
 #                                              {"builtin": true}，有认不出 / 读不出 → 不种、列例子与接入 cmd 指引；恒 exit 0
-#   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH]
+#   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH] [--continue COMMIT]
 #                                              在 git toplevel 写 .openspec-slice 标记（slice / change_dir / base / started）；
 #                                              标记已是同一切片时不改（resume），保住区间与 red_count；
 #                                              给了 --expect-branch 先校验 HEAD 是该分支最新 commit 的后代，否则打印 G0 JSON、exit 1、不写标记
+#                                              --continue：基点校验后、借子仓前把上一轮的全部提交接到 HEAD（已含 noop / 快进 ff /
+#                                              逐个 cherry-pick 为 pick），之后打印的 JSON 带 continued {from, mode, applied}；
+#                                              commit 不存在 / 区间含合并提交 / 冲突 → 回滚到接续前 HEAD、打印 G0 JSON、exit 1、不写标记
+#                                              写新标记时：带 --expect-branch → base = merge-base(HEAD, BRANCH)，否则 --base 或 HEAD
 #                                              无同片标记时：带 --resume-checkpoint 恢复 refs/flight/<change>/<S> 快照（stdout 追加 checkpoint），
 #                                              不带则清掉本片旧快照
 #   checkpoint                                 PostToolUse hook：有标记时把本片 owns 内改动快照到 refs/flight/<change>/<S>；静默、恒 exit 0
@@ -3283,6 +3287,34 @@ def _base_check(root, branch):
     return None
 
 
+def _continue_from(root, commit):
+    """把上一轮属于本片的提交接到当前 HEAD（design D1）→ (info, err)。
+    已含 → noop；HEAD 是其祖先 → 快进；否则逐个 cherry-pick，冲突即回滚到接续前的 HEAD。"""
+    if _run_git(root, "cat-file", "-e", commit + "^{commit}").returncode != 0:
+        return None, "G0 base: 接续的 commit %s 不存在" % commit[:10]
+    if _is_ancestor(root, commit, "HEAD"):
+        return {"from": commit, "mode": "noop", "applied": 0}, None
+    if _is_ancestor(root, "HEAD", commit):
+        n = int(git(root, "rev-list", "--count", "HEAD.." + commit))
+        p = _run_git(root, "merge", "-q", "--ff-only", commit)
+        if p.returncode != 0:
+            return None, "G0 base: 接续 %s 快进失败：%s" % (commit[:10], _first_line(p.stderr, "git merge 失败"))
+        return {"from": commit, "mode": "ff", "applied": n}, None
+    if int(git(root, "rev-list", "--merges", "--count", commit, "--not", "HEAD")) > 0:
+        return None, "G0 base: 接续 %s 的区间含合并提交，无法重放" % commit[:10]
+    pre = git(root, "rev-parse", "HEAD")
+    revs = git(root, "rev-list", "--reverse", commit, "--not", "HEAD").split()
+    for rev in revs:
+        p = _run_git(root, "cherry-pick", rev)
+        if p.returncode != 0:
+            conflicts = _unmerged(root)
+            _run_git(root, "cherry-pick", "--abort")
+            _run_git(root, "reset", "-q", "--keep", pre)
+            why = ", ".join(conflicts) or _first_line(p.stderr or p.stdout, "git cherry-pick 失败")
+            return None, "G0 base: 接续 %s 冲突：%s" % (commit[:10], why)
+    return {"from": commit, "mode": "pick", "applied": len(revs)}, None
+
+
 def _ckpt_ref(change_dir, slice_id):
     return "refs/flight/%s/%s" % (os.path.basename(os.path.abspath(change_dir).rstrip(os.sep)), slice_id)
 
@@ -3573,20 +3605,30 @@ def cmd_start(args):
             print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": [msg],
                               "warnings": [], "summary": "基点校验未通过"}, ensure_ascii=False))
             sys.exit(1)
+    cont = {}
+    if args.continue_from:
+        # 放在 _sub_sync 之前：子仓按接续后的 gitlink 借出
+        info, err = _continue_from(root, args.continue_from)
+        if err:
+            print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": [err],
+                              "warnings": [], "summary": "接续未成功"}, ensure_ascii=False))
+            sys.exit(1)
+        cont = {"continued": info}
     owns = next((s.get("owns") or [] for s in data.get("slices") or [] if s["id"] == args.slice), [])
     synced, failed, sub_warn = _sub_sync(root, args.expect_branch, _need_subs(root, owns))
     if failed:
         print(json.dumps({"slice": args.slice, "ok": False, "commit": "", "failed": failed,
-                          "warnings": sub_warn, "summary": "submodule 未就绪"}, ensure_ascii=False))
+                          "warnings": sub_warn, "summary": "submodule 未就绪", **cont}, ensure_ascii=False))
         sys.exit(1)
     subs = {"submodules": {"synced": synced, "warnings": sub_warn}} if synced or sub_warn else {}
+    subs.update(cont)
     if args.resume_checkpoint:
         # 上一轮执行体门禁已绿却没返回：基点吻合就直接交出留存的结论，不再重做
         rec = _gate_load(root, _gate_ref(args.change_dir, args.slice))
         if rec and rec.get("ok") and rec.get("slice") == args.slice and \
                 git(root, "rev-parse", "HEAD") in (rec.get("base"), rec.get("commit")):
             timeline_record(args.change_dir, "slice-start", "%s (recovered gate)" % args.slice)
-            print(json.dumps(dict(rec, recovered=True), ensure_ascii=False))
+            print(json.dumps(dict(rec, recovered=True, **cont), ensure_ascii=False))
             sys.exit(3)
     existing = _read_marker(root)
     if existing and existing.get("slice") == args.slice:
@@ -3604,8 +3646,11 @@ def cmd_start(args):
         # 首轮起跑：上一次飞行残留的快照不属于本轮，清掉免得被误恢复
         _ckpt_delete_all(root, ref)
         _ckpt_delete(root, _gate_ref(args.change_dir, args.slice))
+    # 带 --expect-branch 时起点 = HEAD 与 change 分支的合并基点（接续已做完），分支上的飞行记录提交不算进区间
+    base = git(root, "merge-base", "HEAD", args.expect_branch) if args.expect_branch \
+        else args.base or git(root, "rev-parse", "HEAD")
     marker = {"slice": args.slice, "change_dir": os.path.abspath(args.change_dir),
-              "base": args.base or git(root, "rev-parse", "HEAD"), "started": now_iso()}
+              "base": base, "started": now_iso()}
     with open(os.path.join(root, MARKER), "w", encoding="utf-8") as f:
         json.dump(marker, f, ensure_ascii=False)
     timeline_record(args.change_dir, "slice-start", note)
@@ -6250,6 +6295,8 @@ def main():
     p.add_argument("--change-dir", required=True)
     p.add_argument("--base", help="区间起点；默认 HEAD（临时 worktree 里从分支 commit 分叉时由派发方传入）")
     p.add_argument("--expect-branch", help="基点校验：HEAD 须是该分支最新 commit 的后代，否则 G0 拒绝起跑")
+    p.add_argument("--continue", dest="continue_from", metavar="COMMIT",
+                   help="重派：接上一轮的全部提交（已含 → 不动；HEAD 是其祖先 → 快进；否则逐个 cherry-pick，冲突回滚并 G0）")
     p.add_argument("--resume-checkpoint", action="store_true",
                    help="重派：无同片标记时把 refs/flight/<change>/<S> 快照恢复为未提交改动（基点须在快照祖先链上）")
     p = sub.add_parser("scope-seed", help="安装器用：按历史 gate.test 决定是否种 <openspec 根>/gate-scope.json = {\"builtin\": true}；恒 exit 0")
