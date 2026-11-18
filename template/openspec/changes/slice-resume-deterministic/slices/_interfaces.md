@@ -24,3 +24,20 @@
 - `tierOf(s)` / `execDef(s)`：按 turns 选档位与执行体定义（standard→slice-executor，large→slice-executor-large）。
 - `startCmd(s, cont, resume)`：重派经 `start --continue` 的命令串。
 - agent `slice-executor-large`：大片档薄定义，纪律同 slice-executor。
+
+## S5（`template/.claude/hooks/slice-gate.py` · `tests/test_evidence_shared_gate.py` · `tests/test_merge_reap.py`）
+
+- `def _evidence_shared(root, change_dir, slice_id)`：共用目录里本切片的 evidence 文件。
+- `def _evidence_merge(root, change_dir, slice_id, drop=False)`：合并共用 evidence 到分支留痕。
+- `def _evidence_prune(root)`：清理共用 evidence 残留。
+- `def evidence_state(change_dir, slice_id, root=None)`：evidence 留痕状态。
+- `def _status_entries(root)` / `def _flight_dirt(xy, path)` / `def _drop_untracked(base, paths)`：合回前工作树状态与飞行记录脏文件处理。
+- `def _reap_one(root, wt, warnings)` / `def _reap(root, sid, sha, pre, warnings)`：合回后回收切片临时 worktree。
+
+## S6（文档与安装：`opsx-apply.md` · `SKILL.md` · `README.md` · `install.sh`）
+
+- 无新增源码签名。
+
+## S7（`template/.claude/hooks/spec_html.py` · `tests/test_spec_html_turns.py`）
+
+- `def slice_turns(change_dir)`：读取各切片轮次档位供切片表渲染。
