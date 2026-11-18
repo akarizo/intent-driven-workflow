@@ -25,3 +25,10 @@
 - `parse_note(note)` / `classify(reason)` 备注解析与归类
 - `cost(change_dir)` 读时间线汇总成本（兼容旧备注）
 - `cost_text(c)` 成本文本渲染
+
+## S4
+
+`template/.claude/hooks/flight-doctor.py`
+- `load_lock()` 按路径加载 flight-lock.py，失败返回 None
+- `doctor_checks(changes)` `[checks]` 节：点名耗时接近测试耗时的检查
+- `doctor_lock()` `[lock]` 节：当前持有者 / 空闲 / 已关闭
