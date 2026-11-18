@@ -1,11 +1,7 @@
 """运行器契约与 propose 文档说明全局守护、wave 集成检查与 owns 分档（scenario: slice-guards#contract-describes-guards-and-wave-check、
 #propose-docs-describe-guards-and-owns-tiers，共 2 条）。
 骨架：strict xfail，断言是真实的；切片 S6 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S6 未实现")
 
 CONTRACT = ROOT / "template" / ".claude" / "flight-runner-contract.md"
 PROPOSE_DOCS = (ROOT / "template" / ".claude" / "commands" / "opsx-propose.md",
@@ -16,7 +12,6 @@ OLD_HEADINGS = ("## 1. 包装脚本要转发的两个变量", "## 2. `GATE_PHASE
                 "## 7. 接入步骤", "## 8. 全机测试锁", "## 9. 测试账本")
 
 
-@PENDING
 def test_contract_describes_guards_and_wave_check():
     # Given: template/.claude/flight-runner-contract.md
     text = CONTRACT.read_text(encoding="utf-8")
@@ -33,7 +28,6 @@ def test_contract_describes_guards_and_wave_check():
         assert h in heads, h
 
 
-@PENDING
 def test_propose_docs_describe_guards_and_owns_tiers():
     # Given: opsx-propose.md、同名 skill 与 schema.yaml
     texts = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in PROPOSE_DOCS}

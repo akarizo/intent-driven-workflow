@@ -27,7 +27,7 @@ exec python3 -m pytest -q tests "${args[@]}"
 ## 2. `GATE_PHASE` / `GATE_CHANGE`
 
 - **注入范围**：baseline 与 final 运行 `gate.test`、`gate.impacted` 与增量重跑时都设。
-- **`GATE_PHASE`**：`baseline` 或 `final`。
+- **`GATE_PHASE`**：`baseline` 或 `final`。全局守护（检查的 `slice` 命令）与 wave 集成检查另有 `slice`、`wave` 两个取值，见第 10 节。
 - **`GATE_CHANGE`**：change 目录名。包装脚本用 `$GATE_CHANGE` 取 change 名，不写死；`cmd_key` 会把脚本里的本 change 名归一成 `<change>`，两个只差 change 名的脚本指纹相同，跨 change 复用才成立。
 
 ## 3. 检查可读的 `GATE_TEST_RESULT`
@@ -153,3 +153,27 @@ baseline 与 final 每次跑测试都留一份逐用例账本，收口时与基�
 - **只报告**：账本与对账不判红，阈值（变慢、建议行）只决定打印什么；账本写不成只留一条「测试账本未写：<原因>」警告，不影响门禁结论。
 - **不落账**：切片 `gate`、final 的 G7 红 / 选测复核未过、同树沿用的 final。
 - **已知限制**：切片门禁不留账；部件形态只有单元层、没有部件维度；账本只在产生它的机器上（基线账本不在本机时对账为空并给出原因）。
+
+## 10. 全局守护与 wave 集成检查
+
+`gate.checks` 里带 `slice` 命令的检查是全局守护：除了 baseline / final 的成对命令，它还在每片门禁与每个 wave 合回后运行，尽早发现切片把全局不变量弄红。
+
+- **`slice` 字段**：`gate.checks` 的检查可多带一条 `slice` 命令（非空字符串）。`gate-checks.json` 里声明了 `slice` 的默认检查，计划里的同名检查必须连同 `slice` 一起带上（lint 校验）。`slice` 进 `plan_sha`，改了要重跑 baseline。
+- **在哪跑**：
+  - baseline：证明起点是绿的，结果记在 `gate-baseline.json` 的 `checks.<名>.slice`，红或超时即基线红；
+  - 每片门禁：红记 `G15 guard <名>`；
+  - 每个 wave 合回后的集成检查：`python3 .claude/hooks/slice-gate.py wave-check`；
+  - final 不跑它，final 跑的是该检查的 `final` 命令。
+- **环境变量**：`GATE_CHANGE` / `GATE_BASE_COMMIT` / `GATE_CHECK_DIR` 与 baseline / final 相同；`GATE_PHASE` 多两个取值：
+
+  | `GATE_PHASE` | 时机 |
+  |---|---|
+  | `baseline` | baseline 运行 `gate.test` 与检查的 `baseline` 命令 |
+  | `slice` | baseline 与每片门禁运行检查的 `slice` 命令 |
+  | `wave` | wave 合回后的集成检查（守护与受影响测试两半） |
+  | `final` | final 运行 `gate.test` 与检查的 `final` 命令 |
+
+- **并行与只读**：同一 wave 的多个切片会并行过门禁、并行调用 `slice` 命令，并且共用 `GATE_CHECK_DIR`；`slice` 命令对共用目录只读（或自己保证并发安全）。日志按场合分名：切片门禁 `<GATE_CHECK_DIR>/.gate-slice-<切片 id>.log`，baseline `.gate-slice.log`，集成检查 `.gate-wave.log`。
+- **要快**：它在每片门禁里跑，应当是秒级的；`timeout_sec` 照常生效，超时即红。
+- **wave 集成检查的测试那一半**：按依赖图只重跑受影响的测试（与增量 final 同一选法），新增失败记 `G16 wave test`。以下情况跳过并在时间线写明原因，不退化成全量：没有可用锚点；估算耗时超过 `gate.wave_test_budget_sec`（缺省 120 秒，留给 final）；配了分层文件或 `gate.impacted`。运行 `gate.test` 时 `GATE_PHASE` 同样是 `wave`。
+- **不做什么**：集成检查不写锚点、不写测试账本。
