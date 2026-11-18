@@ -1,10 +1,6 @@
 """文档说明测试账本与「测试变更」（scenario: test-ledger#docs-describe-test-ledger、#pr-ship-doc-mentions-test-delta-section）。
 骨架：strict xfail，断言是真实的；切片 S7 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S7 未实现")
 
 CLAUDE = ROOT / "template" / ".claude"
 OLD_HEADS = ("## 1. 包装脚本要转发的两个变量", "## 2. `GATE_PHASE` / `GATE_CHANGE`", "## 3. 检查可读的 `GATE_TEST_RESULT`",
@@ -12,7 +8,6 @@ OLD_HEADS = ("## 1. 包装脚本要转发的两个变量", "## 2. `GATE_PHASE` /
              "## 7. 接入步骤", "## 8. 全机测试锁")
 
 
-@PENDING
 def test_docs_describe_test_ledger():
     # Given: 本 change 落地后的模板文档
     lines = (CLAUDE / "flight-runner-contract.md").read_text(encoding="utf-8").splitlines()
@@ -40,7 +35,6 @@ def test_docs_describe_test_ledger():
     assert any("测试账本" in l and "[tests]" in l for l in readme), "README 缺测试账本一条"
 
 
-@PENDING
 def test_pr_ship_doc_mentions_test_delta_section():
     # Given: 本 change 落地后的 pr-ship 命令文档
     lines = (CLAUDE / "commands" / "pr-ship.md").read_text(encoding="utf-8").splitlines()

@@ -305,6 +305,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 - **易变变量**：`FLIGHT_` 与 `GATE_` 前缀的变量每次运行都变，项目缓存键须剔除，建议改用白名单
 - **依赖图未测**：基线按 `not-pytest` / `plugins-dropped` / `plugin-import-failed` / `incomplete` 四类给出原因与修法；未测须表态：选测复核多出伪触发项 `runner:deps-unmeasured`，须修运行器、配 `gate.impacted` 或在 `gate.scope_full_reason` 为它写理由；`flight-doctor.py forecast` 起飞前预告测试成本（只预告，不阻断），`cost` 收口归因每次全量，`doctor` 由 `install.sh --upgrade` 结束时体检
 - **全机测试锁**：baseline / final / `test-tiers.py run` 持独占锁、切片 gate 持共享锁，同一台机器上别的全量在跑时会排队（`FLIGHT_LOCK=off` 关闭，CI 容器已隔离时用）；门禁之外的测试运行用 `flight-lock.py run` 一起排队，细则见 `.claude/flight-runner-contract.md` 第 8 节
+- **测试账本**：baseline / final 每次跑测试都留一份逐用例账本（结局 · 耗时 · 层，不进仓库），收口打印测试变更（新增 · 删除 · 变慢 · 各层前后，进 PR 正文「## 测试变更」），只报告不判红；`flight-doctor.py doctor` 的 `[tests]` 段可看，细则见 `.claude/flight-runner-contract.md` 第 9 节
 
 #### Workflow 前置条件
 
