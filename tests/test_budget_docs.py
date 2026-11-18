@@ -1,11 +1,7 @@
 """文档：运行器契约第 10 节「时间预算与放行」、test-tiers 命令文档与 README 的新字段
 （scenario: tier-budgets#docs-describe-budgets-and-allow-fields）。
 骨架：strict xfail，断言是真实的；切片 S6 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S6 未实现")
 
 CONTRACT = ROOT / "template" / ".claude" / "flight-runner-contract.md"
 TIERS_DOC = ROOT / "template" / ".claude" / "commands" / "test-tiers.md"
@@ -25,7 +21,6 @@ def body(text, prefix):
     return "\n".join(lines[start + 1:end])
 
 
-@PENDING
 def test_docs_describe_budgets_and_allow_fields():
     # Given: 模板仓库的文档
     contract = CONTRACT.read_text(encoding="utf-8")
