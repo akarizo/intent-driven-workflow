@@ -530,8 +530,12 @@ def test_preflight_refuses_missing_or_red_baseline(git_repo):
 
 
 def test_preflight_refuses_stale_baseline(git_repo):
-    # Given: baseline 绿之后把 S2 的 verify 改掉（plan_sha 不再匹配）
+    # Given: baseline 绿之后把 S2 的 verify 改掉（plan_sha 不再匹配）；gate.test = true 测不到依赖图，计划预写 runner:deps-unmeasured 理由
     change = _baseline_repo(git_repo)
+    data = json.loads((change / "slices.json").read_text(encoding="utf-8"))
+    data["gate"]["scope_full_reason"] = {"runner:deps-unmeasured": "gate.test 是 true，不跑 pytest，接受 final 全量"}
+    write_plan(change, data)
+    commit_all(git_repo, "reason")
     assert run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo).returncode == 0
     data = json.loads((change / "slices.json").read_text(encoding="utf-8"))
     data["slices"][1]["verify"] = "true && true"

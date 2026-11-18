@@ -5,13 +5,9 @@
 「gate.test 是否运行」用仓库外的标记文件判定：tests/test_mark.py 在设了 RUNNER_STMT_MARK 时写出它。"""
 import json
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 from final_helpers import baseline, change_and_commit, gate_json, make_repo
 from test_runner_contract import DROPPING, FORWARDING
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S2 实现后去掉")
 
 TRIGGER = "runner:deps-unmeasured"
 REASON = {TRIGGER: "testgate 重建子进程环境，本 change 不接契约，接受 final 全量"}
@@ -55,7 +51,6 @@ def _bl(d):
     return json.loads((d / "gate-baseline.json").read_text(encoding="utf-8"))
 
 
-@PENDING
 def test_unmeasured_baseline_needs_statement(git_repo):
     # Given: gate.test 是丢掉 -p 插件参数的包装脚本，没配 gate.impacted，计划没写理由；baseline 已跑完（plugins-dropped）
     d = _wrapped(git_repo, DROPPING)
@@ -74,7 +69,6 @@ def test_unmeasured_baseline_needs_statement(git_repo):
     assert second.returncode == 0, second.stderr
 
 
-@PENDING
 def test_statement_lets_lint_and_preflight_pass(git_repo):
     # Given: 同样的包装脚本，计划为 runner:deps-unmeasured 写了理由；baseline 已跑完并提交，依赖图未测
     d = _wrapped(git_repo, DROPPING, reasons=REASON)
@@ -90,7 +84,6 @@ def test_statement_lets_lint_and_preflight_pass(git_repo):
     assert pre.returncode == 0, pre.stderr
 
 
-@PENDING
 def test_measured_baseline_rejects_leftover_statement(git_repo):
     # Given: gate.test 是按契约转发两个变量的包装脚本，计划却写了 runner:deps-unmeasured 的理由；baseline 已跑完，依赖图已测到
     d = _wrapped(git_repo, FORWARDING, reasons=REASON)
@@ -105,7 +98,6 @@ def test_measured_baseline_rejects_leftover_statement(git_repo):
     assert any("删除" in l for l in _lines(p.stderr, TRIGGER)), p.stderr
 
 
-@PENDING
 def test_final_refuses_unstated_unmeasured(git_repo, tmp_path):
     # Given: 基线依赖图未测，计划没写理由，没有 approve 提交
     d = _wrapped(git_repo, DROPPING, extra={"tests/test_mark.py": TEST_MARK})
@@ -122,7 +114,6 @@ def test_final_refuses_unstated_unmeasured(git_repo, tmp_path):
     assert not mark.exists()
 
 
-@PENDING
 def test_statement_may_be_prewritten_before_baseline(git_repo):
     # Given: 还没跑过 baseline 的 change，gate.test 是 bash tools/gate.sh，脚本文本里没有 FLIGHT_PYTEST_ARGS
     d = _wrapped(git_repo, DROPPING)
@@ -144,7 +135,6 @@ def test_statement_may_be_prewritten_before_baseline(git_repo):
     assert not [l for l in _lines(forwarding.stderr, "runner:") if l.startswith("runner:")], forwarding.stderr
 
 
-@PENDING
 def test_incremental_baseline_keeps_unmeasured_state(git_repo):
     # Given: 全量基线依赖图未测（plugins-dropped）；之后只改了一个测试文件并提交
     d = _wrapped(git_repo, DROPPING)
