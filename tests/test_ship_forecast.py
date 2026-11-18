@@ -3,13 +3,9 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, run_hook, write
 from final_helpers import baseline, change_and_commit, final, make_repo
 from test_flight_doctor import forecast, plan_dir
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S3 实现后去掉")
 
 
 def _green_final(repo):
@@ -27,7 +23,6 @@ def _ship(repo, d):
     return p, json.loads(p.stdout)
 
 
-@PENDING
 def test_stale_final_reason_says_incremental_rerun(git_repo):
     # Given: 基线测到了依赖图，final 已绿并留下锚点；之后提交了对 src/a.py 的修改
     d = _green_final(git_repo)
@@ -41,7 +36,6 @@ def test_stale_final_reason_says_incremental_rerun(git_repo):
     assert any("final 过期" in r and "补跑将是增量" in r for r in out["reasons"]), out["reasons"]
 
 
-@PENDING
 def test_stale_final_reason_says_full_rerun_with_why(git_repo):
     # Given: 同样的 change；之后提交了对全局文件 pytest.ini 的修改
     d = _green_final(git_repo)
@@ -55,7 +49,6 @@ def test_stale_final_reason_says_full_rerun_with_why(git_repo):
     assert any("final 过期" in r and "补跑将是全量" in r and "pytest.ini" in r for r in out["reasons"]), out["reasons"]
 
 
-@PENDING
 def test_forecast_reads_suite_sec_from_baseline(git_repo):
     # Given: change c 的计划里没有 full_suite_sec、基线的 full_suite_sec 为 300.5；
     #        change old 的基线没有该字段、计划里旧的 gate.full_suite_sec 为 816

@@ -5774,6 +5774,58 @@ def _final_fresh(root, change_dir, final_commit):
     return all(_is_bookkeeping(n, changes_rel) for n in names if n)
 
 
+def final_forecast(change_dir, data, baseline):
+    """final 将怎么跑的预告 → (mode, why)；mode ∈ impacted / full / incremental / unknown。只读，不运行测试。"""
+    gate = data.get("gate") or {}
+    if gate.get("impacted"):
+        return "impacted", "gate.impacted 自己选测"
+    tiers = _load_tiers(change_dir)[0]
+    if tiers_is_parts(tiers):
+        return "full", "多部件分层：部件恒全量"
+    test_cmd = gate.get("test")
+    if not test_cmd:
+        return "unknown", "gate.test 未配置（final 将探测测试命令）"
+    root = toplevel(change_dir)
+    change_rel = _change_rel(root, change_dir)
+    name = os.path.basename(os.path.realpath(change_dir))
+    akey = _anchor_key(root, change_rel, test_cmd, gate)
+    tkey = _tiers_key(root, change_dir, tiers)
+    snap_why, pick = None, None
+    try:
+        snap = _snapshot(root, change_rel)
+    except RuntimeError as e:
+        snap, snap_why = None, "内容快照失败：%s" % e
+    if snap is not None:
+        head = git(root, "rev-parse", "HEAD")
+        hops = _scope_extras(change_dir)["anchor_max_hops"]
+        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops)
+    tier_rel = _change_rel(root, _tiers_path(change_dir))
+    bl = baseline if isinstance(baseline, dict) and baseline.get("running") is not True else None
+    why, _ = _full_why(root, False, pick, bl, snap_why, gate=gate, tier_rel=tier_rel,
+                       decl_rels=_decl_rels(root, change_dir))
+    un = (bl or {}).get("deps_unmeasured")
+    if why and pick is None and isinstance(un, dict):
+        why = "依赖图未测（%s）：%s" % (un.get("kind"), un.get("why"))
+    if why:
+        return "full", why
+    return "incremental", "锚点 %s，Δ %d 个文件" % (str(pick[0].get("commit") or "")[:10], len(pick[1]))
+
+
+def _rerun_forecast(change_dir, data):
+    """ship 的「final 过期」理由后缀：补跑预告；unknown 或预告出错 → 空串（不影响裁决）。"""
+    try:
+        mode, why = final_forecast(change_dir, data, load_baseline(change_dir))
+    except (Exception, SystemExit):
+        return ""
+    if mode == "incremental":
+        return "；补跑将是增量（%s）" % why
+    if mode == "full":
+        return "；补跑将是全量（%s）" % why
+    if mode == "impacted":
+        return "；补跑由 gate.impacted 选测"
+    return ""
+
+
 def cmd_ship(args):
     """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；工作流的 blocked 只作说明。"""
     root = toplevel()
@@ -5800,7 +5852,8 @@ def cmd_ship(args):
         elif not final["ok"]:
             reasons.append("final 红：%s" % final["failed"])
         elif final["commit"] != head[:10] and not _final_fresh(root, args.change_dir, final["commit"]):
-            reasons.append("final 过期：记录 %s，HEAD %s" % (final["commit"], head[:10]))
+            reasons.append("final 过期：记录 %s，HEAD %s" % (final["commit"], head[:10])
+                           + _rerun_forecast(args.change_dir, data))
     # 铁律 4：CRITICAL/HIGH 未闭环不得非 draft —— 与是否飞行模式无关，无条件检查
     blocking = findings.get("blocking") or []
     if blocking:
