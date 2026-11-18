@@ -61,7 +61,10 @@
       "packet": "slices/S3.md",
       "owns": [
         "template/.claude/hooks/slice-gate.py",
-        "tests/test_gate_lock.py"
+        "tests/test_gate_lock.py",
+        "template/.claude/hooks/flight-lock.py",
+        "tests/test_flight_lock.py",
+        "tests/test_gate_checks_baseline.py"
       ],
       "deps": [
         "S1"
@@ -102,7 +105,8 @@
       "owns": [
         "template/.claude/hooks/slice-gate.py",
         "template/.claude/hooks/test-tiers.py",
-        "tests/test_gate_cost_note.py"
+        "tests/test_gate_cost_note.py",
+        "tests/test_gate_checks_baseline.py"
       ],
       "deps": [
         "S3"
