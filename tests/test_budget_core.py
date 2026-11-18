@@ -163,6 +163,22 @@ def test_region_total_over_budget_only_warns():
     assert (b["totals"]["hooks"]["over"], b["totals"]["hooks"]["added_sec"]) == (True, 12.0), b["totals"]
 
 
+def test_total_not_judged_for_impacted_partial_ledger():
+    # Given: 单元层总量预算 10 秒；基线单元层 30 条各 1 秒；选测（gate.impacted）的收口账本只量到其中 2 条
+    tl = load_hook("test-ledger")
+    full = {"tests/unit/test_u.py::test_u%02d" % i: case(1.0, tier="unit") for i in range(30)}
+    part = {k: full[k] for k in sorted(full)[:2]}
+    led = ledger(part, mode="impacted")
+
+    # When: 判预算
+    b = tl.budget(led, base_ledger(full), budgets(unit_total=10.0), scope_of)
+
+    # Then: 部分合计不可比，G14 不判红也不判绿，只警告「G14 未判」点名选测
+    assert not any(f.startswith("G14") for f in b["failed"]), b["failed"]
+    assert any(w.startswith("G14 未判") and "unit" in w and "impacted" in w for w in b["warnings"]), b["warnings"]
+    assert b["totals"]["unit"]["over"] is None, b["totals"]
+
+
 def test_total_not_judged_when_seconds_missing():
     # Given: 单元层总量预算 1 秒；10 条用例里 2 条无耗时、其余合计 5 秒；另一份账本耗时齐全但不完整
     tl = load_hook("test-ledger")

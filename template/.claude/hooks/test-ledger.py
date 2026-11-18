@@ -475,6 +475,9 @@ def budget(final, base, budgets, scope_of, allow=None, phase="final"):
         if final.get("complete") is False:
             warnings.append("G14 未判：%s 的账本不完整" % sc)
             continue
+        if final.get("mode") == "impacted":  # 选测只落实测的那部分用例，合计不是整层的量
+            warnings.append("G14 未判：%s 选测（gate.impacted）只跑了部分用例，合计不可比" % sc)
+            continue
         if tot["cases"] > 0 and tot["no_sec"] / tot["cases"] > NO_SEC_RATIO:
             warnings.append("G14 未判：%s 有 %d 条用例无耗时（共 %d 条）" % (sc, tot["no_sec"], tot["cases"]))
             continue
