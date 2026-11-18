@@ -8,14 +8,10 @@ S1 落地后红在 wave-check 子命令不存在。"""
 import json
 import shlex
 
-import pytest
-
 from conftest import commit_all, run_hook, write
 from final_helpers import anchors, baseline, change_and_commit, gate_json, head, make_repo, timeline_rows
 from test_runner_contract import DROPPING
 from test_runner_statement import REASON
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S2 未实现")
 
 SRC_A_TOUCHED = "def a():\n    return 1  # 改过\n"
 SRC_A_BROKEN = "def a():\n    return 2\n"
@@ -60,7 +56,6 @@ def record(repo, d, payload):
                     cwd=repo)
 
 
-@PENDING
 def test_wave_check_runs_guards_and_impacted_tests(git_repo):
     # Given: 依赖图已测的仓库，检查 layering 带 slice 命令，基线已绿；之后提交了一处只被 tests/test_a.py 依赖的源码改动
     seen = git_repo.parent / "phase.txt"
@@ -81,7 +76,6 @@ def test_wave_check_runs_guards_and_impacted_tests(git_repo):
     assert note.startswith("wave 1/2") and "测试 " in note and note.endswith("ok"), note
 
 
-@PENDING
 def test_wave_check_reds_on_new_test_failure(git_repo):
     # Given: 依赖图已测的仓库，基线已绿；之后提交的源码改动让 tests/test_a.py::test_a 失败
     d = green_repo(git_repo)
@@ -96,7 +90,6 @@ def test_wave_check_reds_on_new_test_failure(git_repo):
     assert timeline_rows(d, "wave-check")[-1].endswith("red")
 
 
-@PENDING
 def test_wave_check_reds_on_guard(git_repo):
     # Given: 检查 layering 的 slice 命令在基线上是绿的；之后提交的改动让它以非 0 退出
     d = guarded_repo(git_repo, "test ! -f src/bad.py")
@@ -111,7 +104,6 @@ def test_wave_check_reds_on_guard(git_repo):
     assert report_rows(d)[-1][2] == "red"
 
 
-@PENDING
 def test_wave_check_skips_tests_without_anchor(git_repo):
     # Given: 依赖图测不到的仓库（gate.test 是丢掉插件参数的包装脚本），基线已绿；之后提交了一处源码改动
     d = make_repo(git_repo, extra={"tools/gate.sh": DROPPING},
@@ -129,7 +121,6 @@ def test_wave_check_skips_tests_without_anchor(git_repo):
     assert "测试跳过" in timeline_rows(d, "wave-check")[-1]
 
 
-@PENDING
 def test_wave_check_skips_tests_over_budget(git_repo):
     # Given: 依赖图已测的仓库，基线已绿，锚点里 tests/test_a.py::test_a 的耗时被记为 500 秒；
     #        之后提交了一处只影响 tests/test_a.py 的改动
@@ -153,7 +144,6 @@ def test_wave_check_skips_tests_over_budget(git_repo):
     assert second["tests"]["mode"] == "impacted", second["tests"]
 
 
-@PENDING
 def test_wave_check_leaves_anchors_and_ledger_alone(git_repo):
     # Given: 依赖图已测的仓库，基线已绿
     d = green_repo(git_repo)
@@ -171,7 +161,6 @@ def test_wave_check_leaves_anchors_and_ledger_alone(git_repo):
     assert busy["tests"]["mode"] == "impacted" and busy["lock"]["mode"] == "exclusive", busy
 
 
-@PENDING
 def test_wave_check_fix_base_lists_files_outside_owns(git_repo):
     # Given: 切片 S1 的 owns 是 src/**；从某个 commit 起先后提交了 src/a.py 与 data/b.json 的改动
     d = green_repo(git_repo)
@@ -194,7 +183,6 @@ def test_wave_check_fix_base_lists_files_outside_owns(git_repo):
     assert any(f.startswith("G0 base") for f in third["failed"]), third["failed"]
 
 
-@PENDING
 def test_record_writes_back_wave_row(git_repo):
     # Given: 一份 slice 为 wave 的 JSON：wave 2/3，守护 layering 1.2 秒，测试跳过并带原因
     d = make_repo(git_repo)
@@ -215,7 +203,6 @@ def test_record_writes_back_wave_row(git_repo):
     assert not [n for n in timeline_rows(d, "gate") if n.startswith("wave")]
 
 
-@PENDING
 def test_ship_drafts_on_red_wave_row(git_repo):
     # Given: gate-report 里 wave 的最新一行是红的，失败项是 G15 guard layering
     d = make_repo(git_repo)
