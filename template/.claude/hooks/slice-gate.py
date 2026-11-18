@@ -1523,6 +1523,7 @@ SCOPE_FILE = "gate-scope.json"
 SCOPE_TIMEOUT = 300  # 秒，不可配置
 SCOPE_REPORT_FIELDS = ("full", "triggers", "count")
 SCOPE_UNDECLARED = "scope:undeclared"  # 伪触发项：未声明且本 change 建立声明（design D2）
+RUNNER_UNMEASURED = "runner:deps-unmeasured"  # 伪触发项：跑完的基线依赖图未测（plan-hygiene design D3）
 SCOPE_EXTRAS = ("global", "blind", "anchor_max_hops")  # gate-scope.json 的可选字段（unified-test-result-reuse design D5）
 SCOPE_EXTRAS_SHAPE = {"global": "字符串数组", "blind": "字符串数组", "anchor_max_hops": "正整数"}
 SCOPE_DECL_SOURCE = "仓库声明 gate-scope.json"
@@ -1775,6 +1776,70 @@ def _scope_reason_errors(report, reasons, pending=()):
     return errors
 
 
+def _runner_state(gate, change_dir, phase):
+    """runner:deps-unmeasured 的处置（plan-hygiene design D3；lint / preflight / baseline / final 共用）
+    → {"trigger", "pending", "kind"}：配了 gate.impacted 或属设计边界 → 两者皆假；
+    非 baseline 阶段且有跑完的基线 → 带 deps_unmeasured 即触发；否则（无跑完的基线或 baseline 开跑前）待定。"""
+    state = {"trigger": False, "pending": False, "kind": None}
+    if gate.get("impacted") is not None or _builtin_by_design(gate, _load_tiers(change_dir)[0]):
+        return state
+    bl = load_baseline(change_dir)
+    if phase != "baseline" and isinstance(bl, dict) and bl.get("running") is not True:
+        un = bl.get("deps_unmeasured")
+        if isinstance(un, dict):
+            state.update(trigger=True, kind=un.get("kind"))
+        return state
+    state["pending"] = True
+    return state
+
+
+def _with_runner(report, rs):
+    """在提供方报告之上追加 runner:deps-unmeasured：未全选 → 全选且触发项只有它；已全选 → 追加在后。"""
+    if not rs["trigger"]:
+        return report
+    trig = list(report["triggers"]) if report["full"] else []
+    return dict(report, full=True, triggers=trig + [RUNNER_UNMEASURED])
+
+
+def _runner_reason_errors(report, reasons, pending, rs):
+    """_scope_reason_errors + runner 处置（report 已经 _with_runner 并入）：待定项并入 pending；缺的含它时在违规后追加修法。"""
+    pend = list(pending) + ([RUNNER_UNMEASURED] if rs["pending"] else [])
+    errors = _scope_reason_errors(report, reasons, pend)
+    if rs["trigger"] and RUNNER_UNMEASURED not in set(reasons or {}):
+        errors = [e + "（依赖图未测：%s；修法见 .claude/flight-runner-contract.md，或配 gate.impacted）" % (rs["kind"] or "未知")
+                  if "缺理由" in e else e for e in errors]
+    return errors
+
+
+def _runner_hint(gate, change_dir, rs):
+    """静态提示（只提示，不影响退出码；baseline 阶段不调用）：待定（即没有跑完的基线）、gate.test 不是普通测试命令，
+    且命令直接写出的仓库文件及其 shell 静态闭包里没有同时出现两个契约变量 → 一行 runner: 提示；否则 None。"""
+    if not rs["pending"] or _plain_test_cmd(gate.get("test")):
+        return None
+    root = _git_top(os.path.dirname(_scope_decl_path(change_dir)))
+    files = _test_gate_files(root, gate) if root else None
+    if not files:
+        return None
+    text = ""
+    for rel in sorted(files):
+        try:
+            with open(os.path.join(root, rel), "r", encoding="utf-8", errors="replace") as f:
+                text += f.read() + "\n"
+        except OSError:
+            continue
+    if "FLIGHT_PYTEST_ARGS" in text and "FLIGHT_PLUGIN_PATH" in text:
+        return None
+    direct = set()
+    try:
+        direct = {r for r in (_repo_rel(root, t) for t in shlex.split(gate.get("test") or "")) if r}
+    except ValueError:
+        pass
+    named = sorted(f for f in files if f in direct) or sorted(files)
+    return ("runner: gate.test 的 %s 文本里没有同时出现 FLIGHT_PYTEST_ARGS 与 FLIGHT_PLUGIN_PATH，依赖图可能测不到；"
+            "baseline 若测不到依赖图须为 runner:deps-unmeasured 写理由（可预写），修法见 .claude/flight-runner-contract.md"
+            % "、".join(named))
+
+
 def _undeclared_msg(change_dir):
     """未声明选测范围的违规原文（lint / baseline / final 共用）。"""
     return ("未声明选测范围：在 %s 写 {\"builtin\": true}（gate.test 是普通测试命令）"
@@ -1799,10 +1864,21 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     errors.extend(perr)
     if errors or not run_scope:
         return errors, None
+    rs = _runner_state(gate, change_dir, phase)
+    hint = _runner_hint(gate, change_dir, rs) if phase != "baseline" else None
+    errors, note = _lint_scope_provider(gate, change_dir, data, phase, provider, reasons, rs)
+    if note and hint:
+        note += "\n" + hint
+    return errors, note
+
+
+def _lint_scope_provider(gate, change_dir, data, phase, provider, reasons, rs):
+    """_lint_scope 按提供方核对的部分；rs：_runner_state 的结论，并入每个分支的理由核对。"""
     if provider["kind"] is None:
         if not _establishes_decl(data, change_dir):
             return ["scope: " + _undeclared_msg(change_dir)], None
-        errors = _scope_reason_errors({"full": True, "triggers": [SCOPE_UNDECLARED]}, reasons)
+        report = _with_runner({"full": True, "triggers": [SCOPE_UNDECLARED]}, rs)
+        errors = _runner_reason_errors(report, reasons, (), rs)
         return errors, (None if errors else "scope: 未声明选测范围，本 change 建立仓库选测声明（已写理由）")
     if provider["kind"] == "builtin":
         test = gate.get("test")
@@ -1811,7 +1887,8 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
                     "npm test / go test ./... / cargo test），当前是 %s，认不出：自带选测的仓库改用 {\"cmd\": \"<只算范围的命令>\"}"
                     % (test if _nonblank(test) else "空")], None
         report = _builtin_report(_git_top(os.path.dirname(_scope_decl_path(change_dir))), change_dir, data, phase)
-        errors = _scope_reason_errors(report, reasons, report.get("pending") or ())
+        report = _with_runner(report, rs)
+        errors = _runner_reason_errors(report, reasons, report.get("pending") or (), rs)
         if errors:
             return errors, None
         tail = "".join("；" + n for n in report.get("notes") or [])
@@ -1823,7 +1900,8 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     errors, report = _run_scope(provider["cmd"], root, _planned_owns(data), _change_rel(root, change_dir))
     if errors:
         return errors, None
-    errors = _scope_reason_errors(report, reasons)
+    report = _with_runner(report, rs)
+    errors = _runner_reason_errors(report, reasons, (), rs)
     if errors:
         return errors, None
     if report["full"]:
@@ -4050,6 +4128,8 @@ def cmd_baseline(args):
     elif hit is not None:
         ct = src.get("test") or {}
         bl["test"] = {k: ct[k] for k in ("exit", "sec", "failed", "failed_nodes", "failed_form") if k in ct}
+        if isinstance(src.get("deps_unmeasured"), dict):  # 没有新的测量就沿用来源的未测状态（plan-hygiene design D3）
+            bl["deps_unmeasured"] = src["deps_unmeasured"]
         if isinstance(ct.get("failed"), list) and ct["failed"]:
             warnings.append("预存红 %d 条（沿用 %s 的全量），final 按基线差分" % (len(ct["failed"]), src.get("change")))
     elif parts:  # 部件形态（design D8）：不跑 gate.test（驱动命令），逐部件运行单元层；不写锚点
@@ -4258,7 +4338,7 @@ def cmd_baseline(args):
     if hit is None and bl["ok"] and bl["test"].get("exit") == 0 and key:
         w = _pool_write(root, {k: bl.get(k) for k in
                                ("change", "commit", "at", "ok", "cmd_key", "snapshot", "byproducts", "test",
-                                "full_suite_sec")})
+                                "full_suite_sec", "deps_unmeasured")})
         if w:
             warnings.append(w)
             bl["warnings"] = warnings
@@ -5385,7 +5465,10 @@ def _final_scope_guard(root, change_dir, data, why, triggers):
         failed.extend(_g2_scope(e) for e in errs)
         if report is not None and report["full"]:
             full, trig = True, list(dict.fromkeys(report["triggers"]))
-    unapproved = [t for t in trig if t not in approved]
+    # 基线依赖图未测（plan-hygiene design D3）：追加伪触发项
+    merged = _with_runner({"full": full, "triggers": trig}, _runner_state(gate, change_dir, "final"))
+    full, trig = merged["full"], merged["triggers"]
+    unapproved =[t for t in trig if t not in approved]
     if unapproved:
         failed.append("G2 scope：final 将全量（触发 %s），未在计划期表态：在 propose 期写理由并重新批准，或修复后重跑"
                       % "、".join(unapproved))
