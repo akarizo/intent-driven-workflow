@@ -27,3 +27,4 @@
 2026-11-18T12:16:29Z	ship	ready
 2026-11-18T12:16:56Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/22
 2026-11-18T12:32:33Z	final	增量（锚点 cbdd8e1a54，重跑 51 个文件 / 沿用 357 个用例） 测试 502.2s · 检查 schema-validate 1.4s · 用例 +1/-0（新增 0.0s） · 排队 0.0s · 负载 7.9→4.0/18 ok
+2026-11-18T12:32:51Z	ship	ready
