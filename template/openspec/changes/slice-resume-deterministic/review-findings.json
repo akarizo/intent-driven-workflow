@@ -1,14 +1,6 @@
 {
   "blocked": [],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/test-evidence.py",
-      "line": 131,
-      "summary": "脚本路径记号把 verify 里 pytest 的测试文件参数也收进来了（本仓库每片 verify 都是 `python3 -m pytest -q tests/test_x.py`，记号就是 `tests/test_x.py`）。第 149 行又按子串匹配 `any(t in cmd ...)`，所以 `cat tests/test_evidence_timeline.py`、`sed -n ... tests/...py`、`git add tests/...py` 这类不是测试运行的命令，都会被记成测试运行。只要输出里出现 error/failed（读测试文件时几乎必然出现），就会记一行 FAIL，等于不跑测试就能伪造出「先红」的留痕，打穿铁律 3「测试运行由 hook 留痕」。要说明的是：spec 字面上允许以 .py 结尾的记号，这条属于 spec 意图（「脚本」应指被执行的包装脚本）和字面写法之间的缺陷，需要确认 spec 意图。",
-      "fix": "只收被执行位置上的记号：按 `;` `&&` `||` `|` 切成命令段，只保留段首词，或者紧跟在 bash/sh/zsh/python/python3/node/npx/tsx 之后的那个词（同时满足含 / 和扩展名两个条件）。命中 TEST_RE 的段（例如 `python3 -m pytest ... tests/x.py`）不出记号。匹配时也照这个规则切分 cmd，比对执行位置上的词，不再用子串 `in`。再补一条用例：verify 为 pytest + .py 文件时，`cat tests/x.py` 不记。如果认定 spec 要放宽，先回 design/spec 修订措辞，再改实现。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "MEDIUM",
