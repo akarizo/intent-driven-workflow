@@ -32,3 +32,9 @@
 - integrator 的合回返回值多 `check`（`wave-check` 的 JSON 或 `null`）。
 - 新的派发 label：`fix:w<i>`、`fix:w<i>:retry`（执行体）、`integrate:w<i>:fix`（integrator）、`review:wavefix<i>`（评审）。
 - 返回值多 `waves: [{wave, ok, failed, tests, fix: {commit, ok, files, outside_owns} | null, skipped}]`。
+
+## 实际签名（wave 1 合回后核对，S1 / S4 / S6）
+
+- S1 `template/.claude/hooks/slice-gate.py:5764` `_guard_checks(gate)`；`:5770` `_run_guards(root, change_dir, checks, baseline, phase, log_tag)`，与上文约定一致。
+- S4 `template/.claude/workflows/opsx-apply.js:39` `const landed = args.landed || {}`；派发 label `integrate:w<i>[:retry]`、`fix:w<i>[:retry]`、`integrate:w<i>:fix[:retry]`（`:244` `:263` `:276`）。
+- S6 仅文档与 schema（`flight-runner-contract.md`、`opsx-propose.md`、`openspec-propose/SKILL.md`、`schema.yaml`），无代码签名。
