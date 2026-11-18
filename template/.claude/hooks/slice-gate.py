@@ -3,7 +3,8 @@
 #
 # 子命令：
 #   lint     --change-dir DIR                 校验 slices.json；stdout 打印 waves JSON；违规 exit 2 并在 stderr 点名规则
-#                                              含 gate.checks（name/baseline/final/timeout_sec）与 checks_skip 形状，并对账 <openspec 根>/gate-checks.json 默认检查
+#                                              含 gate.checks（name/baseline/slice/final/timeout_sec）与 checks_skip 形状，并对账 <openspec 根>/gate-checks.json 默认检查
+#                                              （默认检查声明了 slice → 计划里的同名检查须带 slice，写进 checks_skip 的不报）
 #                                              tiers:：<openspec 根>/test-tiers.json 存在时校验其形状、gate.test == unit.cmd、
 #                                              gate.integration / integration_skip、covers × owns 表态、scenario 测试归层；不存在而计划写了区域选择 → 报缺文件
 #                                              scope:：gate.scope / gate.scope_full_reason / <openspec 根>/gate-scope.json 形状；有效选测命令
@@ -26,7 +27,8 @@
 #                                              无同片标记时：带 --resume-checkpoint 恢复 refs/flight/<change>/<S> 快照（stdout 追加 checkpoint），
 #                                              不带则清掉本片旧快照
 #   checkpoint                                 PostToolUse hook：有标记时把本片 owns 内改动快照到 refs/flight/<change>/<S>；静默、恒 exit 0
-#   gate     S --change-dir DIR [--base REF]  跑 G1–G8、G12（分层文件合法时：区间内改动的测试文件须落在单元层或已选区域）；stdout 打印 JSON（含 base）；追加 gate-report.md；ok 时删标记，红时标记 red_count+1
+#   gate     S --change-dir DIR [--base REF]  跑 G1–G8、G12（分层文件合法时：区间内改动的测试文件须落在单元层或已选区域）、G15（计划里带 slice 的检查：
+#                                              先核对基线 checks.<name>.slice 记录，再以 GATE_PHASE=slice 运行，JSON 多 guards）；stdout 打印 JSON（含 base）；追加 gate-report.md；ok 时删标记，红时标记 red_count+1
 #   record   --change-dir DIR --json '<gate JSON>' | --slice S --commit SHA [--red] [--failed ...] [--warnings ...]
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
@@ -43,13 +45,14 @@
 #                                              走全量且判过候选时记 reuse_skipped（≤5 条）；开跑前内容快照失败 → 停下、不写运行标记；
 #                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
-#                                              且目录仍在），检查红 / 超时 → 基线红
+#                                              且目录仍在），检查红 / 超时 → 基线红；检查带 slice 时另以 GATE_PHASE=slice 跑一遍，
+#                                              记 checks.<name>.slice（沿用条件同 baseline 命令；红 / 超时 → 基线红；不清空目录）
 #                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
 #                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
-#                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
+#                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]（有检查带 slice 时另含 ["slice", [[name, slice]…]]），只改 final 不算过期
 #                                              分层文件存在时已选区域的基线 regions.<name>.cmd 须等于分层文件当前 cmd，否则基线过期
 #   ship     --change-dir DIR [--markdown]    draft / ready 裁决；--markdown 时 delta.json 的 commit 对得上最后一条 final 行才附「## 测试变更」
 #
@@ -70,6 +73,7 @@
 #             锚点池：baseline 跑全量后向 <git common dir>/flight-anchors/ 写一条锚点（只留最新 20 条），
 #             gate-baseline.json 的 test 段在有失败且依赖图测到时另记 failed_nodes（仓库相对 nodeid）。
 #             gate-baseline.json 配了 gate.checks 时另有 "checks": {name: {exit, sec, cmd, key[, reused][, timed_out]}}；未配置时无此键。
+#             检查带 slice 时该记录另有 "slice": {exit, sec, cmd[, reused][, timed_out]}（只有 slice 的检查记录只含这一段）。
 #             gate-baseline.json 有分层文件时另有 "tiers": {"measured": bool[, "why"]} 与 "regions": {name: {exit, sec, cmd[, failed]}}；
 #             无分层文件时无这两个键。
 #             分层文件合法时 gate / final 的 JSON 与 gate-baseline.json（及 baseline 的 stdout）另有
@@ -1112,6 +1116,9 @@ def plan_sha(data):
     checks = gate.get("checks")
     if isinstance(checks, list) and checks:  # 检查的 baseline 命令也归基线负责（design D7）；final 不在此列
         key.append([[c.get("name"), c.get("baseline")] for c in checks if isinstance(c, dict)])
+        guards = [[c.get("name"), c["slice"]] for c in checks if isinstance(c, dict) and c.get("slice")]
+        if guards:  # 全局守护的 slice 命令也归基线负责；没有任何检查带 slice 时与旧算法相同
+            key.append(["slice", guards])
     if gate.get("impacted") is not None:  # gate 命令之一（incremental-final design D8）；未配置时与旧算法相同
         key.append(["impacted", gate.get("impacted")])
     integration = gate.get("integration")
@@ -1633,7 +1640,7 @@ def compute_waves(slices):
     return waves, []
 
 
-CHECK_FIELDS = ("name", "baseline", "final", "timeout_sec")
+CHECK_FIELDS = ("name", "baseline", "slice", "final", "timeout_sec")
 CHECK_NAME_RE = re.compile(r"[a-z0-9-]+")
 DEFAULT_CHECKS = "gate-checks.json"
 
@@ -1670,6 +1677,8 @@ def _lint_checks(gate):
             errors.append("checks: %s 缺少 final 命令（须是非空字符串）" % label)
         if c.get("baseline") is not None and not _nonblank(c.get("baseline")):
             errors.append("checks: %s 的 baseline 须缺省、null 或非空字符串" % label)
+        if c.get("slice") is not None and not _nonblank(c.get("slice")):
+            errors.append("checks: %s 的 slice 须缺省、null 或非空字符串" % label)
         t = c.get("timeout_sec")
         if "timeout_sec" in c and not (isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0):
             errors.append("checks: %s 的 timeout_sec 须是正数" % label)
@@ -1687,18 +1696,19 @@ def _lint_checks(gate):
 
 
 def _repo_default_checks(change_dir):
-    """读 <openspec 根>/gate-checks.json；返回 (默认检查 name 列表 | None, 错误文本 | None)。文件不存在 → (None, None)。"""
+    """读 <openspec 根>/gate-checks.json；返回 (默认检查 name 列表 | None, 声明了非空 slice 的默认检查名集合, 错误文本 | None)。
+    文件不存在 → (None, set(), None)。"""
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(change_dir))), DEFAULT_CHECKS)
     if not os.path.isfile(path):
-        return None, None
+        return None, set(), None
     try:
         with open(path, "r", encoding="utf-8") as f:
             items = json.load(f)
     except (OSError, ValueError) as e:
-        return None, "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, e)
+        return None, set(), "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, e)
     if not isinstance(items, list):
-        return None, "checks: 仓库默认检查文件 %s 无法解析：顶层须是列表" % path
-    names = []
+        return None, set(), "checks: 仓库默认检查文件 %s 无法解析：顶层须是列表" % path
+    names, guards = [], set()
     for i, c in enumerate(items):
         name = c.get("name") if isinstance(c, dict) else None
         if not isinstance(c, dict):
@@ -1709,9 +1719,11 @@ def _repo_default_checks(change_dir):
             why = "检查名 %s 重复" % name
         else:
             names.append(name)
+            if _nonblank(c.get("slice")):
+                guards.add(name)
             continue
-        return None, "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, why)
-    return names, None
+        return None, set(), "checks: 仓库默认检查文件 %s 无法解析：%s" % (path, why)
+    return names, guards, None
 
 
 def _tiers_path(change_dir):
@@ -2697,12 +2709,17 @@ def lint_plan(data, change_dir=None, run_scope=False, phase="lint"):
     check_errors, check_names, skip_keys = _lint_checks(data.get("gate") or {})
     errors.extend(check_errors)
     if change_dir is not None:
-        defaults, err = _repo_default_checks(change_dir)
+        defaults, default_guards, err = _repo_default_checks(change_dir)
         if err:
             errors.append(err)
         for name in defaults or []:
             if name not in check_names and name not in skip_keys:
                 errors.append("checks: 仓库默认检查 %s 未出现在 gate.checks，也没有在 gate.checks_skip 写理由" % name)
+        planned = (data.get("gate") or {}).get("checks")
+        for c in planned if isinstance(planned, list) else []:
+            if (isinstance(c, dict) and isinstance(c.get("name"), str) and c["name"] in default_guards
+                    and not _nonblank(c.get("slice"))):
+                errors.append("checks: 仓库默认检查 %s 是全局守护（声明了 slice），计划里的同名检查须带 slice" % c["name"])
         errors.extend(_lint_tiers(data, change_dir))
         scope_errors, scope_note = _lint_scope(data.get("gate") or {}, change_dir, run_scope, data, phase)
         errors.extend(scope_errors)
@@ -3977,6 +3994,11 @@ def cmd_gate(args):
                 failed.append(f2)
             if w2:
                 warnings.append(w2)
+    gchecks = _guard_checks(gate)
+    guards = None
+    if gchecks:
+        gf, guards = _run_guards(root, args.change_dir, gchecks, baseline, "slice", "slice-" + args.slice)
+        failed.extend(gf)
 
     source = source_files(files, change_rel)
     tests =[f for f in files if is_test_path(f)]
@@ -4016,6 +4038,8 @@ def cmd_gate(args):
               "ceilings": [[rel, ln, limit, up] for rel, ln, limit, up in ceilings],
               "summary": "%s：%d 项失败，%d 项警告；改动 %d 个文件" % ("通过" if not failed else "阻断", len(failed), len(warnings), len(files)),
               "lock": hold.info}
+    if guards is not None:
+        result["guards"] = guards
     segs = []  # 切片 id 之后、结论词之前的片段，以 · 连接（design D8）
     if durations is not None:
         ts = tier_seconds(durations, tiers)
@@ -4024,6 +4048,8 @@ def cmd_gate(args):
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
         segs.append(_tier_note(ts))
+    if guards:
+        segs.append(_guard_note(guards))
     segs.append(_lock_note(hold.info))
     gate_note = " ".join(x for x in (args.slice, " · ".join(s for s in segs if s)) if x)
     if result["ok"]:
@@ -4736,38 +4762,71 @@ def cmd_baseline(args):
         old_checks = (old.get("checks") if isinstance(old, dict) else None) or {}
     for c in checks:
         bcmd = c.get("baseline") if isinstance(c, dict) else None
-        if not bcmd:
+        scmd = c.get("slice") if isinstance(c, dict) else None
+        if not bcmd and not scmd:
             continue
         cname = c["name"]
-        kkey = cmd_key(root, change_rel, bcmd)
+        kkey = cmd_key(root, change_rel, bcmd) if bcmd else None
         try:
             cdir = _check_dir(root, name, cname)
         except RuntimeError as e:  # design D12：运行标记一定被结果覆盖
-            bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey}
+            bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey} if bcmd else {}
+            if scmd:
+                bl["checks"][cname]["slice"] = {"exit": None, "cmd": scmd}
             reasons.append("check %s 共用目录不可用：%s" % (cname, e))
             continue
         oc = old_checks.get(cname) if isinstance(old_checks, dict) else None
-        if (strict_delta == [] and kkey and isinstance(oc, dict) and oc.get("exit") == 0  # 红的重跑（design D8）
-                and oc.get("cmd") == bcmd and oc.get("key") == kkey and os.path.isdir(cdir)):
+        dir_kept = os.path.isdir(cdir)  # 沿用 slice 记录要求目录本来就在、且本轮没有清空它
+        if not bcmd:
+            bl["checks"][cname] = {}
+        elif (strict_delta == [] and kkey and isinstance(oc, dict) and oc.get("exit") == 0  # 红的重跑（design D8）
+                and oc.get("cmd") == bcmd and oc.get("key") == kkey and dir_kept):
             bl["checks"][cname] = {"exit": oc["exit"], "sec": oc.get("sec"), "cmd": bcmd, "key": kkey, "reused": True}
+        else:
+            dir_kept = False
+            try:  # 清空失败显式判红，不让旧数据残留
+                if os.path.lexists(cdir):
+                    shutil.rmtree(cdir)
+                os.makedirs(cdir)
+            except OSError as e:
+                bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey}
+                if scmd:
+                    bl["checks"][cname]["slice"] = {"exit": None, "cmd": scmd}
+                reasons.append("check %s 共用目录无法清空或创建：%s" % (cname, e))
+                continue
+            crc, cout, csec, ctimeout = _run_check(bcmd, root, _check_env("baseline", name, bl["commit"], cdir),
+                                                   c.get("timeout_sec"))
+            bl["checks"][cname] = {"exit": crc, "sec": csec, "cmd": bcmd, "key": kkey}
+            log = _check_log(cdir, "baseline", cout)
+            if ctimeout:
+                bl["checks"][cname]["timed_out"] = True
+                reasons.append(_check_msg("check %s 在基线上超时（%s 秒）" % (cname, c.get("timeout_sec")), log, cout))
+            elif crc != 0:
+                reasons.append(_check_msg("check %s 在基线上红（exit %d）" % (cname, crc), log, cout))
+        if not scmd:
             continue
-        try:  # 清空失败显式判红，不让旧数据残留
-            if os.path.lexists(cdir):
-                shutil.rmtree(cdir)
-            os.makedirs(cdir)
+        # 全局守护的 slice 命令：基线上先跑一遍并记录，沿用条件同上；只写日志，不清空共用目录
+        osl = oc.get("slice") if isinstance(oc, dict) else None
+        if (strict_delta == [] and isinstance(osl, dict) and osl.get("exit") == 0 and osl.get("cmd") == scmd
+                and dir_kept):
+            bl["checks"][cname]["slice"] = {"exit": 0, "sec": osl.get("sec"), "cmd": scmd, "reused": True}
+            continue
+        try:
+            os.makedirs(cdir, exist_ok=True)
         except OSError as e:
-            bl["checks"][cname] = {"exit": None, "cmd": bcmd, "key": kkey}
-            reasons.append("check %s 共用目录无法清空或创建：%s" % (cname, e))
+            bl["checks"][cname]["slice"] = {"exit": None, "cmd": scmd}
+            reasons.append("check %s 共用目录无法创建：%s" % (cname, e))
             continue
-        crc, cout, csec, ctimeout = _run_check(bcmd, root, _check_env("baseline", name, bl["commit"], cdir),
-                                               c.get("timeout_sec"))
-        bl["checks"][cname] = {"exit": crc, "sec": csec, "cmd": bcmd, "key": kkey}
-        log = _check_log(cdir, "baseline", cout)
-        if ctimeout:
-            bl["checks"][cname]["timed_out"] = True
-            reasons.append(_check_msg("check %s 在基线上超时（%s 秒）" % (cname, c.get("timeout_sec")), log, cout))
-        elif crc != 0:
-            reasons.append(_check_msg("check %s 在基线上红（exit %d）" % (cname, crc), log, cout))
+        s_rc, sout, ssec, stimeout = _run_check(scmd, root, _check_env("slice", name, bl["commit"], cdir),
+                                                c.get("timeout_sec"))
+        srec = bl["checks"][cname]["slice"] = {"exit": s_rc, "sec": ssec, "cmd": scmd}
+        log = _check_log(cdir, "slice", sout)
+        if stimeout:
+            srec["timed_out"] = True
+            reasons.append(_check_msg("check %s 的 slice 命令在基线上超时（%s 秒）" % (cname, c.get("timeout_sec")),
+                                      log, sout))
+        elif s_rc != 0:
+            reasons.append(_check_msg("check %s 的 slice 命令在基线上红（exit %d）" % (cname, s_rc), log, sout))
     hold.release()
     bl["lock"] = hold.info  # 放锁之后赋值：load[1] 才有值；入池与锚点只挑固定键，不带它
     # 运行期间的改动（design D6）
@@ -5695,6 +5754,50 @@ def _final_checks(root, change_dir, checks, baseline, final_ctx=None, secs=None)
         elif rc != 0:
             failed.append(_check_msg("G9 check %s：exit %d" % (cname, rc), log, out))
     return failed
+
+
+def _guard_note(guards):
+    """时间线守护片段：守护 a 1.2s / b 0.4s（只列运行过的）。"""
+    return "守护 " + " / ".join("%s %.1fs" % (n, g["sec"]) for n, g in guards.items())
+
+
+def _guard_checks(gate):
+    """全局守护：gate.checks 里 slice 为非空字符串的检查，保持顺序。"""
+    checks = gate.get("checks")
+    return [c for c in (checks if isinstance(checks, list) else []) if isinstance(c, dict) and _nonblank(c.get("slice"))]
+
+
+def _run_guards(root, change_dir, checks, baseline, phase, log_tag):
+    """逐个核对基线的 slice 记录并运行守护（G15）；phase 进 GATE_PHASE，日志写 <共用目录>/.gate-<log_tag>.log。
+    返回 (failed, guards)：failed 每项以 G15 guard <名> 开头；guards = {名: {"exit", "sec"}}，只含运行过的。
+    slice 阶段不清空、不写共用目录的状态，只写日志。"""
+    change = os.path.basename(os.path.realpath(change_dir))
+    base = (baseline or {}).get("commit")
+    recs = (baseline or {}).get("checks")
+    recs = recs if isinstance(recs, dict) else {}
+    failed, guards = [], {}
+    for c in checks:
+        cname, cmd = c["name"], c["slice"]
+        rec = recs.get(cname)
+        rec = rec.get("slice") if isinstance(rec, dict) else None
+        if not base or not (isinstance(rec, dict) and rec.get("exit") == 0 and rec.get("cmd") == cmd):
+            failed.append("G15 guard %s：基线缺记录或与计划不符，重跑 baseline" % cname)
+            continue
+        try:
+            cdir = _check_dir(root, change, cname)
+            os.makedirs(cdir, exist_ok=True)
+            env = _check_env(phase, change, base, cdir)
+        except (RuntimeError, OSError) as e:
+            failed.append("G15 guard %s：共用目录不可用：%s" % (cname, e))
+            continue
+        rc, out, csec, timed_out = _run_check(cmd, root, env, c.get("timeout_sec"))
+        guards[cname] = {"exit": rc, "sec": csec}
+        log = _check_log(cdir, log_tag, out)
+        if timed_out:
+            failed.append(_check_msg("G15 guard %s：超时 %s 秒" % (cname, c.get("timeout_sec")), log, out))
+        elif rc != 0:
+            failed.append(_check_msg("G15 guard %s：exit %d" % (cname, rc), log, out))
+    return failed, guards
 
 
 def _pool_order(name, entry):
