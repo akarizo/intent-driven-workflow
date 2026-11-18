@@ -17,18 +17,20 @@
 #   canary     (--part P | --root DIR --adapter CMD --canary CMD) [--openspec-root DIR]
 #              金丝雀自检（design D7）：随机令牌 + 临时目录出题，在 root 下运行适配器并判四个金丝雀用例的触碰与令牌文件落盘；
 #              --part 通过时把 probe.sha / probe.checked 写回分层文件，独立模式只打印
-#   allow-slow NODEID --reason TEXT [--openspec-root DIR] [--session PATH]
-#              只认转录里**最新**一条人类消息（design D10）：同时含该用例函数名与放行词才写入 slow_allow
+#   allow-slow NODEID --reason TEXT [--limit-sec SEC] [--expires YYYY-MM-DD] [--openspec-root DIR] [--session PATH]
+#              只认转录里**最新**一条人类消息（design D10）：同时含该用例函数名与放行词才写入 slow_allow；
+#              --limit-sec / --expires 写进条目的 limit_sec / expires（design D11），都没给时 stderr 提示一行
 #   render     --probe PATH --plan PATH --out PATH
 #              按划分稿（{tiers, moves}）推算每个探针用例的落点与所属层（部件形态标「部件/unit」或区域名），
 #              写单文件审批页（内联 CSS、导出 Markdown / 复制）
 #
 # 退出码：0 成立 / 无问题；1 有问题（run unit 有部件非 0、check 点名、canary 未通过、render 落点不合规）；
 #         2 输入不可用（分层文件缺失或不合法、部件不存在或没有 probe、probe.cmd 里没有仓库内文件、探针不可度量、
-#         理由为空、文件读不了）；3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）。
+#         理由为空、--limit-sec / --expires 不合法、文件读不了）；3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）。
 #
 # 复用 slice-gate.py 与 takeoff-gate.py 的判定（按路径加载），只读不改它们。兼容 Python 3.8+，只用标准库。
 import argparse
+import datetime
 import html
 import importlib.util
 import json
@@ -329,6 +331,15 @@ def cmd_allow_slow(args):
     reason = (args.reason or "").strip()
     if not reason:
         fail("--reason 不能为空")
+    limit, expires = args.limit_sec, args.expires
+    if limit is not None and not limit > 0:
+        fail("--limit-sec 须大于 0（收到 %s）" % limit)
+    if expires is not None:
+        day = sg._iso_day(expires)
+        if day is None:
+            fail("--expires %s 不是真实日期（须为 YYYY-MM-DD）" % expires)
+        if day < datetime.datetime.now(datetime.timezone.utc).date():
+            fail("--expires %s 早于今天（UTC）" % expires)
     session = tg.locate_cli(args.session)
     if not session:
         fail("找不到会话转录（--session 或 CLAUDE_CODE_SESSION_ID）；放行慢用例需要人类在对话里明确批准", 3)
@@ -341,6 +352,12 @@ def cmd_allow_slow(args):
         fail("最新一条人类消息（%s · %s）里没有同时出现 %s 与放行词；请人类在对话里明确写出放行哪个用例及理由"
              % (tg.iso(when), tg.summarize(text), func), 3)
     entry = {"reason": reason, "approved": "%s · %s" % (tg.iso(when), tg.summarize(text))}
+    if limit is not None:
+        entry["limit_sec"] = int(limit) if limit.is_integer() else limit
+    if expires is not None:
+        entry["expires"] = expires
+    if limit is None and expires is None:
+        sys.stderr.write("提示：这条放行没有上限也没有到期日（可加 --limit-sec / --expires）\n")
     tiers.setdefault("slow_allow", {})[args.nodeid] = entry
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(tiers, fh, ensure_ascii=False, indent=2)
@@ -470,6 +487,8 @@ def main(argv=None):
     p = sub.add_parser("allow-slow")
     p.add_argument("nodeid")
     p.add_argument("--reason", required=True)
+    p.add_argument("--limit-sec", type=float)
+    p.add_argument("--expires")
     p.add_argument("--openspec-root")
     p.add_argument("--session")
     p = sub.add_parser("render")
