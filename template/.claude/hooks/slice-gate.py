@@ -1939,6 +1939,9 @@ def _lint_scope(gate, change_dir, run_scope, data=None, phase="lint"):
     errors.extend(perr)
     if errors or not run_scope:
         return errors, None
+    errors = _lint_inert(gate, change_dir)
+    if errors:
+        return errors, None
     rs = _runner_state(gate, change_dir, phase)
     hint = _runner_hint(gate, change_dir, rs) if phase != "baseline" else None
     errors, note = _lint_scope_provider(gate, change_dir, data, phase, provider, reasons, rs)
@@ -5938,6 +5941,38 @@ def _recon_anchor(root, change_dir, data):
     except (RuntimeError, OSError, ValueError, SystemExit):
         return None
     return cands[0] if cands else None
+
+
+INERT_LINT_STATIC = ("测试路径", "全局文件", "声明的 global")  # 静态核对判红的 _never_inert 类别（changes 根下 / 声明文件不判红）
+
+
+def _lint_inert(gate, change_dir):
+    """inert 声明的两项核对 → 违规列表（都以 "scope: " 开头；ship-rerun-hardening D3）。没声明、或不在 git 仓库里 → []。
+    静态：glob 匹配到测试路径 / 全局文件 / 声明的 global；对账：_recon_anchor 的依赖图里有测试文件依赖了生效的 inert 路径。"""
+    top = _git_top(os.path.dirname(_scope_decl_path(change_dir)))
+    if top is None:
+        return []
+    ctx = _inert_ctx(top, change_dir)
+    if not ctx["inert"]:
+        return []
+    try:
+        tracked = [p for p in _git_raw(top, ["ls-files", "-z"]).split("\0") if p]
+    except RuntimeError:
+        return []
+    errors = []
+    for g in ctx["inert"]:
+        bad = [(p, c) for p, c in ((p, _never_inert(p, ctx)) for p in tracked if fnmatch.fnmatchcase(p, g))
+               if c in INERT_LINT_STATIC]
+        if bad:
+            more = "等 %d 个" % len(bad) if len(bad) > 5 else ""
+            errors.append("scope: gate-scope.json 的 inert %s 匹配到不能声明为无关的路径：%s%s"
+                          % (g, "、".join("%s（%s）" % pc for pc in bad[:5]), more))
+    anchor = _recon_anchor(top, change_dir, {"gate": gate})
+    if anchor:
+        label = "%s@%s" % (anchor.get("change"), str(anchor.get("commit") or "")[:10])
+        errors.extend("scope: inert 声明与依赖图矛盾：%s 被测试文件 %s 依赖（锚点 %s）；从 inert 去掉它，或让该测试不再依赖它"
+                      % (p, f, label) for p, f in _inert_paths(top, tracked, ctx, anchor)[1][:8])
+    return errors
 
 
 def _inert_drop(root, change_dir, data=None, recon=True):

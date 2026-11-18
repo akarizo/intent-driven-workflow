@@ -6,9 +6,11 @@
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
 #   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock]
+#                                                         [declare] 声明了 inert 时另与锚点池的依赖图对账，列出矛盾
 #
 # 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用它的 load_plan / load_baseline /
-# final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）。
+# final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）；inert 对账另调
+# _git_top / _git_raw / _inert_ctx / _inert_paths / _pool_order。
 # [lock] 同法加载 flight-lock.py，只调用 holders() / lock_dir()（machine-test-lock design D7、D10）。
 # 纯标准库，兼容 Python 3.9。
 import argparse
@@ -45,7 +47,7 @@ TIMELINE = "timeline.md"
 BASELINE = "gate-baseline.json"
 SCOPE_FILE = "gate-scope.json"
 ANCHOR_DIR = "flight-anchors"
-DECLARE_KEYS = ("global", "blind", "anchor_max_hops")
+DECLARE_KEYS = ("global", "blind", "inert", "anchor_max_hops")
 SEC_RE = re.compile(r"exit -?\d+, ([\d.]+)s")
 TEST_RE = re.compile(r"测试 ([\d.]+)s")
 WAIT_RE = re.compile(r"排队 ([\d.]+)s")
@@ -347,7 +349,45 @@ def doctor_declare(openspec_root):
         return lines
     for k in DECLARE_KEYS:
         lines.append("  %s：%s" % (k, json.dumps(decl[k], ensure_ascii=False) if k in decl else "未声明（取缺省）"))
+    if "inert" in decl:
+        lines.extend(_inert_recon(openspec_root))
     return lines
+
+
+def _inert_recon(openspec_root):
+    """inert 与锚点池里每条测到依赖图的锚点（由新到旧）对账（ship-rerun-hardening D3）；同一路径只列一次。"""
+    try:
+        sg = load_gate()
+    except (Exception, SystemExit) as e:
+        return ["  inert：无法对账（slice-gate.py 加载失败：%s）" % _err(e)]
+    top = sg._git_top(openspec_root)
+    if top is None:
+        return ["  inert：无法对账（不在 git 仓库）"]
+    try:
+        common = sg.git(top, "rev-parse", "--git-common-dir")
+        tracked = [p for p in sg._git_raw(top, ["ls-files", "-z"]).split("\0") if p]
+        ctx = sg._inert_ctx(top, os.path.join(openspec_root, "changes", "_"))
+    except (Exception, SystemExit) as e:
+        return ["  inert：无法对账（%s）" % _err(e)]
+    pdir = os.path.join(common if os.path.isabs(common) else os.path.join(top, common), ANCHOR_DIR)
+    try:
+        names = [n for n in os.listdir(pdir) if n.endswith(".json") and not n.startswith(".tmp-")]
+    except OSError:
+        names = []
+    anchors = [(sg._pool_order(n, e), e) for n, e in ((n, _read_json(os.path.join(pdir, n))) for n in names)
+               if isinstance(e, dict) and e.get("measured") is True]
+    if not anchors:
+        return ["  inert：没有测到依赖图的锚点，无法对账"]
+    anchors.sort(key=lambda x: x[0], reverse=True)
+    lines, seen = [], set()
+    for _, a in anchors:
+        for p, f in sg._inert_paths(top, tracked, ctx, a)[1]:
+            if p in seen:
+                continue
+            seen.add(p)
+            lines.append("  inert 与依赖图矛盾：%s 被测试文件 %s 依赖（锚点 %s@%s）"
+                         % (p, f, a.get("change"), str(a.get("commit") or "")[:10]))
+    return lines or ["  inert：与 %d 条锚点的依赖图无矛盾" % len(anchors)]
 
 
 def _last_final_costs(change_dir):
