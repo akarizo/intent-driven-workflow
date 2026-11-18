@@ -117,3 +117,21 @@
   _ledger_secs,fn,def _ledger_secs(led)
   _ledger_source,fn,"def _ledger_source(root, change, commit)"
 ```
+
+## S5
+
+```
+[0]{name,kind,signature}:
+  （无新增公开符号：cmd_final 内部落账，输出 JSON 增 tests 键，经 S4 的 _ledger_* 完成）
+```
+
+## S6
+
+```
+[5]{name,kind,signature}:
+  load_ledger,fn,def load_ledger()
+  SLOWEST_N,const,SLOWEST_N = 10  # [tests] 最慢清单至多列 10 条
+  RECENT_N,const,RECENT_N = 5  # [tests] 最近的测试变更至多列 5 个 change
+  _last_segment,fn,"def _last_segment(change_dir, tl)"
+  doctor_tests,fn,"def doctor_tests(openspec_root, changes)"
+```
