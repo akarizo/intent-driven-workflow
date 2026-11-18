@@ -67,7 +67,10 @@ slow_candidates(probe, case_sec=UNIT_MAX_SEC) -> [nodeid]
 ## S4 · `slice-gate.py`
 
 ```python
-_budget_judge(root, name, tiers, led, phase, lock_info, base=None, base_commit=None) -> (failed, warnings, 摘要 | None)
+_budget_judge(root, name, tiers, led, phase, lock_info, base=None, base_commit=None, tiers_file=None) -> (failed, warnings, 摘要 | None)
+_final_budget(root, name, change_dir, tiers, led, baseline, lock_info) -> (failed, warnings, 摘要 | None)   # final 阶段取基线 commit 的分层文件与预算变更比较
+_tiers_has_budget(tiers) -> bool
+_tiers_at(root, commit, tiers_file) -> tiers | None
 ```
 
 - 没有任何范围写 `budget` → `([], [], None)`，不调用账本模块。
@@ -76,3 +79,20 @@ _budget_judge(root, name, tiers, led, phase, lock_info, base=None, base_commit=N
 - 任何异常 → `([], ["预算未判：<原因>"], None)`。
 
 输出位置：final 的 `result["tests"]["budget"]` 与 `delta.json` 的 `budget`；baseline 的 `bl["ledger"]["budget"]`。摘要为 `None` 时都不出现这个键。
+
+## S3 · `test-tiers.py`
+
+```
+test-tiers.py allow-slow NODEID --reason TEXT [--limit-sec SEC] [--expires YYYY-MM-DD] [--openspec-root DIR] [--session PATH]
+```
+
+- `--limit-sec` 须大于 0，写入条目 `limit_sec`（整数值写成 int）；`--expires` 须为不早于今天（UTC）的真实日期，写入条目 `expires`。不合法 → 退出 2。
+- 两者都没给 → 照常写入，stderr 提示一行「没有上限也没有到期日」。
+
+## S5 · `flight-doctor.py`
+
+```python
+_tests_budget(path, tl, best) -> 预算与放行的 [tests] 展示行
+```
+
+- `[tests]` 段列出各范围预算与放行条目；只读展示，不改判定。
