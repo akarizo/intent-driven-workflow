@@ -12,13 +12,10 @@ import subprocess
 import sys
 import time
 
-import pytest
-
 from conftest import HOOKS, commit_all, hook_path, run_hook, write
 from final_helpers import baseline, final, gate_json, make_repo, timeline_rows
 from lock_helpers import QUEUED, Locks, wait_for
 
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S3 未实现")
 
 PY = shlex.quote(sys.executable)
 UNIT_CMD = "%s -m pytest -q -p no:cacheprovider tests/unit" % PY
@@ -56,7 +53,6 @@ def held_exclusive(lock):
     return lock["mode"] == "exclusive" and lock["state"] == "held" and isinstance(lock["waited"], (int, float))
 
 
-@PENDING
 def test_baseline_and_final_hold_exclusive_lock(git_repo):
     # Given: 一个有计划、测试全绿的仓库，锁目录里没有其他持有者
     d = make_repo(git_repo)
@@ -72,7 +68,6 @@ def test_baseline_and_final_hold_exclusive_lock(git_repo):
     assert held_exclusive(read_bl(d)["lock"]), read_bl(d)
 
 
-@PENDING
 def test_slice_gate_holds_shared_lock(git_repo):
     # Given: 同一个仓库，切片 S1 已 start
     d = make_repo(git_repo)
@@ -87,7 +82,6 @@ def test_slice_gate_holds_shared_lock(git_repo):
     assert lock["mode"] == "shared" and lock["state"] == "held", lock
 
 
-@PENDING
 def test_final_queues_behind_exclusive_holder(git_repo, tmp_path):
     # Given: baseline 已绿；另一个进程在同一锁目录持有独占锁
     d = make_repo(git_repo)
@@ -119,7 +113,6 @@ def test_final_queues_behind_exclusive_holder(git_repo, tmp_path):
     assert lock["state"] == "held" and lock["waited"] > 0, lock
 
 
-@PENDING
 def test_gate_runs_when_lock_module_missing(git_repo, tmp_path):
     # Given: 一份不含 flight-lock.py 的 hooks 目录副本
     d = make_repo(git_repo)
@@ -136,7 +129,6 @@ def test_gate_runs_when_lock_module_missing(git_repo, tmp_path):
     assert gate_json(p)["lock"]["state"] == "unavailable", p.stdout
 
 
-@PENDING
 def test_contended_run_downgrades_slow_unit_verdict(git_repo, tmp_path):
     # Given: 单元层有一个每次睡 3.1 秒的纯函数用例；另一个进程以 FLIGHT_LOCK_MAX_HOLD_SEC=0.3 持有独占锁且不结束
     d = tiers_repo(git_repo)
@@ -158,7 +150,6 @@ def test_contended_run_downgrades_slow_unit_verdict(git_repo, tmp_path):
     assert any("G10" in w and SLEEPY in w and "降为警告" in w for w in bl.get("warnings") or []), bl.get("warnings")
 
 
-@PENDING
 def test_lock_off_keeps_slow_unit_verdict(git_repo):
     # Given: 同样的仓库（单元层有一个每次睡 3.1 秒的纯函数用例）
     d = tiers_repo(git_repo)
@@ -173,7 +164,6 @@ def test_lock_off_keeps_slow_unit_verdict(git_repo):
     assert any(r.startswith("G10") and SLEEPY in r for r in bl["reasons"]), bl["reasons"]
 
 
-@PENDING
 def test_timeline_records_wait_and_load(git_repo):
     # Given: 一个有计划、测试全绿的仓库
     d = make_repo(git_repo)

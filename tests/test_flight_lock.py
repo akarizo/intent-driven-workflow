@@ -6,10 +6,11 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
 import json
 import os
+import subprocess
 import sys
 import time
 
-from conftest import hook_path
+from conftest import hook_path, load_hook
 from lock_helpers import INFO_PREFIX, Locks, wait_for
 
 
@@ -172,3 +173,32 @@ def test_lock_off_or_unavailable_runs_unlocked(tmp_path):
         assert off.info()["state"] == "off", off.info()
         assert bad.info()["state"] == "unavailable" and bad.info()["why"], bad.info()
         assert a.release() == 0
+
+
+def test_exclusive_acquire_clears_holder_file_of_reused_pid(tmp_path, monkeypatch):
+    # Given: 一个无关的在世子进程；锁目录 holders/ 下有一份 pid 为它、since 很早的假持有者文件
+    monkeypatch.setenv("FLIGHT_LOCK_DIR", str(tmp_path / "lk"))
+    monkeypatch.delenv("FLIGHT_LOCK_HELD", raising=False)
+    monkeypatch.delenv("FLIGHT_LOCK", raising=False)
+    fl = load_hook("flight-lock")
+    other = subprocess.Popen(["sleep", "30"])
+    try:
+        hd = tmp_path / "lk" / "holders"
+        hd.mkdir(parents=True)
+        fake = hd / ("%d.json" % other.pid)
+        fake.write_text(json.dumps({"pid": other.pid, "mode": "exclusive", "change": "ghost", "label": "killed",
+                                    "since": 1.0, "cap_sec": 1.0}), encoding="utf-8")
+        assert [h["pid"] for h in fl.holders()] == [other.pid]
+
+        # When: 以独占方式 acquire 再 release
+        hold = fl.acquire("exclusive", change="c", label="t")
+        state = hold.info["state"]
+        hold.release()
+
+        # Then: 拿到锁；假持有者文件已不存在，holders() 为空
+        assert state == "held", hold.info
+        assert not fake.exists()
+        assert fl.holders() == []
+    finally:
+        other.kill()
+        other.wait(timeout=5)
