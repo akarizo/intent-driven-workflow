@@ -96,3 +96,16 @@ _tests_budget(path, tl, best) -> 预算与放行的 [tests] 展示行
 ```
 
 - `[tests]` 段列出各范围预算与放行条目；只读展示，不改判定。
+
+## S6 · 文档（无公开符号）
+
+- 改 `flight-runner-contract.md`（新增第 10 节「时间预算与放行」、第 8 节 G13 / G14 与 G10 并列）、`commands/test-tiers.md`（budget 与放行参数）、`README.md`（补一行）。
+
+## S7 · `slice-gate.py`
+
+```python
+_observe_part_region(tiers, rname, rpart, junit) -> None   # 部件区域 junit 逐用例耗时进账本（tier=区域名，无结局）；无 junit / 无用例 → 不动作
+_lock_expect_sec(baseline, gate) -> number | None          # 锁预计耗时取全量秒数：基线 full_suite_sec / gate.full_suite_sec / 非增量基线 test.sec 的最大值
+```
+
+- final 的区域运行与 baseline 的部件区域运行都经 `keep_junit` 取 junit 后调 `_observe_part_region`。
