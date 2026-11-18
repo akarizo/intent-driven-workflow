@@ -12,8 +12,14 @@
 #                                              （另设 GATE_SCOPE_PLANNED / GATE_SCOPE_CHANGE）、校验 GATE_SCOPE_OUT 报告；builtin 先认 gate.test
 #                                              再进程内预测；核对全选理由逐项表态；
 #                                              通过时 stderr 打一行范围摘要
+#                                              owns:：条数上限随轮次档（标准档 1–12、大片档 1–30；> 12 条时计划写 large 或现存文件 > 8 → 大片档）；
+#                                              带通配的条目在轮次档那棵树上展开 > 20 个现存文件 → 须在该片 owns_wide（条目 → 非空理由）写理由，
+#                                              时间线已有 approve 事件时只提示不判红；owns_wide 形状 / 多余键 / 空理由判红；不在 git 仓库里不数文件；
+#                                              通过时 stderr 为每条通配打一行 `owns: <切片> <条目> → <N> 个文件`
 #   waves    --change-dir DIR                 只打印 waves JSON（不跑选测命令、不判未声明）
 #   turns    --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: standard / large}：owns 在基线 commit（取不到 → HEAD）树上的已提交文件 > 8 → large，计划写 "turns": "large" 可升档；不写任何文件
+#   landed   --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: 门禁行 commit}：最新门禁行绿、commit 能解析且是 HEAD 祖先、
+#                                              该 commit 到工作树间切片包与 specs/ 无改动、slices.json 该片条目（除 owns / owns_wide）未变；只读
 #   scope-seed --openspec-root DIR           DIR/gate-scope.json 已有 → 保留；否则历史 slices.json 的 gate.test 全可识别 → 种
 #                                              {"builtin": true}，有认不出 / 读不出 → 不种、列例子与接入 cmd 指引；恒 exit 0
 #   start    S --change-dir DIR [--base REF] [--expect-branch BRANCH] [--continue COMMIT]
@@ -110,7 +116,9 @@ from datetime import datetime, timezone
 
 MAX_SLICES = 9
 MAX_DEPTH = 3
-MAX_OWNS = 12
+OWNS_CAP = {"standard": 12, "large": 30}
+OWNS_TIER_LABEL = {"standard": "标准档", "large": "大片档"}
+OWNS_WIDE_FILES = 20
 TURN_LARGE_FILES = 8
 TURN_TIERS = ("standard", "large")
 MARKER = ".openspec-slice"
@@ -1626,6 +1634,10 @@ def glob_match(path, pattern):
     return False
 
 
+def _has_glob(pattern):
+    return isinstance(pattern, str) and any(c in pattern for c in "*?[")
+
+
 def globs_intersect(a, b):
     if a == b or glob_match(a, b) or glob_match(b, a):
         return True
@@ -2634,13 +2646,19 @@ def _turn_tree(root, change_dir):
     return "HEAD"
 
 
-def _owned_file_count(root, commit, owns):
-    """commit 的树上落在 owns 内的已提交文件数；gitlink 在子仓对象库里按记录的 sha 数，取不到按 0。"""
-    p = subprocess.run(["git", "ls-tree", "-r", "-z", commit], cwd=root, capture_output=True, text=True)
-    if p.returncode != 0:
+def _owned_file_count(root, commit, owns, cache=None):
+    """commit 的树上落在 owns 内的已提交文件数；gitlink 在子仓对象库里按记录的 sha 数，取不到按 0。
+    cache（dict）给了时按 commit 复用 ls-tree 输出（同一次 lint_plan 内多次调用）。"""
+    listing = cache.get(commit) if cache is not None else None
+    if listing is None:
+        p = subprocess.run(["git", "ls-tree", "-r", "-z", commit], cwd=root, capture_output=True, text=True)
+        listing = p.stdout if p.returncode == 0 else ""
+        if cache is not None:
+            cache[commit] = listing
+    if not listing:
         return 0
     n = 0
-    for e in p.stdout.split("\0"):
+    for e in listing.split("\0"):
         meta, _, path = e.partition("\t")
         f = meta.split()
         if len(f) != 3:
@@ -2677,19 +2695,53 @@ def lint_plan(data, change_dir=None, run_scope=False, phase="lint"):
         errors.append("ids: 切片 id 重复")
     if not (1 <= len(slices) <= MAX_SLICES):
         errors.append("count: 切片数 %d 不在 1–%d 内" % (len(slices), MAX_SLICES))
-    # 降档检查要 git：只在有切片写 standard 时取顶层；不在仓库里 → 跳过
+    # 数文件要 git：只在有切片写 standard、owns 多于标准档上限或带通配时取顶层；不在仓库里 → 依赖文件数的判断全跳过
     turn_root = None
-    if change_dir is not None and any(s.get("turns") == "standard" for s in slices):
+    if change_dir is not None and any(s.get("turns") == "standard" or len(s.get("owns") or []) > OWNS_CAP["standard"]
+                                      or any(_has_glob(o) for o in s.get("owns") or []) for s in slices):
         turn_root = _git_top(change_dir)
     turn_tree = _turn_tree(turn_root, change_dir) if turn_root else None
+    tree_cache = {}
+    approved = None
+    expansions, wide_notes = [], []
     for s in slices:
         owns = s.get("owns") or []
-        if not (1 <= len(owns) <= MAX_OWNS):
-            errors.append("owns: %s 的 owns 有 %d 条，须在 1–%d 内" % (s.get("id"), len(owns), MAX_OWNS))
+        tier = "standard"
+        if len(owns) > OWNS_CAP["standard"] and (
+                s.get("turns") == "large"
+                or (turn_root and _owned_file_count(turn_root, turn_tree, owns, tree_cache) > TURN_LARGE_FILES)):
+            tier = "large"
+        if not (1 <= len(owns) <= OWNS_CAP[tier]):
+            errors.append("owns: %s 的 owns 有 %d 条，%s须在 1–%d 内（标准档 1–%d，大片档 1–%d；这一片要更多条目先写 \"turns\": \"large\"）"
+                          % (s.get("id"), len(owns), OWNS_TIER_LABEL[tier], OWNS_CAP[tier],
+                             OWNS_CAP["standard"], OWNS_CAP["large"]))
+        wide = s.get("owns_wide")
+        if wide is not None and not isinstance(wide, dict):
+            errors.append("owns: %s 的 owns_wide 须是对象（owns 条目 → 理由）" % s.get("id"))
+        for key, reason in (wide.items() if isinstance(wide, dict) else ()):
+            if key not in owns:
+                errors.append("owns: %s 的 owns_wide 有多余的键 %s（须是该片的 owns 条目）" % (s.get("id"), key))
+            if not _nonblank(reason):
+                errors.append("owns: %s 的 owns_wide 里 %s 的理由须是非空字符串" % (s.get("id"), key))
+        for o in owns if turn_root else ():
+            if not _has_glob(o):
+                continue
+            k = _owned_file_count(turn_root, turn_tree, [o], tree_cache)
+            expansions.append("owns: %s %s → %d 个文件" % (s.get("id"), o, k))
+            if k <= OWNS_WIDE_FILES or (isinstance(wide, dict) and o in wide):
+                continue
+            if approved is None:
+                approved = _has_approve(change_dir)
+            if approved:
+                wide_notes.append("owns: %s 的 %s 展开出 %d 个现存文件（> %d），新计划须在 owns_wide 里为它写理由"
+                                  % (s.get("id"), o, k, OWNS_WIDE_FILES))
+            else:
+                errors.append("owns: %s 的 %s 展开出 %d 个现存文件（> %d），须在该片的 owns_wide 里为它写理由"
+                              % (s.get("id"), o, k, OWNS_WIDE_FILES))
         if "turns" in s and s.get("turns") not in TURN_TIERS:
             errors.append("turns: %s 的 turns 须是 standard / large" % s.get("id"))
         elif s.get("turns") == "standard" and turn_root:
-            n = _owned_file_count(turn_root, turn_tree, owns)
+            n = _owned_file_count(turn_root, turn_tree, owns, tree_cache)
             if n > TURN_LARGE_FILES:
                 errors.append("turns: %s 展开后现存 %d 个文件（> %d），按规模是大片档，不能写 standard（删掉该字段或写 large）"
                               % (s.get("id"), n, TURN_LARGE_FILES))
@@ -2738,6 +2790,9 @@ def lint_plan(data, change_dir=None, run_scope=False, phase="lint"):
         errors.extend(scope_errors)
     if scope_note and not errors:
         sys.stderr.write(scope_note + "\n")
+    if not errors:
+        for line in expansions + wide_notes:
+            sys.stderr.write(line + "\n")
     return errors, waves
 
 
@@ -3553,6 +3608,50 @@ def cmd_turns(args):
     if errors:
         die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
     print(json.dumps(slice_turns(data, args.change_dir, toplevel(args.change_dir)), ensure_ascii=False))
+
+
+def _plan_entry(data, sid):
+    """计划里该片条目去掉 owns / owns_wide 后的对象；没有该片 → None。"""
+    for s in (data.get("slices") or []) if isinstance(data, dict) else []:
+        if isinstance(s, dict) and s.get("id") == sid:
+            return {k: v for k, v in s.items() if k not in ("owns", "owns_wide")}
+    return None
+
+
+def cmd_landed(args):
+    """只读：{切片 id: 门禁行 commit}，收已落地的切片（绿、commit 是 HEAD 祖先、切片包 / specs / 计划条目未再改）。"""
+    data = load_plan(args.change_dir)
+    errors, _ = lint_plan(data, args.change_dir, run_scope=False)
+    if errors:
+        die("slices.json 不合法：\n  - " + "\n  - ".join(errors))
+    root = toplevel(args.change_dir)
+    latest = report_latest(args.change_dir)
+    change_rel = _change_rel(root, args.change_dir)
+    old_plans, out = {}, {}
+    for s in data.get("slices") or []:
+        sid = s.get("id")
+        row = latest.get(sid)
+        if not row or not row["ok"] or not re.fullmatch(r"[0-9a-fA-F]{4,40}", row["commit"]):
+            continue
+        p = subprocess.run(["git", "rev-parse", "--verify", "--quiet", row["commit"] + "^{commit}"],
+                           cwd=root, capture_output=True, text=True)
+        sha = p.stdout.strip()
+        if p.returncode != 0 or not sha or not _is_ancestor(root, sha, "HEAD"):
+            continue
+        if subprocess.run(["git", "diff", "--quiet", sha, "--", "%s/slices/%s.md" % (change_rel, sid),
+                           change_rel + "/specs"], cwd=root, capture_output=True).returncode != 0:
+            continue
+        if sha not in old_plans:
+            q = subprocess.run(["git", "show", "%s:%s/slices.json" % (sha, change_rel)],
+                               cwd=root, capture_output=True, text=True)
+            try:
+                old_plans[sha] = json.loads(q.stdout) if q.returncode == 0 else None
+            except ValueError:
+                old_plans[sha] = None
+        old = _plan_entry(old_plans[sha], sid)
+        if old is not None and old == _plan_entry(data, sid):
+            out[sid] = row["commit"]
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def _is_ancestor(root, anc, desc):
@@ -6990,7 +7089,7 @@ def cmd_scope_seed(args):
 def main():
     ap = argparse.ArgumentParser(description="slice-gate：切片规划 lint 与切片门禁")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("lint", "waves", "turns", "final", "baseline", "preflight"):
+    for name in ("lint", "waves", "turns", "landed", "final", "baseline", "preflight"):
         p = sub.add_parser(name)
         p.add_argument("--change-dir", required=True)
         if name == "baseline":
@@ -7038,7 +7137,7 @@ def main():
     {"lint": cmd_lint, "waves": cmd_lint, "start": cmd_start, "gate": cmd_gate, "record": cmd_record,
      "final": cmd_final, "baseline": cmd_baseline, "preflight": cmd_preflight, "ship": cmd_ship,
      "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync,
-     "merge": cmd_merge, "turns": cmd_turns, "wave-check": cmd_wave_check}[args.cmd](args)
+     "merge": cmd_merge, "turns": cmd_turns, "landed": cmd_landed, "wave-check": cmd_wave_check}[args.cmd](args)
 
 
 if __name__ == "__main__":

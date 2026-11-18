@@ -1,14 +1,10 @@
 """owns 条数上限随轮次档、宽通配要写理由（scenario: owns-tiers#owns-cap-follows-turn-tier、#wide-glob-needs-reason、
-#lint-prints-glob-expansion、#approved-change-not-reddened-by-wide-rule，共 4 条）。
-骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
+#lint-prints-glob-expansion、#approved-change-not-reddened-by-wide-rule，共 4 条）。"""
 import json
-
-import pytest
 
 from conftest import commit_all, run_hook, write
 from test_slice_gate import plan, slice_
 
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S3 未实现")
 
 WIDE = "lib/*.py"
 EXPANSION = "owns: S1 %s → 21 个文件" % WIDE
@@ -48,7 +44,6 @@ def set_slice(change, repo, sid, **fields):
     commit_all(repo, "plan edit")
 
 
-@PENDING
 def test_owns_cap_follows_turn_tier(git_repo):
     # Given: 切片 S1 的 13 条 owns 都是现存文件；切片 S2 的 13 条 owns 里只有 2 个现存文件
     big = ["a/f%02d.py" % i for i in range(1, 14)]
@@ -71,7 +66,6 @@ def test_owns_cap_follows_turn_tier(git_repo):
     assert third.returncode == 2 and "S1 的 owns" in third.stderr, third.stderr
 
 
-@PENDING
 def test_wide_glob_needs_reason(git_repo):
     # Given: 切片 S1 的 owns 是一条展开出 21 个现存文件的通配
     change = wide_repo(git_repo)
@@ -93,7 +87,6 @@ def test_wide_glob_needs_reason(git_repo):
     assert stray.returncode == 2 and "owns_wide" in stray.stderr, stray.stderr
 
 
-@PENDING
 def test_lint_prints_glob_expansion(git_repo):
     # Given: 切片 S1 的 owns 有一条展开出 21 个现存文件的通配并写了理由，另有一条字面路径
     write(git_repo / "NOTES.txt", "x\n")
@@ -108,7 +101,6 @@ def test_lint_prints_glob_expansion(git_repo):
     assert "NOTES.txt →" not in p.stderr
 
 
-@PENDING
 def test_approved_change_not_reddened_by_wide_rule(git_repo):
     # Given: 切片 S1 的 owns 是一条展开出 21 个现存文件的通配，没有写理由；该 change 的时间线已有 approve 事件
     change = wide_repo(git_repo, approved=True)
