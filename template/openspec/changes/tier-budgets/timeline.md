@@ -15,3 +15,8 @@
 2026-11-18T12:03:06Z	review	findings=15 blocking=0 deferred=15
 2026-11-18T12:13:14Z	final	增量（锚点 2cc616742f，重跑 87 个文件 / 沿用 210 个用例） 测试 574.3s · 检查 schema-validate 1.3s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 2.1→3.4/18 ok
 2026-11-18T12:13:18Z	apply-done	blocked=0 blocking=0
+2026-11-18T12:13:47Z	ship	draft: 切片 S3 无门禁记录; 切片 S4 无门禁记录; 切片 S5 无门禁记录
+2026-11-18T12:14:27Z	gate	S3 ok
+2026-11-18T12:14:27Z	gate	S4 ok
+2026-11-18T12:14:27Z	gate	S5 ok
+2026-11-18T12:14:28Z	ship	ready
