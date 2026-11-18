@@ -70,3 +70,25 @@ def test_spec_html_shows_provider_state(tmp_path):
     assert "模板内建" in html[0]
     assert "python3 tools/scope.py" in html[1] and "仓库声明" in html[1]
     assert "未声明选测范围" in html[2]
+
+
+def test_spec_html_shows_provider_with_optional_fields(tmp_path):
+    # Given: 两份仓库声明都带可选字段：{"builtin": true, "global": […], "blind": […]} 与 {"cmd": …, "anchor_max_hops": 3}
+    def change(name, decl):
+        base = tmp_path / name
+        c = artifacts(base / "openspec" / "changes" / "add-export")
+        write(base / "openspec" / "gate-scope.json", json.dumps(decl))
+        _slices(c, {"test": "pytest -q"})
+        return c, base / "spec.html"
+
+    cases = [change("b", {"builtin": True, "global": ["conf/**"], "blind": ["tests/test_dyn.py"]}),
+             change("c", {"cmd": "python3 tools/scope.py", "anchor_max_hops": 3})]
+
+    # When: 分别渲染 spec.html
+    runs = [render(c, out) for c, out in cases]
+
+    # Then: 可选字段不影响声明的识别：builtin 那份含「模板内建」，cmd 那份含命令原文，都不出现「未声明选测范围」
+    assert all(p.returncode == 0 for p in runs), [p.stderr for p in runs]
+    html = [out.read_text(encoding="utf-8") for _, out in cases]
+    assert "模板内建" in html[0] and "未声明选测范围" not in html[0]
+    assert "python3 tools/scope.py" in html[1] and "未声明选测范围" not in html[1]
