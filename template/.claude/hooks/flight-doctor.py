@@ -5,19 +5,21 @@
 #   flight-doctor.py forecast --change-dir DIR [--json]   起飞前预告 baseline / final 走全量还是增量
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
-#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock]
+#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock] [tests]
 #                                                         [declare] 声明了 inert 时另与锚点池的依赖图对账，列出矛盾
 #
 # 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用它的 load_plan / load_baseline /
 # final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）；inert 对账另调
 # _git_top / _git_raw / _inert_ctx / _inert_paths / _pool_order。
 # [lock] 同法加载 flight-lock.py，只调用 holders() / lock_dir()（machine-test-lock design D7、D10）。
+# [tests] 同法加载 test-ledger.py，只调用 load / summary / parse_segment / segment / _sort_key（test-ledger design D11）。
 # 纯标准库，兼容 Python 3.9。
 import argparse
 import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,6 +75,10 @@ def load_gate():
 
 def load_lock():
     return _load("flight_lock", "flight-lock.py")
+
+
+def load_ledger():
+    return _load("test_ledger", "test-ledger.py")
 
 
 def _err(e):
@@ -443,6 +449,68 @@ def doctor_lock():
     return lines
 
 
+SLOWEST_N = 10  # [tests] 最慢清单至多列 10 条
+RECENT_N = 5  # [tests] 最近的测试变更至多列 5 个 change
+
+
+def _last_segment(change_dir, tl):
+    """timeline 里最后一条带「用例 +A/-R（新增 Xs）」片段的 final 行 → (时间, 片段)；没有 → None。"""
+    try:
+        with open(os.path.join(change_dir, TIMELINE), "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        cols = line.split("\t")
+        if len(cols) >= 3 and cols[1] == "final":
+            seg = tl.parse_segment(cols[2])
+            if seg is not None:
+                return cols[0], seg
+    return None
+
+
+def doctor_tests(openspec_root, changes):
+    lines = ["[tests]"]
+    tl = load_ledger()
+    p = subprocess.run(["git", "-C", openspec_root, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if p.returncode != 0 or not p.stdout.strip():
+        return lines + ["  不在 git 仓库，跳过"]
+    root = p.stdout.strip()
+    best, best_key = None, None
+    for name, _ in changes:
+        for phase in ("final", "baseline"):
+            led = tl.load(root, name, phase)
+            if led is None:
+                continue
+            key = (str(led.get("at") or ""), phase == "final")
+            if best_key is None or key > best_key:
+                best, best_key = (name, phase, led), key
+    if best is None:
+        lines.append("  没有账本数据：本机还没有带账本的 baseline / final（升级后重跑一次 baseline 即有）")
+    else:
+        name, phase, led = best
+        summ = tl.summary(led)
+        lines.append("  账本：%s · %s · %s · %s" % (name, phase, str(led.get("commit") or "-")[:10], led.get("mode") or "-"))
+        for t, slot in sorted(summ["tiers"].items(), key=lambda kv: (kv[0] == tl.NO_TIER, kv[0])):
+            lines.append("  %s：%d 条 · %.1f 秒" % ("未分层" if t == tl.NO_TIER else t, slot["cases"], slot["sec"]))
+        lines.append("  无耗时 %d 条" % summ["no_sec"])
+        slow = [it for it in sorted((led.get("cases") or {}).items(), key=tl._sort_key) if it[1].get("s") is not None]
+        if slow:
+            lines.append("  最慢：")
+            for cid, c in slow[:SLOWEST_N]:
+                lines.append("    %.3fs  %s（%s）" % (c["s"], cid, "未分层" if (c.get("t") or tl.NO_TIER) == tl.NO_TIER
+                                                       else c["t"]))
+    if not os.path.isfile(os.path.join(openspec_root, "test-tiers.json")):
+        lines.append("  未配置测试分层：账本不分层；跑 /test-tiers 划分后才有各层数字")
+    recent = [(r[0], name, r[1]) for name, d in changes for r in (_last_segment(d, tl),) if r is not None]
+    if recent:
+        recent.sort(key=lambda x: x[0], reverse=True)
+        lines.append("  最近的测试变更：")
+        for _, name, seg in recent[:RECENT_N]:
+            lines.append("    %s：%s" % (name, tl.segment(seg)))
+    return lines
+
+
 def doctor(openspec_root):
     openspec_root = os.path.abspath(openspec_root)
     changes = _changes(openspec_root)
@@ -456,6 +524,10 @@ def doctor(openspec_root):
     out += doctor_declare(openspec_root)
     out += doctor_checks(changes)
     out += doctor_lock()
+    try:
+        out += doctor_tests(openspec_root, changes)
+    except (Exception, SystemExit) as e:
+        out += ["[tests]", "  test-ledger.py 不可用：%s" % _err(e)]
     return "\n".join(out)
 
 
