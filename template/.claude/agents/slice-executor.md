@@ -16,7 +16,7 @@ color: blue
 ## 开工（前两轮）
 
 1. 读切片包 `openspec/changes/<change>/slices/<S>.md`：scenario 原文、测试骨架路径、`owns`、`verify` 命令、design 摘录、依赖切片的接口摘要（`slices/_interfaces.md`）。**不要**去读 proposal / design / adr 全文，除非切片包明确指向某一段。
-2. 立即运行 `python3 .claude/hooks/slice-gate.py start <S> --change-dir openspec/changes/<change>`（记录 base、写 `.openspec-slice` 标记）。从此刻起写 `owns` 之外的文件会被门禁拒绝，这是设计，不是故障。重派时 prompt 会给上一轮的 commit 与 `--base`：按 prompt 的第零步先把 commit 接上（HEAD 不是它则 `git cherry-pick`），再跑带 `--base` 的 `start`；`start` 对同片幂等，重跑不会改写起点。prompt 让 `start` 带 `--resume-checkpoint`（上一轮执行体未返回）时，start 已把上一轮半成品恢复为未提交改动，输出的 `checkpoint.restored` 列出这些文件：先 `git status` / `git diff` 看清已完成部分，在其上继续，不重做。prompt 给的 `start` 可能带 `--expect-branch <branch>`（基点校验：HEAD 须是 change 分支的后代）；`start` 非 0 退出 → 不做任何改动，把 `start` 打印的 JSON 原样作为最终输出（此时没有标记，stop-gate 不会拦收口）。start 会按 gitlink 填充隔离 worktree 的 submodule；子仓未就绪时以 `G0 submodule` 非 0 退出，同样把 JSON 原样返回。`start` 以 3 退出 = 上一轮门禁已通过的结论被找回：stdout 是留存的门禁 JSON（`ok` 为 true、`recovered` 为 true），原样作为最终输出，不做任何改动。
+2. 立即运行 `python3 .claude/hooks/slice-gate.py start <S> --change-dir openspec/changes/<change>`（记录 base、写 `.openspec-slice` 标记）。从此刻起写 `owns` 之外的文件会被门禁拒绝，这是设计，不是故障。重派时照 prompt 给的 `start` 命令跑：带 `--continue <上一轮 commit>` 时，由脚本把上一轮的全部提交接到当前 HEAD（输出的 `continued` 写明方式与个数），区间起点由脚本按 change 分支算；接不上时 `start` 非 0 退出，照下面的规则原样返回；prompt 另给了接续步骤（如 hooks 未升级时的手工 `git cherry-pick`）就按 prompt 先做。`start` 对同片幂等，重跑不会改写起点。prompt 让 `start` 带 `--resume-checkpoint`（上一轮执行体未返回）时，start 已把上一轮半成品恢复为未提交改动，输出的 `checkpoint.restored` 列出这些文件：先 `git status` / `git diff` 看清已完成部分，在其上继续，不重做。prompt 给的 `start` 可能带 `--expect-branch <branch>`（基点校验：HEAD 须是 change 分支的后代）；`start` 非 0 退出 → 不做任何改动，把 `start` 打印的 JSON 原样作为最终输出（此时没有标记，stop-gate 不会拦收口）。start 会按 gitlink 填充隔离 worktree 的 submodule；子仓未就绪时以 `G0 submodule` 非 0 退出，同样把 JSON 原样返回。`start` 以 3 退出 = 上一轮门禁已通过的结论被找回：stdout 是留存的门禁 JSON（`ok` 为 true、`recovered` 为 true），原样作为最终输出，不做任何改动。
 
 ## 纪律
 
@@ -31,7 +31,7 @@ color: blue
 - 改了骨架的断言 → 必须在最终 JSON 的 `summary` 里申报改了哪条、为什么。
 - **每切片一个 commit**：`git add <owns 内的文件>`（不用 `-A`），`git commit -m "<type>(<scope>): <S> <切片标题>"`。不 push、不 merge、不切分支、不改 `openspec/` 下的工件（tasks.md 勾选由主会话做）。
 - **owns 落在 submodule 内**时按顺序：① 先 `git -C <子仓路径> add <子仓内相对路径>` + `git -C <子仓路径> commit -m "<type>(<scope>): <S> <标题>"`；② 再在父仓 `git add <子仓路径> <父仓 owns 文件>`，把 gitlink 并入同一个切片 commit。漏掉 gitlink 会被 `G6 gitlink` 拦下；不在子仓里切分支、不 push。
-- **预算**：`maxTurns: 40`。接近上限时停止扩展范围，直接收尾跑门禁，如实返回。撞上限时 hook 已快照 owns 内改动、重派会接续，但仍应在上限前收尾。
+- **预算**：轮次上限见本定义 frontmatter 的 `maxTurns`（标准档 40；大片档由 `slice-executor-large.md` 给 80）。接近上限时停止扩展范围，直接收尾跑门禁，如实返回。撞上限时 hook 已快照 owns 内改动、重派会接续，但仍应在上限前收尾。
 
 ## 收尾（唯一输出）
 

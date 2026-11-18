@@ -1,6 +1,6 @@
 // opsx-apply · 飞行模式的确定性调度脚本（Claude Code 命名工作流）
 // 由 /opsx-apply 命令以 args 启动：
-//   { change, changeDir, hooksDir, agentsDir, waves, useAgentTypes, branch, models, efforts }
+//   { change, changeDir, hooksDir, agentsDir, waves, useAgentTypes, branch, turns, models, efforts }
 //   change        change 名，如 "add-user-export"
 //   changeDir     相对仓库根，如 "openspec/changes/add-user-export"
 //   hooksDir      相对仓库根，如 ".claude/hooks"
@@ -8,6 +8,7 @@
 //   waves         slice-gate.py waves 的输出，如 [["S1","S2"],["S3"],["S4","S5"]]
 //   useAgentTypes false 时不传 agentType（agent 定义未注册的仓库回退为默认 workflow subagent）
 //   branch        可选，change 分支名（起飞时 git branch --show-current）；每个执行体的 start 带 --expect-branch，据此做基点祖先校验
+//   turns         可选，{ S1: "standard", S2: "large", ... }（slice-gate.py turns 的输出）；large 派 slice-executor-large（80 轮），缺省全部 standard（40 轮）
 //   deps          可选，{ S3: ["S1","S2"], ... }（来自 slices.json）；依赖已 blocked 的切片直接记 blocked，不白跑
 //                 blocked 条目形如 { slice, kind: 'gate' | 'infra', reason }：gate = 切片门禁红；infra = agent 重派后仍未返回 / 依赖跳过 / integrator 合回失败。
 //                 blocked 只进 PR 正文作说明；draft / ready 由 slice-gate.py ship 按 gate-report.md 裁决，不看本列表。
@@ -33,6 +34,14 @@ const { change, changeDir, hooksDir, waves, useAgentTypes } = args
 const agentsDir = args.agentsDir || '.claude/agents'
 const branch = args.branch || null
 const deps = args.deps || {}   // 可选：{ S3: ["S1","S2"], ... }；依赖已 blocked 的切片不再派发，直接记 blocked
+const changeName = changeDir.split('/').filter(Boolean).pop()
+
+// ---- 轮次档：按 args.turns 给每片选执行体定义；CAPS 必须等于两份定义文件 frontmatter 的 maxTurns
+const turns = args.turns || {}
+const CAPS = { standard: 40, large: 80 }
+const TIER_NAME = { standard: '标准档', large: '大片档' }
+const tierOf = (s) => (turns[s] === 'large' ? 'large' : 'standard')
+const execDef = (s) => (tierOf(s) === 'large' ? 'slice-executor-large' : 'slice-executor')
 
 // ---- 模型路由（铁律：按角色显式声明，缺一即拒绝起飞）
 const models = args.models || {}
@@ -46,11 +55,11 @@ const typed = (name) => (useAgentTypes === false ? {} : { agentType: name })
 // agent 定义未注册（useAgentTypes=false）时，纪律仍以定义文件为准：让默认 subagent 先读它再干活
 const rules = (name) => (useAgentTypes === false ? `先 Read ${agentsDir}/${name}.md，严格按它的纪律执行（它就是你的角色定义）。\n` : '')
 const gateCmd = (s) => `python3 ${hooksDir}/slice-gate.py gate ${s} --change-dir ${changeDir}`
-// base：重派时传上一轮 gate JSON 的 base，让 start 在接续 commit 后仍以同一基准算区间（start 对同片幂等）
+// cont：重派时传上一轮 gate JSON 的 commit，start --continue 由脚本把上一轮的全部提交接到当前 HEAD；区间起点由脚本按 change 分支算
 // resume：上一轮执行体未返回时，start 带 --resume-checkpoint 把 hook 快照的半成品恢复为未提交改动
 // branch：start 校验 HEAD 是 change 分支的后代（基点校验），不是则非 0 退出并打印 G0 JSON
-const startCmd = (s, base, resume) => `python3 ${hooksDir}/slice-gate.py start ${s} --change-dir ${changeDir}`
-  + (base ? ` --base ${base}` : '') + (resume ? ' --resume-checkpoint' : '') + (branch ? ` --expect-branch ${branch}` : '')
+const startCmd = (s, cont, resume) => `python3 ${hooksDir}/slice-gate.py start ${s} --change-dir ${changeDir}`
+  + (cont ? ` --continue ${cont}` : '') + (resume ? ' --resume-checkpoint' : '') + (branch ? ` --expect-branch ${branch}` : '')
 // 执行体未返回（多为撞 maxTurns）时的重派标记：没有门禁结论，也没有 commit / base 可接
 const NO_RETURN = { noReturn: true }
 
@@ -64,7 +73,7 @@ const GATE = {
     failed: { type: 'array', items: { type: 'string' } },
     warnings: { type: 'array', items: { type: 'string' } },
     summary: { type: 'string' },
-    // 本轮 start 记录的区间起点 sha；重派时原样回传给 start --base，重试才能接着上一轮的 commit 与基准继续
+    // 本轮 start 记录的区间起点 sha；只作留档，重派不再回传（start --continue 由脚本按 change 分支算区间起点）
     base: { type: 'string' },
     // 合规天花板行 [[相对路径, 行号（整数）, 限制, 升级路径], ...]：门禁在临时 worktree 里算出，靠这个字段带回给 record 写进飞行记录
     // 内层元素无类型约束，执行体可能转写出非整数行号 → 消费侧 slice-gate.py 的 ceiling_rows_from_json 负责宽容化，不在这里 fail
@@ -104,16 +113,14 @@ const MERGE = {
 }
 
 const executorPrompt = (s, retryOf) => [
-  rules('slice-executor') + `你在仓库根（cwd）。为 OpenSpec change \`${change}\` 实现切片 ${s}。`,
-  // 重派：接着上一轮的 commit 继续（临时 worktree 可能是新开的，HEAD 不是上一轮 commit 就 cherry-pick 它）；首轮无第零步，基点由 start --expect-branch 校验
-  retryOf && retryOf.commit
-    ? `第零步：运行 \`git rev-parse HEAD\`，若不等于上一轮的 commit ${retryOf.commit}，运行 \`git cherry-pick ${retryOf.commit}\` 把它接上；冲突则 \`git cherry-pick --abort\`，不做任何改动，直接返回 {"slice":"${s}","ok":false,"commit":"<实际 HEAD>","failed":["G0 base: cherry-pick ${retryOf.commit} 冲突"]}。`
-    : '',
+  rules(execDef(s)) + `你在仓库根（cwd）。为 OpenSpec change \`${change}\` 实现切片 ${s}。`,
   `切片包：${changeDir}/slices/${s}.md（scenario、owns、verify、接口摘要都在里面，先读它）。`,
+  // 重派：start --continue 由脚本接上一轮的全部提交（临时 worktree 可能是新开的）；hooks 未升级时回退为手工 cherry-pick；首轮基点由 start --expect-branch 校验
   retryOf && retryOf.noReturn
     ? `第一步运行 \`${startCmd(s, null, true)}\`（\`--resume-checkpoint\` 从快照恢复上一轮半成品）。`
-    : retryOf && retryOf.base
-      ? `第一步运行 \`${startCmd(s, retryOf.base)}\`（\`--base\` 是上一轮的区间起点，start 对同片幂等；不要不带 --base 重跑）。`
+    : retryOf && retryOf.commit
+      ? `第一步运行 \`${startCmd(s, retryOf.commit)}\`（\`--continue\` 由脚本把上一轮的全部提交接到当前 HEAD，输出里的 continued 写明接了几个）。\n` +
+        `start 报 unrecognized arguments: --continue（hooks 未升级）→ 运行 \`git rev-parse HEAD\`，不等于 ${retryOf.commit} 就 \`git cherry-pick ${retryOf.commit}\`（冲突则 \`git cherry-pick --abort\` 并返回 failed 为 ["G0 base: cherry-pick ${retryOf.commit} 冲突"] 的 JSON），再运行不带 --continue 的 start。`
       : `第一步运行 \`${startCmd(s)}\`。`,
   'start 非 0 退出（G0 基点校验未通过）→ 不做任何改动，把它打印的 JSON 原样作为最终输出。',
   // 上一轮无产出（start 以 G0 拒绝，commit 为空）→ 走首轮分支从头实现，而不是「只修门禁项」
@@ -150,13 +157,17 @@ for (const [i, allWave] of waves.entries()) {
   const iso = 'worktree'
   // 执行体没交回结构化结果时 agent 调用会抛错（运行时实测），与返回空值同样按未返回处理
   const run = (s, retryOf) => agent(executorPrompt(s, retryOf),
-    { label: retryOf ? `${s}:retry` : s, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+    { label: retryOf ? `${s}:retry` : s, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed(execDef(s)) })
     .catch(() => null)
   const done = await parallel(wave.map((s) => () =>
     run(s).then((r) => (!r || !r.ok) ? run(s, r || NO_RETURN) : r)))
   for (const [k, r] of done.entries()) {
     const s = wave[k]
-    if (!r) { blocked.push({ slice: s, kind: 'infra', reason: 'agent 未返回（已重派一次）' }); continue }
+    if (!r) {
+      const t = tierOf(s)
+      blocked.push({ slice: s, kind: 'infra', reason: `执行体未返回（已重派一次）：${TIER_NAME[t]}上限 ${CAPS[t]} 轮；半成品快照在 refs/flight/${changeName}/${s}，重新起飞的首轮会清掉它，要保留先在新 worktree 里 start ${s} --resume-checkpoint` })
+      continue
+    }
     results.push(r)
     if (!r.ok) { blocked.push({ slice: s, kind: 'gate', reason: r.failed.join('; ') }); continue }
   }

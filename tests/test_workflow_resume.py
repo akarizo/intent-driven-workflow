@@ -1,18 +1,15 @@
 """工作流的接续与轮次档（scenario: slice-continue#workflow-retry-continues-via-start、#executor-contract-describes-continue；
 turn-tiers#workflow-picks-definition-by-tier、#large-definition-is-thin、#noreturn-blocked-reason-names-tier-and-snapshot、
 #large-executor-is-gated-and-audited，共 6 条）。
-骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
+S4 已解锁（骨架标记已去）。"""
 import json
 import re
-
-import pytest
 
 from conftest import load_hook, run_hook
 from test_agents_workflow import (AGENTS, TAIL_REPLIES, exec_prompts, flight_args, frontmatter, gate_json, run_workflow,
                                   start_cmds)
 from test_approval_gate import change_dir, human, transcript
 
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S4 未实现")
 LARGE = AGENTS / "slice-executor-large.md"
 
 
@@ -20,7 +17,6 @@ def exec_calls(out):
     return {c["opts"]["label"]: c for c in out["calls"] if re.fullmatch(r"S\d+(:retry)?", c["opts"]["label"])}
 
 
-@PENDING
 def test_workflow_retry_continues_via_start(tmp_path):
     # Given: S1 首轮门禁红（带 commit 与 base），重派后绿；S2、S3 一次绿
     replies = [
@@ -42,7 +38,6 @@ def test_workflow_retry_continues_via_start(tmp_path):
     assert "只修这些门禁项" in prompt
 
 
-@PENDING
 def test_workflow_picks_definition_by_tier(tmp_path):
     # Given: args.turns 把 S2 标为大片档；S2 首轮门禁红、重派后绿；分别在 agent 类型已注册与未注册两种配置下起飞
     replies = [
@@ -68,7 +63,6 @@ def test_workflow_picks_definition_by_tier(tmp_path):
     assert all(v["opts"].get("agentType") == "slice-executor" for v in plain.values()), plain
 
 
-@PENDING
 def test_large_definition_is_thin():
     # Given: template/.claude/agents/ 下的两份执行体定义
     std_fm, _ = frontmatter(AGENTS / "slice-executor.md")
@@ -88,7 +82,6 @@ def test_large_definition_is_thin():
     assert "只写 owns 内文件" not in body
 
 
-@PENDING
 def test_noreturn_blocked_reason_names_tier_and_snapshot(tmp_path):
     # Given: S1 是大片档、S2 是标准档；两片的首轮与重派都没有交回结果
     replies = [["^S3$", gate_json("S3")]] + TAIL_REPLIES
@@ -107,7 +100,6 @@ def test_noreturn_blocked_reason_names_tier_and_snapshot(tmp_path):
         assert "refs/flight/c/" + sid in reason, reason
 
 
-@PENDING
 def test_large_executor_is_gated_and_audited(tmp_path):
     # Given: 回退路径用 Agent 工具派 slice-executor-large，prompt 指向某个 change；转录里没有人类批准
     d = change_dir(tmp_path)
@@ -127,7 +119,6 @@ def test_large_executor_is_gated_and_audited(tmp_path):
     assert roles.get("slice-executor-large") == "executor" and roles.get("slice-executor") == "executor"
 
 
-@PENDING
 def test_executor_contract_describes_continue():
     # Given: template/.claude/agents/slice-executor.md
     fm, body = frontmatter(AGENTS / "slice-executor.md")
