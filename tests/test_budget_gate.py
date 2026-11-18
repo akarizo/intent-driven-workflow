@@ -7,16 +7,12 @@ import shutil
 import subprocess
 import sys
 
-import pytest
-
 from conftest import HOOKS, commit_all, git, run_hook
 from final_helpers import change_and_commit, final, gate_json, latest_anchor
 from lock_helpers import Locks
 from test_ledger_baseline import read_ledger
 from test_tiers_gate import HOOKS_OK, PURE, setup_tiers
 from test_tiers_parts_gate import setup_parts
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S4 未实现")
 
 H_FILE = "tests/integration/hooks/test_h.py"
 SLOW_FILE = "tests/integration/hooks/test_slow.py"
@@ -61,7 +57,6 @@ def texts(*groups):
     return [t for g in groups for t in (g or [])]
 
 
-@PENDING
 def test_final_red_on_new_slow_integration_case(git_repo):
     # Given: 区域 hooks 单条上限 0.4 秒，基线已跑且通过；之后提交了一个新的区域测试文件，里面一条用例睡 1 秒
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {H_FILE: HOOKS_OK})
@@ -79,7 +74,6 @@ def test_final_red_on_new_slow_integration_case(git_repo):
     assert out["tests"]["budget"]["new_n"] == 1, out["tests"]
 
 
-@PENDING
 def test_debt_keeps_baseline_and_final_green(git_repo):
     # Given: 区域 hooks 单条上限 0.4 秒，区域里已有一条睡 1 秒的用例
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {H_FILE: HOOKS_OK, SLOW_FILE: SLOW})
@@ -97,7 +91,6 @@ def test_debt_keeps_baseline_and_final_green(git_repo):
     assert (out["tests"]["budget"]["debt_n"], out["tests"]["budget"]["new_n"]) == (1, 0), out["tests"]
 
 
-@PENDING
 def test_baseline_red_on_unit_total_over_budget(git_repo):
     # Given: 单元层总量预算 0.05 秒，单元层有一条睡 0.3 秒的纯函数用例
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": NAP}, {H_FILE: HOOKS_OK})
@@ -115,7 +108,6 @@ def test_baseline_red_on_unit_total_over_budget(git_repo):
     assert p2.returncode == 0, p2.stdout + p2.stderr
 
 
-@PENDING
 def test_contended_run_downgrades_budget_verdicts(git_repo, tmp_path):
     # Given: 单元层总量预算 0.05 秒、一条睡 0.3 秒的用例；另一个进程持有独占锁且已超过它的持有上限
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": NAP}, {H_FILE: HOOKS_OK})
@@ -137,7 +129,6 @@ def test_contended_run_downgrades_budget_verdicts(git_repo, tmp_path):
     assert any("G14" in w and "降为警告" in w for w in bl.get("warnings") or []), bl.get("warnings")
 
 
-@PENDING
 def test_budget_failure_does_not_fail_gate(git_repo, tmp_path):
     # Given: 一份不含 test-ledger.py 的 hooks 副本；区域 hooks 单条上限 0.4 秒，基线已用副本跑过，之后新增一条睡 1 秒的区域用例
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {H_FILE: HOOKS_OK})
@@ -159,7 +150,6 @@ def test_budget_failure_does_not_fail_gate(git_repo, tmp_path):
     assert any(w.startswith("预算未判") for w in out["warnings"]), out["warnings"]
 
 
-@PENDING
 def test_final_reports_budget_changes(git_repo):
     # Given: 区域 hooks 单条上限 30 秒，基线已跑；之后把它改成 300 秒并提交
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {H_FILE: HOOKS_OK})
@@ -178,7 +168,6 @@ def test_final_reports_budget_changes(git_repo):
     assert out["tests"]["budget"]["changes"], out["tests"]
 
 
-@PENDING
 def test_parts_unit_total_judged_per_part(git_repo):
     # Given: 部件形态：部件 py 的单元层总量预算 0.05 秒（它有一条睡 0.3 秒的纯函数用例），部件 sh 没写预算
     d = setup_parts(git_repo, py_tests=NAP)
@@ -194,7 +183,6 @@ def test_parts_unit_total_judged_per_part(git_repo):
     assert not any("G14" in r and "部件 sh" in r for r in reasons), reasons
 
 
-@PENDING
 def test_region_only_rerun_keeps_unit_cases(git_repo):
     # Given: 有分层文件，基线已跑；之后只提交了区域 hooks 的一个新测试文件
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": PURE}, {H_FILE: HOOKS_OK})

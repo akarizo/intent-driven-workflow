@@ -33,6 +33,7 @@
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
 #                                              分层文件合法时：单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒），已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
+#                                              分层文件写了 budget 时落账之后判预算（G13 集成层新增超线 / G14 层总量；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 tests.budget 与 delta.json，附相对基线的预算变更
 #   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
@@ -45,6 +46,7 @@
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
 #                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
+#                                              分层文件写了 budget 时落账之后判预算（G14 层总量红 → 基线红、不动 test_ok；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 ledger.budget
 #                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒；红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
@@ -1560,14 +1562,73 @@ def _lock_expect_sec(baseline, gate):
     return None
 
 
+TIME_VERDICT_PREFIXES = ("G10 slow unit test", "G13 slow integration test", "G14 tier budget")
+
+
 def _time_verdicts(failed, warnings, lock_info):
-    """lock_info["state"] == "timeout" 时，把以 "G10 slow unit test" 开头的失败项挪进 warnings，
+    """lock_info["state"] == "timeout" 时，把以 TIME_VERDICT_PREFIXES 任一开头的失败项挪进 warnings，
     原文保留并在末尾加「（排队放弃后未持锁，时间类判定降为警告：<why>）」；其他状态原样返回。"""
     if not isinstance(lock_info, dict) or lock_info.get("state") != "timeout":
         return failed, warnings
     tag = "（排队放弃后未持锁，时间类判定降为警告：%s）" % (lock_info.get("why") or "")
-    slow = [f for f in failed if f.startswith("G10 slow unit test")]
+    slow = [f for f in failed if f.startswith(TIME_VERDICT_PREFIXES)]
     return [f for f in failed if f not in slow], list(warnings) + [f + tag for f in slow]
+
+
+def _tiers_has_budget(tiers):
+    """分层文件里任一部件的单元层或区域写了 budget 键。"""
+    return any("budget" in part["unit"] or any("budget" in reg for reg in (part.get("regions") or {}).values())
+               for part in tier_parts(tiers).values())
+
+
+def _tiers_at(root, commit, tiers_file):
+    """commit 时的分层文件（tiers_file 为绝对路径）；当时没有、解析不了或形状不合法 → None。"""
+    rel = os.path.relpath(os.path.realpath(tiers_file), os.path.realpath(root)).replace(os.sep, "/")
+    try:
+        raw = git(root, "show", "%s:%s" % (commit, rel))
+    except RuntimeError:
+        return None
+    with tempfile.TemporaryDirectory(prefix="flight-tiers-") as tmp:  # 复用 _load_tiers_file 的形状校验
+        path = os.path.join(tmp, TIER_FILE)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(raw)
+        return _load_tiers_file(path)[0]
+
+
+def _budget_judge(root, name, tiers, led, phase, lock_info, base=None, base_commit=None, tiers_file=None):
+    """预算判定（tier-budgets D5 / D6 / D7）→ (failed, warnings, 摘要 | None)；已过 _time_verdicts。
+    没写任何 budget → ([], [], None)，不碰账本模块；final 给了 base_commit 与 tiers_file 时附相对基线的预算变更。
+    任何异常 → ([], ["预算未判：<原因>"], None)，不改结论。"""
+    try:
+        if tiers is None or not _tiers_has_budget(tiers):
+            return [], [], None
+        mod = _ledger_mod()
+        if led is None or isinstance(mod, str):
+            return [], ["预算未判：测试账本不可用（%s）" % (mod if isinstance(mod, str) else "账本未写")], None
+        budgets = tier_budgets(tiers)
+        res = mod.budget(led, base, budgets, budget_scope_of(tiers), allow_view(tiers.get("slow_allow") or {}), phase)
+        summary = {k: v for k, v in res.items() if k not in ("failed", "warnings")}
+        warnings = list(res.get("warnings") or [])
+        if phase == "final" and base_commit and tiers_file:
+            old = _tiers_at(root, base_commit, tiers_file)
+            if old is not None:
+                lines = mod.budget_changes(tier_budgets(old), budgets, old.get("slow_allow") or {},
+                                           tiers.get("slow_allow") or {})
+                if lines:
+                    warnings.append("预算变更（相对基线 %s）：%s" % (str(base_commit)[:10], "；".join(lines)))
+                summary["changes"] = lines
+        failed, warnings = _time_verdicts(list(res.get("failed") or []), warnings, lock_info)
+        return failed, warnings, summary
+    except Exception as e:
+        return [], ["预算未判：%s: %s" % (type(e).__name__, e)], None
+
+
+def _final_budget(root, name, change_dir, tiers, led, baseline, lock_info):
+    """final 落账之后的预算判定：基线账本作 base，基线 commit 上的分层文件作预算变更的比较对象。"""
+    lmod = _ledger_mod()
+    base = None if isinstance(lmod, str) else lmod.load(root, name, "baseline")
+    return _budget_judge(root, name, tiers, led, "final", lock_info, base, (baseline or {}).get("commit"),
+                         tiers_file=_tiers_path(change_dir))
 
 
 def part_tier_verdict(top, name, part, res, allow):
@@ -4269,7 +4330,7 @@ def cmd_final(args):
                 warnings.append(w2)
     inc = None
     # 收口账本（test-ledger design D6 / D9）：只在本次确实跑了套件时落账；lrerun 与对账共用
-    led, lrerun = None, None
+    led, lrerun, bsum = None, None, None  # bsum：预算摘要（tier-budgets D5），只在落账之后判
     lmeta = {"commit": head, "phase": "final", "mode": None, "lock": hold.info.get("state")}
     test_sec, check_secs = None, {}  # gate.test 三选一分支的秒数（不含区域）与各项检查的秒数（design D8）
     sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
@@ -4290,6 +4351,9 @@ def cmd_final(args):
             inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
             led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
             warnings.extend([lwarn] if lwarn else [])
+            f, w, bsum = _final_budget(root, name, args.change_dir, tiers, led, baseline, hold.info)
+            failed.extend(f)
+            warnings.extend(w)
         elif not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
         else:
@@ -4447,7 +4511,7 @@ def cmd_final(args):
                        "inherited_tests": inherited}
                 if tiers is not None:
                     inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
-                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
+                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes, ran=bool(run_sel))
                 anchor_part["deps_kind"] = None if d or not run_sel else "incomplete"
                 nodes_ok = _anchor_has_nodes(anchor) and (bool(d) or not run_sel)
                 tres = {"mode": "incremental", "fails": fails, "rerun_nodes": _nodes_lower(d.get("nodes")) if d else None,
@@ -4544,6 +4608,9 @@ def cmd_final(args):
                                             universe=(anchor_part["nodes"] or None) if nodes_ok and anchor_part else None,
                                             source=lsrc, rerun_files=lrerun)
                 warnings.extend([lwarn] if lwarn else [])
+                f, w, bsum = _final_budget(root, name, args.change_dir, tiers, led, baseline, hold.info)
+                failed.extend(f)
+                warnings.extend(w)
             if cur_snap is not None and anchor_part is not None:
                 # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
@@ -4614,9 +4681,13 @@ def cmd_final(args):
     if led is not None:  # 对账（test-ledger design D7 / D8 / D10）：只报告，不影响 ok / failed / 退出码
         lmod = _ledger_mod()
         result["tests"] = dict(lmod.summary(led), delta=None, why=None)
+        if bsum is not None:
+            result["tests"]["budget"] = bsum
         try:
             d, dwhy = lmod.delta(lmod.load(root, name, "baseline"), led, lrerun, root)
             if d is not None:
+                if bsum is not None:
+                    d["budget"] = bsum
                 lmod.save(root, name, "delta", d)
                 segs.append(lmod.segment(d))
             result["tests"].update(delta=d, why=dwhy)
@@ -4928,6 +4999,12 @@ def cmd_baseline(args):
         warnings.append(lwarn)
     if led is not None:
         bl["ledger"] = lmod.summary(led)
+    # 预算判定（tier-budgets D5）：在 test_ok 之后，G14 只让基线红、不动 test_ok；锚点 measured 随 reasons 一并变
+    f14, w14, bsum = _budget_judge(root, name, tiers, led, "baseline", hold.info)
+    reasons.extend(f14)
+    warnings.extend(w14)
+    if bsum is not None and "ledger" in bl:
+        bl["ledger"]["budget"] = bsum
     if hit is None and not parts:
         measured = adeps is not None and not deps_un and not deps_whys and not reasons
         if deps_un:
@@ -6365,9 +6442,10 @@ def _anchor_has_nodes(anchor):
     return isinstance(nodes, dict) and (bool(nodes) or not anchor.get("tests"))
 
 
-def _anchor_forward(root, old, sel, d, fails, outcomes):
+def _anchor_forward(root, old, sel, d, fails, outcomes, ran=None):
     """增量后的新锚点依赖部分：重跑文件（与已删除的文件）换成本次结果，其余照抄旧锚点。
-    nodes 同口径：旧锚点带 nodes 且本次依赖图测到（或无重跑）时，未重跑文件的旧结局 ∪ 本次结局；否则 {}。"""
+    nodes 同口径：旧锚点带 nodes 且本次依赖图测到（或无重跑）时，未重跑文件的旧结局 ∪ 本次结局；否则 {}。
+    ran：本次是否真的起了 pytest（缺省按 sel 非空）；只重跑区域时 sel 含区域文件而 ran 为假，nodes 照样沿用。"""
     known = set(old.get("files") or []) | set(old.get("deps") or {}) | set(old.get("tests") or {})
     drop = set(sel) | {f for f in known if not os.path.isfile(os.path.join(root, f))}
     deps = {f: v for f, v in (old.get("deps") or {}).items() if f not in drop}
@@ -6375,7 +6453,7 @@ def _anchor_forward(root, old, sel, d, fails, outcomes):
     tests = {f: n for f, n in (old.get("tests") or {}).items() if f not in drop}
     tests.update(_node_counts(n for n, _ in outcomes))
     nodes = {}
-    if _anchor_has_nodes(old) and (d or not sel):
+    if _anchor_has_nodes(old) and (d or not (sel if ran is None else ran)):
         nodes = {n: o for n, o in old["nodes"].items() if str(n).split("::", 1)[0] not in drop}
         nodes.update(_nodes_lower(d.get("nodes")))
     return {
