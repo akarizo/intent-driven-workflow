@@ -1,11 +1,7 @@
 """test-ledger.py 的预算判定（集成层棘轮 G13、层总量 G14）、预算变更比较、「测试变更」的预算段、对账噪声项收窄
 （scenario: tier-budgets#new-integration-case-over-line-is-red 等 11 条）。
 骨架：strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。只调纯函数，不碰真实文件、不起子进程。"""
-import pytest
-
 from conftest import load_hook
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S1 未实现")
 
 H = "tests/integration/hooks/test_h.py::"
 OLD, NEW, BIG = H + "test_old", H + "test_new", H + "test_big"
@@ -45,7 +41,6 @@ def allowed(limit=None, expired=False):
             "approved": "2026-11-18T03:12:00Z · 放行 test_big", "reason": "读 40MB 真实样本"}
 
 
-@PENDING
 def test_new_integration_case_over_line_is_red():
     # Given: 区域 hooks 单条上限 30 秒；收口账本里 test_new 实测 42.0 秒，基线账本里没有它
     tl = load_hook("test-ledger")
@@ -61,7 +56,6 @@ def test_new_integration_case_over_line_is_red():
     assert (b["new_n"], b["judged"]) == (1, True), b
 
 
-@PENDING
 def test_existing_cases_over_line_only_warn():
     # Given: 基线账本里 test_debt 50 秒、test_drift 20 秒；收口账本里两条都是实测，分别 55 秒与 35 秒
     tl = load_hook("test-ledger")
@@ -78,7 +72,6 @@ def test_existing_cases_over_line_only_warn():
     assert any("未判红" in w and DRIFT in w for w in b["warnings"]), b["warnings"]
 
 
-@PENDING
 def test_unmeasured_and_unbudgeted_cases_not_judged():
     # Given: 三条不在基线的 90 秒用例：hooks 里沿用的、hooks 里实测但无耗时的、没写单条上限的区域 docs 里实测的
     tl = load_hook("test-ledger")
@@ -95,7 +88,6 @@ def test_unmeasured_and_unbudgeted_cases_not_judged():
     assert (b["new_n"], b["debt_n"], b["cross_n"]) == (0, 0, 0), b
 
 
-@PENDING
 def test_allow_entry_moves_integration_case_line():
     # Given: 区域 hooks 单条上限 30 秒；新增用例 test_big 实测 74 秒；放行名单里有它
     tl = load_hook("test-ledger")
@@ -120,7 +112,6 @@ def test_allow_entry_moves_integration_case_line():
     assert bj["failed"] == [] and bj["allowed_n"] == 1, bj
 
 
-@PENDING
 def test_missing_baseline_ledger_degrades_to_warning():
     # Given: 区域 hooks 单条上限 30 秒；收口账本里一条实测 42 秒的用例；基线账本缺失，或不完整
     tl = load_hook("test-ledger")
@@ -137,7 +128,6 @@ def test_missing_baseline_ledger_degrades_to_warning():
         assert any("未判" in w and "hooks" in w for w in b["warnings"]), b["warnings"]
 
 
-@PENDING
 def test_unit_total_over_budget_is_red():
     # Given: 单元层总量预算 10 秒；账本里单元层 30 条各 0.5 秒，其中 20 条是沿用的
     tl = load_hook("test-ledger")
@@ -155,7 +145,6 @@ def test_unit_total_over_budget_is_red():
     assert under["failed"] == [] and under["totals"]["unit"]["over"] is False, under
 
 
-@PENDING
 def test_region_total_over_budget_only_warns():
     # Given: 区域 hooks 总量预算 100 秒；收口账本里 4 条共 130 秒，其中 12 秒的那条不在基线账本里
     tl = load_hook("test-ledger")
@@ -174,7 +163,6 @@ def test_region_total_over_budget_only_warns():
     assert (b["totals"]["hooks"]["over"], b["totals"]["hooks"]["added_sec"]) == (True, 12.0), b["totals"]
 
 
-@PENDING
 def test_total_not_judged_when_seconds_missing():
     # Given: 单元层总量预算 1 秒；10 条用例里 2 条无耗时、其余合计 5 秒；另一份账本耗时齐全但不完整
     tl = load_hook("test-ledger")
@@ -192,7 +180,6 @@ def test_total_not_judged_when_seconds_missing():
         assert any(w.startswith("G14") and "未判" in w for w in b["warnings"]), b["warnings"]
 
 
-@PENDING
 def test_render_lists_budget_section():
     # Given: 一份对账结果，预算段里有新增超线 1 条、老债 2 条、区域合计超预算、1 条已过期的放行、一行预算变更
     tl = load_hook("test-ledger")
@@ -220,7 +207,6 @@ def test_render_lists_budget_section():
     assert not any(w in plain for w in ("新增超线", "老债", "已过期", "预算变更")), plain
 
 
-@PENDING
 def test_budget_changes_are_listed():
     # Given: 单元层单条上限 3 → 10、区域 hooks 总量预算 300 → 取消；放行新增一条，另一条的上限 60 → 90 且理由也改了
     tl = load_hook("test-ledger")
@@ -243,7 +229,6 @@ def test_budget_changes_are_listed():
     assert tl.budget_changes(old_b, old_b, old_a, {b1: dict(old_a[b1], reason="换个说法")}) == []
 
 
-@PENDING
 def test_noisy_delta_items_skip_region_cases():
     # Given: 单元层用例 1.0 → 3.0 秒，区域 hooks 的用例 10 → 40 秒，都是实测
     tl = load_hook("test-ledger")
