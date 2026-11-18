@@ -1,0 +1,184 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ]
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "test-ledger.py：账本合成（实测 / 沿用 / 层 / 两种用例 id）、存取（git common dir，按 change，保留 30 个）与 show 子命令",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/test-ledger.py",
+        "tests/test_ledger_core.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_ledger_core.py",
+      "scenarios": [
+        "test-ledger#build-marks-measured-and-inherited",
+        "test-ledger#build-keeps-unrerun-cases-from-source-ledger",
+        "test-ledger#build-attributes-tiers-per-case",
+        "test-ledger#ledger-stored-per-change-in-git-common-dir",
+        "test-ledger#show-lists-cases-by-tier-and-seconds"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "slice-gate.py 采集：依赖图插件记逐用例耗时、junit 兜底、增量重跑恒取耗时、run_part 上报；进程内观测表",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_ledger_capture.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_ledger_capture.py tests/test_final_deps.py tests/test_final_guard.py tests/test_final_nodes_diff.py tests/test_gate_test_result.py tests/test_tiers_probe.py tests/test_tiers_parts_runner.py tests/test_tiers_timing.py tests/test_runner_contract.py tests/test_final_incremental.py tests/test_baseline_anchor_reuse.py tests/test_slice_gate.py tests/test_final_tests_only.py",
+      "scenarios": [
+        "test-ledger#deps-run-records-case-seconds",
+        "test-ledger#junit-fallback-when-deps-unmeasured",
+        "test-ledger#incremental-rerun-records-seconds",
+        "test-ledger#part-adapter-run-is-observed"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "test-ledger.py：对账（新增 / 删除 / 未重测 / 变慢 / 各层前后）、时间线片段、Markdown、建议行与 delta 子命令",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/hooks/test-ledger.py",
+        "tests/test_ledger_delta.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_ledger_delta.py tests/test_ledger_core.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py",
+      "scenarios": [
+        "test-ledger#delta-counts-added-removed-slower",
+        "test-ledger#delta-keeps-unrerun-cases-out-of-removed",
+        "test-ledger#delta-handles-missing-or-junit-baseline",
+        "test-ledger#segment-and-markdown-are-bounded",
+        "test-ledger#advice-lines-follow-fixed-rules"
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "slice-gate.py baseline 落账：写基线账本、gate-baseline.json 加 ledger 摘要、锚点带 secs；账本失败只留警告",
+      "packet": "slices/S4.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_ledger_baseline.py"
+      ],
+      "deps": [
+        "S1",
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_ledger_baseline.py tests/test_ledger_capture.py tests/test_ledger_core.py tests/test_slice_gate_baseline_preflight.py tests/test_baseline_incremental.py tests/test_baseline_anchor_reuse.py tests/test_baseline_pool.py tests/test_baseline_component_reuse.py tests/test_tiers_gate.py tests/test_tiers_parts_gate.py tests/test_gate_lock.py tests/test_plan_hygiene_baseline.py tests/test_runner_contract.py tests/test_gate_checks_baseline.py tests/test_inert_paths.py",
+      "scenarios": [
+        "test-ledger#full-baseline-writes-ledger-and-summary",
+        "test-ledger#anchor-baseline-inherits-seconds",
+        "test-ledger#reused-baseline-keeps-source-ledger",
+        "test-ledger#tiered-baseline-attributes-tiers",
+        "test-ledger#ledger-failure-does-not-fail-baseline"
+      ]
+    },
+    {
+      "id": "S5",
+      "title": "slice-gate.py final 落账与对账输出：输出 JSON 的 tests、时间线片段、delta.json、ship --markdown 的「测试变更」；部件形态落账",
+      "packet": "slices/S5.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_ledger_final.py",
+        "tests/test_gate_checks_baseline.py"
+      ],
+      "deps": [
+        "S3",
+        "S4"
+      ],
+      "verify": "python3 -m pytest -q tests/test_ledger_final.py tests/test_ledger_baseline.py tests/test_ledger_delta.py tests/test_gate_checks_baseline.py tests/test_ship_verdict.py tests/test_ship_forecast.py tests/test_slice_gate_final.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_final_impacted.py tests/test_final_tiers.py tests/test_gate_cost_note.py tests/test_gate_test_result.py tests/test_tiers_parts_gate.py tests/test_gate_lock.py tests/test_flight_doctor_cost_lock.py tests/test_final_tests_only.py tests/test_inert_paths.py",
+      "scenarios": [
+        "test-ledger#final-full-reports-test-delta",
+        "test-ledger#incremental-final-marks-inherited-cases",
+        "test-ledger#tests-only-final-inherits-previous-final-ledger",
+        "test-ledger#ship-markdown-appends-test-delta-when-fresh",
+        "test-ledger#ledger-failure-does-not-fail-final",
+        "test-ledger#parts-runs-write-ledger"
+      ]
+    },
+    {
+      "id": "S6",
+      "title": "flight-doctor.py doctor 新增 [tests]：最近一份账本的各层与最慢用例、最近几个 change 的测试变更、没有账本时的说明",
+      "packet": "slices/S6.md",
+      "owns": [
+        "template/.claude/hooks/flight-doctor.py",
+        "tests/test_flight_doctor_tests.py"
+      ],
+      "deps": [
+        "S3"
+      ],
+      "verify": "python3 -m pytest -q tests/test_flight_doctor_tests.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_surfaces.py tests/test_inert_reconcile.py",
+      "scenarios": [
+        "test-ledger#doctor-tests-lists-tiers-and-slowest",
+        "test-ledger#doctor-tests-lists-recent-change-deltas",
+        "test-ledger#doctor-tests-explains-missing-ledger"
+      ]
+    },
+    {
+      "id": "S7",
+      "title": "文档：运行器契约新增第 9 节「测试账本」；test-tiers.md、pr-ship.md、README 各补说明",
+      "packet": "slices/S7.md",
+      "owns": [
+        "template/.claude/flight-runner-contract.md",
+        "template/.claude/commands/test-tiers.md",
+        "template/.claude/commands/pr-ship.md",
+        "README.md",
+        "tests/test_ledger_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_ledger_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_template_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_ship_memory_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_baseline_incremental_docs.py tests/test_ship_rerun_docs.py",
+      "scenarios": [
+        "test-ledger#docs-describe-test-ledger",
+        "test-ledger#pr-ship-doc-mentions-test-delta-section"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "test-ledger#build-marks-measured-and-inherited": "tests/test_ledger_core.py::test_build_marks_measured_and_inherited",
+    "test-ledger#build-keeps-unrerun-cases-from-source-ledger": "tests/test_ledger_core.py::test_build_keeps_unrerun_cases_from_source_ledger",
+    "test-ledger#build-attributes-tiers-per-case": "tests/test_ledger_core.py::test_build_attributes_tiers_per_case",
+    "test-ledger#ledger-stored-per-change-in-git-common-dir": "tests/test_ledger_core.py::test_ledger_stored_per_change_in_git_common_dir",
+    "test-ledger#show-lists-cases-by-tier-and-seconds": "tests/test_ledger_core.py::test_show_lists_cases_by_tier_and_seconds",
+    "test-ledger#deps-run-records-case-seconds": "tests/test_ledger_capture.py::test_deps_run_records_case_seconds",
+    "test-ledger#junit-fallback-when-deps-unmeasured": "tests/test_ledger_capture.py::test_junit_fallback_when_deps_unmeasured",
+    "test-ledger#incremental-rerun-records-seconds": "tests/test_ledger_capture.py::test_incremental_rerun_records_seconds",
+    "test-ledger#part-adapter-run-is-observed": "tests/test_ledger_capture.py::test_part_adapter_run_is_observed",
+    "test-ledger#delta-counts-added-removed-slower": "tests/test_ledger_delta.py::test_delta_counts_added_removed_slower",
+    "test-ledger#delta-keeps-unrerun-cases-out-of-removed": "tests/test_ledger_delta.py::test_delta_keeps_unrerun_cases_out_of_removed",
+    "test-ledger#delta-handles-missing-or-junit-baseline": "tests/test_ledger_delta.py::test_delta_handles_missing_or_junit_baseline",
+    "test-ledger#segment-and-markdown-are-bounded": "tests/test_ledger_delta.py::test_segment_and_markdown_are_bounded",
+    "test-ledger#advice-lines-follow-fixed-rules": "tests/test_ledger_delta.py::test_advice_lines_follow_fixed_rules",
+    "test-ledger#full-baseline-writes-ledger-and-summary": "tests/test_ledger_baseline.py::test_full_baseline_writes_ledger_and_summary",
+    "test-ledger#anchor-baseline-inherits-seconds": "tests/test_ledger_baseline.py::test_anchor_baseline_inherits_seconds",
+    "test-ledger#reused-baseline-keeps-source-ledger": "tests/test_ledger_baseline.py::test_reused_baseline_keeps_source_ledger",
+    "test-ledger#tiered-baseline-attributes-tiers": "tests/test_ledger_baseline.py::test_tiered_baseline_attributes_tiers",
+    "test-ledger#ledger-failure-does-not-fail-baseline": "tests/test_ledger_baseline.py::test_ledger_failure_does_not_fail_baseline",
+    "test-ledger#final-full-reports-test-delta": "tests/test_ledger_final.py::test_final_full_reports_test_delta",
+    "test-ledger#incremental-final-marks-inherited-cases": "tests/test_ledger_final.py::test_incremental_final_marks_inherited_cases",
+    "test-ledger#ship-markdown-appends-test-delta-when-fresh": "tests/test_ledger_final.py::test_ship_markdown_appends_test_delta_when_fresh",
+    "test-ledger#ledger-failure-does-not-fail-final": "tests/test_ledger_final.py::test_ledger_failure_does_not_fail_final",
+    "test-ledger#parts-runs-write-ledger": "tests/test_ledger_final.py::test_parts_runs_write_ledger",
+    "test-ledger#doctor-tests-lists-tiers-and-slowest": "tests/test_flight_doctor_tests.py::test_doctor_tests_lists_tiers_and_slowest",
+    "test-ledger#doctor-tests-lists-recent-change-deltas": "tests/test_flight_doctor_tests.py::test_doctor_tests_lists_recent_change_deltas",
+    "test-ledger#doctor-tests-explains-missing-ledger": "tests/test_flight_doctor_tests.py::test_doctor_tests_explains_missing_ledger",
+    "test-ledger#docs-describe-test-ledger": "tests/test_ledger_docs.py::test_docs_describe_test_ledger",
+    "test-ledger#pr-ship-doc-mentions-test-delta-section": "tests/test_ledger_docs.py::test_pr_ship_doc_mentions_test_delta_section",
+    "test-ledger#tests-only-final-inherits-previous-final-ledger": "tests/test_ledger_final.py::test_tests_only_final_inherits_previous_final_ledger"
+  }
+}
