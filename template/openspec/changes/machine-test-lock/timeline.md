@@ -19,3 +19,4 @@
 2026-11-18T02:46:44Z	apply-done	blocked=0 blocking=0
 2026-11-18T02:47:00Z	apply-done	首飞 S3 规划漏钉键测试 blocked → 补计划重批 → 补飞 S3/S5/S6 绿
 2026-11-18T02:47:15Z	ship	ready
+2026-11-18T02:47:20Z	ship	ready
