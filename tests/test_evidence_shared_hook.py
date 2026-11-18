@@ -1,14 +1,10 @@
 """test-evidence.py 把切片留痕写进 git 共用目录（scenario: slice-evidence-shared#hook-writes-slice-rows-to-common-dir、
 #hook-leaves-heartbeat-on-any-bash、#hook-recognizes-verify-script-runs，共 3 条）。
-骨架：strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
+切片 S2 已实现，骨架标记已去。"""
 import json
-
-import pytest
 
 from conftest import run_hook, write
 from test_evidence_timeline import bash_event, marker_repo
-
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S2 未实现")
 
 
 def shared_log(git_repo, slice_id="S1", change="c"):
@@ -24,7 +20,6 @@ def fire(git_repo, cmd, stdout="", event="PostToolUse"):
     return run_hook("test-evidence", stdin=bash_event(cmd, stdout=stdout, event=event, cwd=git_repo), cwd=git_repo)
 
 
-@PENDING
 def test_hook_writes_slice_rows_to_common_dir(git_repo):
     # Given: 根目录有指向切片 S1 的标记；一条 pytest 通过的 Bash 事件，接着一条 pytest 失败的事件
     change = marker_repo(git_repo)
@@ -40,7 +35,6 @@ def test_hook_writes_slice_rows_to_common_dir(git_repo):
     assert not (change / "evidence.log").exists()
 
 
-@PENDING
 def test_hook_leaves_heartbeat_on_any_bash(git_repo):
     # Given: 根目录有指向切片 S1 的标记；一条不是测试运行的 Bash 事件（git status）
     change = marker_repo(git_repo)
@@ -54,7 +48,6 @@ def test_hook_leaves_heartbeat_on_any_bash(git_repo):
     assert not (change / "evidence.log").exists()
 
 
-@PENDING
 def test_hook_recognizes_verify_script_runs(git_repo):
     # Given: 切片 S1 的 verify 是包装脚本 `bash openspec/changes/c/verify/viewer.sh test src`，gate.test 是 `bash tools/full.sh`；
     #        命令文本里都没有 pytest / vitest 之类的运行器名字
