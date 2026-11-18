@@ -93,3 +93,31 @@ exec python3 -m pytest -q tests "${args[@]}"
 3. **对账**：baseline 之后提交一处改动，跑 `slice-gate.py final`（增量）留下结果文件副本，再在同一棵树上跑 `slice-gate.py final --full`，两份结果文件的 `nodes` 逐条一致才算接通。
 4. **声明 global / blind**：对账不一致的来源（依赖图看不见的配置、数据、插件目录）写进 `gate-scope.json` 的 `global`；只能靠每次重跑兜住的测试写进 `blind`；必要时调 `anchor_max_hops`。
 5. **检查改读结果文件**：`gate.checks` 的 `final` 命令改读 `$GATE_TEST_RESULT`，不再自己重跑测试或拼 junit。
+
+## 8. 全机测试锁
+
+同一台机器同一时刻只让一套全量测试在跑：门禁的测试运行先取锁再开跑，取不到就排队。
+
+- **是什么**：用户级目录（缺省 `~/.claude/flight-lock/`）下的一把读写锁，跨仓库、跨 worktree 共用；持有进程退出即释放。
+- **谁用哪种**：
+
+  | 方式 | 命令 |
+  |---|---|
+  | **独占** | `slice-gate.py baseline` · `slice-gate.py final` · `test-tiers.py run` / `probe` |
+  | **共享** | 切片 `slice-gate.py gate`（verify 到 G7） |
+
+  共享方之间可同时持有；独占方排队时，后来的共享方不插队。
+- **环境变量**：
+
+  | 变量 | 作用 |
+  |---|---|
+  | `FLIGHT_LOCK=off` | 关闭锁，门禁直接开跑 |
+  | `FLIGHT_LOCK_DIR` | 锁目录；主目录在网络盘时指到本机路径 |
+  | `FLIGHT_LOCK_MAX_HOLD_SEC` | 持有上限：某次运行持锁超过它，排队方不再等；缺省为上次全量耗时的 3 倍、不低于 300 秒，没有记录时 1800 秒 |
+  | `FLIGHT_LOCK_HELD` | 重入标记，门禁自己设，持锁期间的子进程不再排队；包装脚本按白名单重建环境时须随 `FLIGHT_` 前缀放行（第 1、4 节），否则被测进程里再调门禁会排到持有上限 |
+
+- **CI**：容器已经隔离时设 `FLIGHT_LOCK=off`。
+- **门禁之外的测试运行**想一起排队：`python3 .claude/hooks/flight-lock.py run exclusive -- <命令>`；看谁在占：`python3 .claude/hooks/flight-lock.py status`。
+- **放弃等待**：排队方发现持有者超过持有上限即放弃（状态 `timeout`），这一次不加锁继续跑，G10 慢单测降为警告（原文保留并注明原因）；`off` 与平台不支持（`unavailable`）时同样不加锁，但 G10 照常判。
+- **留痕**：输出 JSON 的 `lock` 字段；时间线备注里的「排队 Ns · 负载 起→止/核数」；final 备注里的「测试 Ns · 检查 <名> Ns」；`flight-doctor.py cost` 归因排队与收口秒数，`doctor` 的 `[checks]` `[lock]` 两段体检。排队期间 stderr 打印「排队中」与在等谁，不是卡死。
+- **已知限制**：共享方之间不限流；不保证先来先到；多用户之间互不可见（锁目录在各自主目录下）。

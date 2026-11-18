@@ -79,6 +79,7 @@ metadata:
    ```
    用**后台**方式运行（例如 Bash 的 `run_in_background`），不等它跑完，直接进入 step 6 交接。
    它跑一次全量测试，耗时记在 `gate-baseline.json` 里，不改任何计划文件；同时跑 lint / typecheck 基线与每片 `verify`。
+   baseline、final 与切片门禁会排队等全机测试锁（同一台机器同一时刻只有一套全量在跑）；stderr 里的「排队中」不是卡死，时间线会记下排队秒数，详见 `.claude/flight-runner-contract.md` 第 8 节。
    verify 在基线上必须绿（骨架是 strict-xfail）。
    配置了 `gate.checks` 时，baseline 在 verify 之后运行每个检查的 `baseline` 命令，任一红即基线红（照下面的红处理）；代码树没变时按与 lint 相同的条件沿用上次结果。
    配置了测试分层（openspec 根有 `test-tiers.json`）时，baseline 只跑单元层（`gate.test`，带探针判 G10 慢单测 / G11 单测不纯，任一失败即基线红）与 `gate.integration` 选中的区域（verify 之后、检查之前），不走增量（与 `--full` 相同），未选区域不跑；输出带分层耗时 `tier_sec`。

@@ -1,0 +1,147 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/flight-lock.py",
+      "line": 184,
+      "summary": "持有者是否在世只用 os.kill(pid, 0) 判断（第 140 行），没有防 pid 复用。锁目录缺省是 ~/.claude/flight-lock，重启后也还在。如果持有者在 release 前被强杀或机器断电，它留下的 holders/<pid>.json 的 pid 之后可能被别的无关进程占用，这个文件就永远清不掉，而且它的 since 很早，在列表里总是排第一。之后每次真有人争锁，排队方第一次轮询失败就会认为它已持有好几天、超过上限，立刻放弃并以 timeout 状态不加锁运行，互斥失效。status 也会一直列出这个假持有者。",
+      "fix": "在 _acquire 拿到独占主锁后，删掉 holders/ 下除自己以外的所有 .json 文件，因为此刻不可能有别的合法持有者。也可以在持有者文件里多记一个进程启动标识（例如 boot 时间或进程创建时间），在 _holders_raw 里一起比对。至少要在排队方判定超时前再确认一次该 pid 确实是 flight-lock 持有者，不能只看 kill(pid, 0)。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-lock.py",
+      "line": 332,
+      "summary": "CMD 被信号杀死时，subprocess.call 返回负数（例如 -15），sys.exit(-15) 实际得到退出码 241，既不是 CMD 的原退出码，也不符合 shell 惯例 128+N（143），调用方或人看到会误读。",
+      "fix": "在 _cmd_run 里加一句：rc < 0 时改为 128 + (-rc) 再返回。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-lock.py",
+      "line": 67,
+      "summary": "_who 在 change 和 label 都为空时回退成 \"pid N\"，排队提示（第 180 行）会因此打成「等 pid 123 · pid 123 · 已持有 …」，pid 重复出现。",
+      "fix": "排队提示里，在 change 和 label 都为空时省略 _who 段，或者让 _who 返回空串，由各调用点自己决定怎么回退。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-lock.py",
+      "line": 50,
+      "summary": "FLIGHT_LOCK_MAX_HOLD_SEC 只要能被 float() 解析就直接采用，没有校验取值。设成 \"nan\" 时比较恒为假，排队方永远不会放弃；设成负数或 0 时，任何排队都会立刻放弃。",
+      "fix": "只接受有限的正数（math.isfinite(v) and v > 0），其余值按 ValueError 处理，回退到下一档公式。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 218,
+      "summary": "note_costs 的 checks 解析（S4 要用的契约）在本片没有任何测试锁定。现有用例只经 cost() 间接用到 test 和 wait，CHECKS_RE 的边界（末尾 ok/red、后接锁片段、没有检查片段）都没被断言。定向抽查时这些输入的解析结果都正确，问题只在于没有回归护栏",
+      "fix": "在 tests/test_flight_doctor_cost_lock.py 加一个直接 importlib 加载并调用 note_costs 的用例，至少覆盖三种情况：检查片段后接 ' · 排队'、检查片段直接接 ' ok'/' red'、没有检查片段时返回 {}。或者在 S4 的 owns 里明确补上这项测试"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 51,
+      "summary": "TEST_RE 和 WAIT_RE 对整条备注做 search，也会扫到「全量（…）/全量：…」的原因文本。原因里一旦出现「测试 3s」「排队 5s」这样的字样，秒数就会被错误归因（需进一步确认原因文本是否可能含这类字样，目前 slice-gate 的 full_why 看起来不含）",
+      "fix": "改为只在原因片段之后的文本里搜（例如先用 parse_note 定位的原因结束位置截断），或者要求片段前是行首、空格或 ' · ' 边界：r\"(?:^| · | )测试 ([\\d.]+)s(?= · | ok$| red$|$)\""
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 227,
+      "summary": "[\\d.]+ 能匹配到 '1.2.3'、'.' 这类畸形数字，float() 遇到会抛 ValueError，cost 就不再满足「恒退出 0」的约定。旧代码的 SEC_RE 也是同样写法，所以这个风险原本就有，这次只是多了三处同类调用",
+      "fix": "把数字模式收紧为 (\\d+(?:\\.\\d+)?)，或者把 float 转换包进一个失败时返回 None 的小函数"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 441,
+      "summary": "[lock] 的方式映射写死为 `\"独占\" if mode == \"exclusive\" else \"共享\"`：持有者文件里 mode 为空或是未知值时（`_holders_raw` 用 `rec.get(\"mode\", \"\")` 兜底），会被误报成「共享」，而 flight-lock.py 自己的 status 是用 `MODE_CN.get(mode, mode)` 原样显示的。",
+      "fix": "改成 `{\"exclusive\": \"独占\", \"shared\": \"共享\"}.get(h.get(\"mode\"), h.get(\"mode\") or \"-\")`，未知值原样显示。这样仍然只调 holders() / lock_dir()，不越出接口约定。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 81,
+      "summary": "`_err` 碰到 SystemExit 一律写「slice-gate 退出（code）」。现在 doctor_lock 也走这个函数，flight-lock.py 加载时如果以 SystemExit 退出，输出会把原因错安到 slice-gate 头上。",
+      "fix": "给 `_err` 加一个可选的模块名参数（缺省仍是 slice-gate），doctor_lock 调用时传 \"flight-lock\"；或者在 doctor_lock 里单独处理 SystemExit 的文案。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 427,
+      "summary": "D10 要求 [lock] 写出「是否启用」，但锁启用时这一节不写启用状态，只有关闭时才有一行；没有 fcntl 的平台上（flight-lock 的状态是 unavailable）也会显示「空闲」，读者以为锁在起作用。",
+      "fix": "如果 D10 确实要显式写启用状态：在锁目录那行之后，锁已启用时加一行「  已启用」，`fl.fcntl is None` 时写「  不可用（无 flock）」。如果认为切片包的文案已经够用，就在 design D10 里说明不单独写启用状态。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_flight_doctor_lock.py",
+      "line": 3,
+      "summary": "去掉 PENDING 以后，模块 docstring 还写着「骨架：每个 scenario 一个 strict xfail……实现后去掉标记即解锁」，和现在的测试对不上了。",
+      "fix": "把 docstring 第 3 行删掉，或者改写成描述已解锁的现状；不要动断言和函数名。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_flight_doctor_lock.py",
+      "line": 38,
+      "summary": "doctor_lock 里「FLIGHT_LOCK=off → 已关闭」和「flight-lock.py 加载失败 → 写原因」两个分支没有测试；doctor_checks 的「无：……」兜底行，以及多个 change 只有部分命中的情况也没有测试。spec 只要求两条 scenario，所以门禁不会拦，但这些分支回归了也没人发现。",
+      "fix": "后续可以补两条小测试：一条在 env 里设 FLIGHT_LOCK=OFF（顺带验证不分大小写），断言 [lock] 含「已关闭」且没有持有者行；另一条构造一个没有 final 备注的 change，断言 [checks] 含「无：」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4023,
+      "summary": "（需进一步确认是否为设计意图）cmd_final 在 lock.state == timeout 时把 G10 降为警告。若因此判为 ok，这次结果照常经 _final_rec_write 写成绿记录。下次同一棵树的 final 走 _final_reusable 直接沿用 ok，而沿用分支的 warnings 只含本次新算的项，不带上次被降级的 G10 警告。结果是：争抢时放过的慢单测，在树不变时永远不会在持锁状态下重判，警告也从报告里消失。spec 与 design D6 都没有写降级结果能否进同树沿用，也没有写它能否当 gate.impacted 的锚点（_last_green）。",
+      "fix": "如果设计本意是让降级只影响当次：hold.info['state'] == 'timeout' 且确有 G10 被挪进 warnings 时，在 entry 上加标记（例如 entry['contended'] = True），并让 _final_reusable / _last_green 拒绝带这个标记的记录；或者这种情况干脆不写绿记录。如果设计允许沿用，就在 design.md 写明，并在沿用分支把上次被降级的 G10 警告带进 warnings。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-lock.py",
+      "line": 208,
+      "summary": "防 pid 复用的修复只在独占方式成功拿到 main.lock 时生效。假持有者文件存在、同时还有在世的共享持有者时，排队的独占方 _Wait.after_miss 会把这份 since 最早的假文件当作 top，判它超过上限，立刻放弃并以 timeout 不加锁运行。这条路径上清理永远不会执行，直到某次独占取锁没有遇到争抢。这次改动是按切片包「只此一处」做的，不算偏离规格，但残留了这条路径。",
+      "fix": "本片可以不改，建议记入 backlog。后续可在持有者文件里记录进程启动时间（如 ps -o lstart 或 /proc/<pid>/stat 的 starttime），_holders_raw 比对 pid 与启动时间，不一致时按残留文件删除。这样共享和独占两种方式都能识别 pid 复用。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1371,
+      "summary": "_lock_expect_sec 用一行嵌套的条件表达式取 baseline.test.sec，可读性差。另外 baseline 是 dict 但 test 不是 dict（比如手改坏的 gate-baseline.json）时，.get 会抛 AttributeError。这一步在 flight_lock 的 try 之外执行，会让 gate / final / baseline 直接崩掉，与「锁不可用时门禁照常运行」的意图不一致。",
+      "fix": "拆成显式步骤：t = baseline.get('test') if isinstance(baseline, dict) else None；sec = t.get('sec') if isinstance(t, dict) else None；然后依次检查 sec 和 (gate or {}).get('full_suite_sec') 是不是数值。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 66,
+      "summary": "文件头的输出契约注释逐个列出了 final JSON 的附加键（tier_sec、gate-baseline.json 的 checks 等），但本片新增的 `sec: {test, checks}` 键和备注里的「测试 Xs」「检查 <名> Xs」片段没有写进去，读这段注释的人会漏掉新字段。S6 文档片可能已在别处写过，未逐一核实。",
+      "fix": "在第 66-68 行的 tier_sec 说明之后补一行：final 的 JSON 另有 \"sec\": {\"test\": 秒或 null, \"checks\": {检查名: 秒}}，test 只统计 gate.test 三选一分支（不含区域），时间线备注在锁片段之前带「测试 Xs」「检查 a Xs / b Ys」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 307,
+      "summary": "README 的独占持有者只列了 baseline / final / `test-tiers.py run`，漏了 `probe`。契约第 8 节、test-tiers.md 和实现（test-tiers.py:95 的 probe 也取 exclusive）都包含 probe，几处文档说法不一致。",
+      "fix": "改成「baseline / final / `test-tiers.py run` / `probe` 持独占锁」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 111,
+      "summary": "`FLIGHT_LOCK_MAX_HOLD_SEC` 写的缺省值是「上次全量耗时的 3 倍」，但只对 slice-gate 的 baseline / final / gate 成立。`test-tiers.py run` / `probe` 不传 expect_sec，`flight-lock.py run` 不带 `--expect-sec` 时，上限固定为 1800 秒（flight-lock.py:_cap_sec）。用户包一次超过 30 分钟的全量时，排队方会提前放弃并在不加锁的情况下开跑，文档里看不出这一点。",
+      "fix": "在第 8 节「门禁之外的测试运行」一条补上 `flight-lock.py run` 可选的 `--expect-sec N`（以及 `--change` / `--label`），说明不传时上限为 1800 秒；也可在变量表里注明「3 倍」只适用于门禁的运行。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 117,
+      "summary": "留痕一条没有提重入状态 `nested`。时间线会出现「重入」（flight-lock.py:note），`off` / `unavailable` 时显示「未加锁（…）」，文档只写了「排队 Ns · 负载…」这一种形态，读时间线的人可能看不懂另外几种片段。",
+      "fix": "在留痕一条补一句：重入时备注为「重入」，未加锁时为「未加锁（原因）」，放弃时为「排队 Ns 后放弃（原因）」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_lock_docs.py",
+      "line": 3,
+      "summary": "PENDING 标记已经去掉，模块 docstring 却还写着「骨架：每个 scenario 一个 strict xfail … 切片 S6 实现后去掉标记即解锁」，与现状不符。",
+      "fix": "如果仓库对解锁后的骨架测试没有保留原 docstring 的约定，就把这句改成描述现状，或者删掉；有约定则保持不动。（需进一步确认仓库惯例）"
+    }
+  ],
+  "fix": null
+}

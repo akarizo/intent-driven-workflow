@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+machine-test-lock · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+machine-test-lock
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">tasks</span><span class="chip" data-state="done">specs/machine-test-lock</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">门禁把机器当成自己独占的：每条飞行的 baseline、final、切片 verify 都直接开跑，彼此不知道对方存在。afa 的测试分层体检（2026-11-18）取证时，18 核机器上另一条飞行正在收口，负载 37–45。后果有三个：</p><p class="why-body">- 墙钟被拉长，而且拉长了多少没有记录；
+- 时间类判定失真——项目侧的单条 3 秒预算在负载高于核数时只能退化成告警，模板的 G10 慢单测判定在同样条件下会不会误判，没有运行样本；
+- 时序敏感的用例偶发红，把 MR 打成 draft。</p><p class="why-body">模板里没有任何并发闸：<code>slice-gate.py</code> 全文没有文件锁，也不读负载。</p><p class="why-body">同一份体检还指出收口的成本在留痕里是 0：final 的时间线备注没有秒数，各项检查的耗时算出来又丢了（<code>slice-gate.py</code> 的 <code>_final_checks</code> 丢弃 <code>_run_check</code> 返回的秒数），<code>flight-doctor.py cost</code> 因此报「final：全量 3 次（0.0 秒）」。最贵的一步无法归因，违背铁律 8（度量必打印）。</p><p class="why-body">2026-11-18 的方案页（<code>docs/flight-fixes-and-test-governance.html</code>）定了两点：</p><p class="why-body">- <strong>Q1 粒度</strong>：读写锁——全量类运行独占，切片 verify 之间共享。
+- <strong>Q2 排队超时</strong>：放弃等待后不加锁继续跑，标记争抢，时间类判定降为警告，对错判定不变。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>新增全机测试锁</strong> <code>template/.claude/hooks/flight-lock.py</code>（锁逻辑全在这一个文件）：</li><li>用户级目录（缺省 <code>~/.claude/flight-lock/</code>，<code>FLIGHT_LOCK_DIR</code> 可改）下的一把读写文件锁，跨仓库、跨 worktree 共用；用系统的 <code>flock</code>，持有进程退出时内核自动放锁。</li><li><strong>独占</strong>与<strong>共享</strong>两种持有方式；独占方排队时后来的共享方进不来（不饿死）。</li><li>持有期间给子进程带重入标记：被测进程里再调门禁不会自己等自己。</li><li>持有者把自己是谁（change、命令、pid、起始时间、持有上限）写在锁目录里；排队方立刻打印在等谁，之后每 30 秒打印一次。</li><li><strong>放弃等待</strong>：最早的在世持有者持锁超过它声明的上限（缺省为它上次全量耗时的 3 倍、不低于 300 秒；没有耗时记录时 1800 秒；<code>FLIGHT_LOCK_MAX_HOLD_SEC</code> 可改）→ 排队方不再等，不加锁继续跑。</li><li><strong>回退</strong>：平台没有 <code>flock</code>、锁目录不可用、<code>flight-lock.py</code> 缺失或抛错 → 不加锁照跑并记「未加锁」；<code>FLIGHT_LOCK=off</code> 显式关闭（给已经隔离的 CI 容器用）。锁自身的任何问题都不让门禁失败。</li><li>CLI：<code>flight-lock.py run &lt;exclusive|shared&gt; -- &lt;命令&gt;</code>（门禁之外的测试运行也能排队）与 <code>flight-lock.py status</code>。</li><li><strong>门禁持锁</strong>（<code>slice-gate.py</code> 只加调用点）：</li><li><code>baseline</code>、<code>final</code> 从第一条测试命令到最后一项检查整段<strong>独占</strong>；</li><li>切片 <code>gate</code> 的 verify 到 G7 整段<strong>共享</strong>；</li><li><code>test-tiers.py run</code> / <code>probe</code> <strong>独占</strong>。</li><li><strong>争抢时降级</strong>：放弃等待后跑出来的那一次，G10 慢单测由判红降为警告并写明原因；G11 及所有对错判定不变。</li><li><strong>留痕</strong>：</li><li>baseline / final / gate 的输出 JSON 带 <code>lock</code>（方式、状态、排队秒数、起止负载、核数），时间线备注带「排队 N 秒 · 负载 起→止/核数」；</li><li>final 的 JSON 带 <code>sec</code>（gate.test 秒数与每项检查秒数），时间线备注带「测试 N 秒 · 检查 &lt;名&gt; N 秒」；</li><li>结论词仍在备注末尾，旧时间线照常能读。</li><li><strong>成本归因与体检</strong>（<code>flight-doctor.py</code>）：</li><li><code>cost</code> 认新备注：final 的秒数不再是 0，另列排队秒数；</li><li><code>doctor</code> 新增 <code>[checks]</code>（某项检查耗时接近 gate.test → 疑似检查在重跑测试）与 <code>[lock]</code>（当前持有者）。</li><li><strong>文档</strong>：<code>flight-runner-contract.md</code> 新增一节；<code>opsx-apply</code> / <code>opsx-propose</code> 命令与同名 skill、<code>test-tiers.md</code>、<code>README.md</code> 各补一句排队说明。</li><li><strong>不做</strong>：</li><li>共享方之间的并行度配额（已知天花板，先看上线后的负载数字）；</li><li>逐用例耗时账本、分层预算与豁免（另一个 change）；</li><li>baseline 回写 <code>slices.json</code>、契约未接的表态（另一个 change）；</li><li>多用户共用一台机器时跨用户排队（锁在用户级目录）。</li></ul><div class="impact"><span class="tag"><strong>代码</strong>：新增 <code>template/.claude/hooks/flight-lock.py</code>；改 <code>template/.claude/hooks/slice-gate.py</code>（调用点、输出字段、备注、G10 降级）、<code>test-tiers.py</code>（<code>run</code> / <code>probe</code> 持锁）、<code>flight-doctor.py</code>（<code>cost</code> 解析、<code>doctor</code> 两节）。</span><span class="tag"><strong>测试</strong>：新增 <code>tests/test_flight_lock.py</code>、<code>tests/lock_helpers.py</code>、<code>tests/test_gate_lock.py</code>、<code>tests/test_gate_cost_note.py</code>、<code>tests/test_flight_doctor_lock.py</code>、<code>tests/test_lock_docs.py</code>；<code>tests/conftest.py</code> 给整个套件指定临时锁目录（本仓测试会在子进程里跑门禁，不能去排真实的全机锁）。</span><span class="tag"><strong>文档</strong>：<code>template/.claude/flight-runner-contract.md</code>、<code>template/.claude/commands/{opsx-apply,opsx-propose,test-tiers}.md</code>、<code>template/.claude/skills/{openspec-apply-change,openspec-propose}/SKILL.md</code>、<code>README.md</code>。</span><span class="tag"><strong>ADR</strong>：新增 <code>template/openspec/adr/DRAFT-machine-wide-test-lock.md</code>。</span><span class="tag"><strong>行为变化</strong>：同一用户在同一台机器上的多条飞行，全量类运行改为排队；<code>FLIGHT_LOCK=off</code> 恢复原行为。输出 JSON 与时间线只增不改；<code>flight-doctor.py cost --json</code> 的新数据放在新的顶层键里，已有键的形状不变。</span><span class="tag"><strong>下游</strong>：已安装的仓库跑 <code>./install.sh --upgrade</code> 拿到新 hook；项目侧缓存键按契约第 4 节已须剔除 <code>FLIGHT_</code> 前缀，新增的 <code>FLIGHT_LOCK_*</code> 变量不需要额外处理。</span><span class="tag"><strong>与方案页的两处出入</strong>（详见 design D5、D6）：放弃等待的上限按<strong>持有者</strong>算而不是按排队方自己算；<code>FLIGHT_LOCK=off</code> 与平台不支持时 G10 <strong>不</strong>降级。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>machine-test-lock</code>：全机测试锁的语义（独占 / 共享 / 不饿死 / 重入 / 放弃等待 / 回退）、门禁各命令的持锁方式、争抢时时间类判定降级、排队与耗时的留痕、<code>flight-doctor.py</code> 的归因与体检、随模板下发的说明。</h4><p></p></div><div class="cap-card" data-kind="modified"><span class="cap-kind">Modified</span><h4>无。<code>openspec/specs/</code> 不存在；门禁的对错判定不变，本 change 的增量以 ADDED 写在新 capability 里。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>machine-test-lock <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 全机测试锁区分独占与共享</p><p><code>flight-lock.py</code> SHALL 在锁目录（缺省 <code>~/.claude/flight-lock/</code>，环境变量 <code>FLIGHT_LOCK_DIR</code> 可改）下提供一把跨仓库、跨 worktree 共用的读写锁：独占持有与任何其他持有互斥，共享持有之间可以并存。有独占方在排队时，后来的共享方 MUST NOT 先于它拿到锁。持有者 SHALL 把方式、change、命令标签、pid 与起始时间写在锁目录里；排队方 SHALL 在第一次没拿到锁时立刻往 stderr 打印一行含「排队中」与持有者标签的提示，之后每 30 秒一行。持有进程退出（含被杀）后锁 MUST 自动释放。<code>flight-lock.py run &lt;exclusive|shared&gt; -- &lt;命令&gt;</code> SHALL 取锁后运行命令、以命令的退出码退出，并在 stderr 末尾打印一行 <code>flight-lock: &lt;JSON&gt;</code> 给出本次的方式、状态与排队秒数；<code>flight-lock.py status --json</code> SHALL 列出在世的持有者。
+Feature: 一台机器同一时刻只有一套满核并行的测试
+Rule: 独占排队、共享并存；锁跟着门禁进程走，进程没了锁就没了</p><div class="scenario"><p class="scenario-name">Scenario: exclusive-holders-mutually-exclude</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 经 <code>flight-lock.py run exclusive</code> 持有锁，命令尚未结束</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>进程 B 以同一锁目录运行 <code>flight-lock.py run exclusive -- &lt;命令&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>B 的 stderr 出现含「排队中」与 A 的标签的一行，B 的命令没有开始</span></li><li><span class="step-key" data-kw="AND">AND</span><span>A 结束后 B 的命令才运行，B 以命令的退出码退出</span></li><li><span class="step-key" data-kw="AND">AND</span><span>B 的 <code>flight-lock:</code> 行里状态为 <code>held</code>、排队秒数大于 0</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: shared-holders-run-together</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 经 <code>flight-lock.py run shared</code> 持有锁，命令尚未结束</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>进程 B 以同一锁目录运行 <code>flight-lock.py run shared -- &lt;命令&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>A 还没结束时 B 的命令已经开始运行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: exclusive-waiter-blocks-new-shared</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 持有共享锁；进程 X 请求独占并已在排队</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>进程 C 请求共享</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>C 的命令没有开始，C 的 stderr 出现「排队中」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>A 结束后 X 的命令先运行；X 结束后 C 的命令才运行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: killed-holder-releases-lock</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 持有独占锁，进程 B 请求独占并在排队</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>A 的 <code>flight-lock.py</code> 进程被 SIGKILL 杀掉</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>B 的命令随即运行</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>flight-lock.py status --json</code> 不再列出 A</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: status-lists-live-holders</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 以 <code>--change demo --label &quot;final gate&quot;</code> 持有独占锁</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>flight-lock.py status --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>输出的持有者列表恰有一项，方式为 <code>exclusive</code>，change 为 <code>demo</code>，标签为 <code>final gate</code>，pid 为 A 的 pid</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 持锁期间的子进程不再排队</p><p>持有锁的进程 SHALL 给它启动的子进程带上重入标记（环境变量 <code>FLIGHT_LOCK_HELD</code>，含锁目录）；带着同一锁目录的重入标记请求锁的进程 MUST NOT 等待，状态记为 <code>nested</code>。标记里的锁目录与当前锁目录不同 → 不算重入，照常取锁。本仓测试套件 SHALL 经 <code>tests/conftest.py</code> 把 <code>FLIGHT_LOCK_DIR</code> 指到本次会话的临时目录，使测试里启动的门禁不去排用户级目录里的锁。
+Feature: 被测进程里再调门禁不会自己等自己
+Rule: 重入只认同一把锁；测试套件用自己的锁目录</p><div class="scenario"><p class="scenario-name">Scenario: nested-run-does-not-wait</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>外层 <code>flight-lock.py run exclusive -- &lt;命令&gt;</code>，其命令是以同一锁目录再次运行 <code>flight-lock.py run exclusive -- &lt;内层命令&gt;</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>外层运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>内层命令运行完成，外层以 0 退出</span></li><li><span class="step-key" data-kw="AND">AND</span><span>内层的 <code>flight-lock:</code> 行里状态为 <code>nested</code>、排队秒数为 0</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: test-suite-uses-isolated-lock-dir</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>本仓的 pytest 会话</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>测试读取环境变量 <code>FLIGHT_LOCK_DIR</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>它指向一个存在的目录，且不在用户主目录的 <code>.claude</code> 之下</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 锁不可用或持有者停滞时不加锁继续</p><p>排队方 SHALL 在最早的在世持有者持锁时间超过该持有者声明的上限时放弃等待，状态记为 <code>timeout</code>，随后不加锁运行。上限由持有者在取锁时声明：设了 <code>FLIGHT_LOCK_MAX_HOLD_SEC</code> 取它；否则为持有者上次全量耗时的 3 倍且不低于 300 秒；没有耗时记录时为 1800 秒。<code>FLIGHT_LOCK=off</code> 时 MUST NOT 取锁，状态记为 <code>off</code>。平台没有 <code>flock</code>、锁目录不可创建或不可写时状态记为 <code>unavailable</code> 并带原因。这三种状态下命令 MUST 照常运行，退出码 MUST 只取决于命令本身。
+Feature: 锁坏了或有人占着不放，门禁照样能跑
+Rule: 锁自身的任何问题都不让命令失败；没拿到锁要留下原因</p><div class="scenario"><p class="scenario-name">Scenario: waiter-gives-up-on-stalled-holder</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 以 <code>FLIGHT_LOCK_MAX_HOLD_SEC=0.3</code> 持有独占锁且一直不结束</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>进程 B 以同一锁目录运行 <code>flight-lock.py run exclusive -- &lt;以 7 退出的命令&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>B 在 A 仍持有时运行了它的命令，并以 7 退出</span></li><li><span class="step-key" data-kw="AND">AND</span><span>B 的 <code>flight-lock:</code> 行里状态为 <code>timeout</code>，原因点名 A 的标签</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lock-off-or-unavailable-runs-unlocked</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>进程 A 持有独占锁</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>进程 B 带 <code>FLIGHT_LOCK=off</code> 运行 <code>flight-lock.py run exclusive -- &lt;命令&gt;</code>；另一次把 <code>FLIGHT_LOCK_DIR</code> 指到一个普通文件之下的路径再运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次的命令都立即运行、以命令的退出码退出</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第一次状态为 <code>off</code>；第二次状态为 <code>unavailable</code> 且原因非空</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 门禁各命令按方式持锁</p><p><code>slice-gate.py baseline</code> 与 <code>final</code> SHALL 在运行第一条测试命令之前取<strong>独占</strong>锁、在最后一项检查结束之后释放（同树沿用的 final 不运行任何测试，不取锁）；<code>slice-gate.py gate</code> SHALL 从运行 verify 之前到 G7 结束之后持<strong>共享</strong>锁；<code>test-tiers.py run</code> 与 <code>probe</code> SHALL 整个运行期间持<strong>独占</strong>锁。这些命令的输出 JSON（<code>baseline</code> 另写进 <code>gate-baseline.json</code>）SHALL 带 <code>lock</code> 字段：<code>mode</code>、<code>state</code>、<code>waited</code>（排队秒数）、<code>why</code>、<code>load</code>（起止负载，取不到为 null）、<code>cores</code>。<code>flight-lock.py</code> 缺失或加载失败时门禁 MUST 照常运行，<code>lock.state</code> 为 <code>unavailable</code>。
+Feature: 全量类运行排队，切片 verify 并行
+Rule: 整段测量只排一次队；锁只加在调用点，判定逻辑不动</p><div class="scenario"><p class="scenario-name">Scenario: baseline-and-final-hold-exclusive-lock</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个有计划、测试全绿的仓库，锁目录里没有其他持有者</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>依次运行 <code>slice-gate.py baseline</code> 与 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次输出 JSON 的 <code>lock.mode</code> 都是 <code>exclusive</code>、<code>lock.state</code> 都是 <code>held</code>、<code>lock.waited</code> 是数字</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-baseline.json</code> 里有同样的 <code>lock</code> 字段</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: slice-gate-holds-shared-lock</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>同一个仓库，切片 S1 已 <code>start</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>输出 JSON 的 <code>lock.mode</code> 是 <code>shared</code>、<code>lock.state</code> 是 <code>held</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-queues-behind-exclusive-holder</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>另一个进程在同一锁目录持有独占锁</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>final 的 stderr 出现「排队中」，持有者结束之前 final 不结束</span></li><li><span class="step-key" data-kw="AND">AND</span><span>持有者结束后 final 以 0 退出，<code>lock.waited</code> 大于 0</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: gate-runs-when-lock-module-missing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份不含 <code>flight-lock.py</code> 的 hooks 目录副本</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>用副本里的 <code>slice-gate.py</code> 运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>baseline 以 0 退出，<code>lock.state</code> 是 <code>unavailable</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: test-tiers-run-and-probe-hold-exclusive-lock</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个有分层文件的仓库，另一个进程在同一锁目录持有独占锁</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别运行 <code>test-tiers.py run unit</code> 与 <code>test-tiers.py probe</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次的 stderr 都出现「排队中」，持有者结束之前都不结束</span></li><li><span class="step-key" data-kw="AND">AND</span><span>持有者结束后两次都以 0 退出</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 争抢时时间类判定降为警告</p><p><code>lock.state</code> 为 <code>timeout</code> 的 baseline 或 final 里，G10 慢单测 SHALL 由失败降为警告，警告文字 SHALL 保留原判定内容并写明因放弃等待而降级；G11 及其他判定 MUST 不变。<code>lock.state</code> 为 <code>held</code>、<code>nested</code>、<code>off</code> 或 <code>unavailable</code> 时 G10 MUST 照常判定。
+Feature: 只有确知有人同时在跑的那一次，秒数才不作数
+Rule: 降级只针对时间；关掉锁或平台不支持不等于放宽</p><div class="scenario"><p class="scenario-name">Scenario: contended-run-downgrades-slow-unit-verdict</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>分层文件合法、单元层有一个每次睡 3.1 秒的纯函数用例；另一个进程以 <code>FLIGHT_LOCK_MAX_HOLD_SEC=0.3</code> 持有独占锁且不结束</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>以同一锁目录运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>baseline 以 0 退出，<code>lock.state</code> 是 <code>timeout</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>reasons</code> 里没有 G10；<code>warnings</code> 里有一条同时含 <code>G10</code>、该用例的 id 与「降为警告」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lock-off-keeps-slow-unit-verdict</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>同样的仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>带 <code>FLIGHT_LOCK=off</code> 运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>lock.state</code> 是 <code>off</code>，baseline 以非 0 退出，<code>reasons</code> 里有一条以 G10 开头并点名该用例</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 时间线记录排队、负载与收口各项耗时</p><p>baseline、final、gate 的时间线备注 SHALL 带锁片段：持锁时为「排队 &lt;秒&gt;s」，放弃等待时为「排队 &lt;秒&gt;s 后放弃（&lt;原因&gt;）」，未加锁时为「未加锁（&lt;原因&gt;）」，重入时为「重入」；取得到负载时其后接「 · 负载 &lt;起&gt;→&lt;止&gt;/&lt;核数&gt;」。final 实际运行了 gate.test（全量、增量或 <code>gate.impacted</code>）时，输出 JSON SHALL 带 <code>sec.test</code>，备注 SHALL 带「测试 &lt;秒&gt;s」；运行了检查时 JSON SHALL 带 <code>sec.checks</code>（<code>{检查名: 秒}</code>），备注 SHALL 带「检查 &lt;名&gt; &lt;秒&gt;s」，多项以「 / 」分隔。final 与 gate 备注的结论词（<code>ok</code> / <code>red</code>）MUST 仍在末尾，gate 备注 MUST 仍以切片 id 开头，已有的「全量（…）」「增量（…）」「单元 …s · 集成 …s」文字 MUST 不变。
+Feature: 慢了能看出慢在排队、测试还是检查
+Rule: 备注只增不改；旧的解析方照常工作</p><div class="scenario"><p class="scenario-name">Scenario: timeline-records-wait-and-load</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个有计划、测试全绿的仓库，切片 S1 已 <code>start</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>依次运行 baseline、<code>gate S1</code>、final</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>三条时间线备注都匹配「排队 &lt;数字&gt;s」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>final 的备注以 <code> ok</code> 结尾；gate 的备注以 <code>S1 </code> 开头、以 <code> ok</code> 或 <code> red</code> 结尾</span></li><li><span class="step-key" data-kw="AND">AND</span><span>平台取得到负载时，三条备注都含「负载 」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-note-records-test-and-check-seconds</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划配了一项检查 <code>probe-check</code>，baseline 已绿，之后有一处代码改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py final</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>输出 JSON 的 <code>sec.test</code> 是数字，<code>sec.checks</code> 恰含 <code>probe-check</code> 且值是数字</span></li><li><span class="step-key" data-kw="AND">AND</span><span>final 的时间线备注匹配「测试 &lt;数字&gt;s」与「检查 probe-check &lt;数字&gt;s」，并以 <code> ok</code> 结尾</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 成本归因与体检读得到排队和收口耗时</p><p><code>flight-doctor.py cost</code> SHALL 从 final 备注的「测试 &lt;秒&gt;s」取该次运行的秒数、从 baseline 与 final 备注的「排队 &lt;秒&gt;s」取排队秒数：全量 final 的秒数计入 <code>final.full_sec</code> 与对应 <code>full_runs</code> 项的 <code>sec</code>；<code>--json</code> 另给顶层 <code>wait_sec</code>（<code>{&quot;baseline&quot;: 秒, &quot;final&quot;: 秒}</code>），文本输出在各事件行写出排队秒数。<code>baseline</code> 与 <code>final</code> 两个对象已有的键 MUST 不增不减；没有这些片段的旧时间线 MUST 得到与改动前相同的结果。<code>flight-doctor.py doctor</code> SHALL 新增两节：<code>[checks]</code> 逐个在途 change 读最近一条 final 备注，某项检查的秒数不低于 10 秒且不低于「测试」秒数的一半时点名该 change 与检查并写明疑似在重跑测试；<code>[lock]</code> 列出当前在世的持有者（方式、change、标签、已持有秒数），没有时写「空闲」，<code>FLIGHT_LOCK=off</code> 时写明已关闭。两个子命令仍恒以 0 退出。
+Feature: 收口的成本不再是 0，重跑测试的检查会被点名
+Rule: 只读、只报告、不阻断</p><div class="scenario"><p class="scenario-name">Scenario: cost-reads-final-seconds-and-wait</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份时间线：一条旧格式的全量 baseline、一条带「排队 12.5s」的全量 baseline、一条带「测试 524.3s」与「排队 212.0s」的全量 final、一条带「测试 8.0s」的增量 final</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>flight-doctor.py cost --json</code> 与不带 <code>--json</code> 的 <code>cost</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>final.full_sec</code> 等于 524.3，对应 <code>full_runs</code> 项的 <code>sec</code> 等于 524.3</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>wait_sec</code> 等于 <code>{&quot;baseline&quot;: 12.5, &quot;final&quot;: 212.0}</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>baseline</code> 与 <code>final</code> 两个对象的键集合都恰为 <code>full</code>、<code>incremental</code>、<code>full_sec</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>文本输出的 final 一行含「排队 212.0 秒」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: doctor-flags-check-as-slow-as-tests</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>在途 change <code>c1</code> 的最近一条 final 备注含「测试 100.0s · 检查 ratchet 95.0s / style 1.0s」</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>flight-doctor.py doctor</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>[checks]</code> 一节点名 <code>c1</code> 与 <code>ratchet</code> 并含「重跑」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>该节不出现 <code>style</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: doctor-reports-lock-holders</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个进程以 <code>--change demo --label &quot;final gate&quot;</code> 在锁目录持有独占锁</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>以同一锁目录运行 <code>flight-doctor.py doctor</code>；持有者结束后再运行一次</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次的 <code>[lock]</code> 一节含 <code>demo</code> 与 <code>final gate</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次的 <code>[lock]</code> 一节含「空闲」</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 随模板下发全机测试锁的说明</p><p><code>template/.claude/flight-runner-contract.md</code> SHALL 新增一节说明全机测试锁：独占与共享各用在哪些命令、<code>FLIGHT_LOCK=off</code>、<code>FLIGHT_LOCK_DIR</code>、<code>FLIGHT_LOCK_MAX_HOLD_SEC</code>、重入标记 <code>FLIGHT_LOCK_HELD</code> 须随 <code>FLIGHT_</code> 前缀留在被测进程环境里、CI 容器里怎么关、门禁之外的测试运行用 <code>flight-lock.py run</code> 排队、放弃等待后时间类判定降级。<code>opsx-apply</code> 与 <code>opsx-propose</code> 的命令及同名 skill、<code>test-tiers.md</code>、<code>README.md</code> SHALL 各写明门禁运行会排队等全机测试锁，并指向契约文档或 <code>flight-lock.py</code>。
+Feature: 项目侧知道门禁为什么在等、怎么关
+Rule: 命令与同名 skill 同改</p><div class="scenario"><p class="scenario-name">Scenario: contract-documents-machine-test-lock</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/flight-runner-contract.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读其中标题含「全机测试锁」的一节</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>该节提到 <code>FLIGHT_LOCK=off</code>、<code>FLIGHT_LOCK_DIR</code>、<code>FLIGHT_LOCK_MAX_HOLD_SEC</code>、<code>FLIGHT_LOCK_HELD</code>、<code>flight-lock.py run</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>写明独占与共享、CI、降为警告</span></li><li><span class="step-key" data-kw="AND">AND</span><span>原有的第 1–7 节标题都还在</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: commands-and-skills-mention-queueing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>opsx-apply.md</code>、<code>opsx-propose.md</code>、<code>openspec-apply-change/SKILL.md</code>、<code>openspec-propose/SKILL.md</code>、<code>test-tiers.md</code>、<code>README.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>逐个查找含「全机测试锁」的行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>六个文件都有这样的行，且该行含「排队」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>六个文件都提到 <code>flight-lock.py</code> 或 <code>flight-runner-contract.md</code></span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p><strong>现状</strong>（读 <code>template/.claude/hooks/</code> 现行代码，main <code>b7be9ed</code>）：</p><ul><li><code>slice-gate.py</code> 的三个测量命令各自直接开跑，没有任何互斥，也不读负载：</li><li><code>cmd_baseline</code>：复用判定里的补跑 → <code>run_test_gate(gate.test)</code> → lint / typecheck → 每片 verify → 已选区域 → 检查；</li><li><code>cmd_final</code>：G7 实跑 scenario → lint / typecheck → gate.test（全量 / 增量 / <code>gate.impacted</code>）→ 区域 → 检查；</li><li><code>cmd_gate</code>：该片 verify → lint / typecheck → G7。</li><li><code>test-tiers.py run</code> / <code>probe</code> 同样直接跑单元层。</li><li>时间线备注的现行格式与解析方：</li><li>baseline：<code>exit 0, 529.9s ok；全量：&lt;原因&gt;；verify 推导 N 片</code>，或 <code>增量（…） ok</code>；</li><li>final：<code>[全量（原因）|增量（…）] [单元 Xs · 集成 Ys] ok|red</code>，结论词在末尾；</li><li>gate：<code>S1 [单元 Xs · 集成 Ys] ok|red</code>；</li><li><code>timeline.py report</code> 取 gate 备注的第一个词作切片 id、按 <code>endswith(&quot; ok&quot;)</code> / <code>endswith(&quot;red&quot;)</code> 取结论；</li><li><code>flight-doctor.py</code> 的 <code>parse_note</code> 按「全量：」「全量（」「增量」「同树沿用」分类，秒数只认 baseline 的 <code>exit N, Xs</code>（<code>SEC_RE</code>）；final 没有秒数，<code>cost</code> 里恒为 0；</li><li><code>tests/test_flight_doctor.py</code> 断言 <code>cost --json</code> 的 <code>baseline</code> 对象<strong>整体相等</strong>，所以这两个对象不能加键。</li><li><code>_final_checks</code> 调 <code>_run_check</code> 拿到每项检查的秒数后丢弃（<code>rc, out, _, timed_out</code>）；baseline 的检查秒数已记在 <code>gate-baseline.json</code>。</li><li>本仓测试套件大量以子进程运行 <code>slice-gate.py baseline / final / gate</code>（<code>tests/conftest.py</code> 的 <code>run_hook</code> 把 <code>os.environ</code> 原样传下去）。门禁一旦取用户级目录里的锁，本仓的测试就会去排真实飞行的队。</li><li>门禁给子进程的环境来自 <code>dict(os.environ)</code>；<code>_drop_inherited</code> 只清 <code>FLIGHT_ENV</code> 名单里的变量。Python 打开的文件描述符缺省不被子进程继承。</li></ul><p><strong>已定决策</strong>（2026-11-18，方案页 <code>docs/flight-fixes-and-test-governance.html</code> Q1、Q2，用户回复「按推荐」）：</p><ul><li><strong>Q1</strong>：读写锁——全量类运行独占，切片 verify 共享。</li><li><strong>Q2</strong>：排队超时后不加锁继续跑，标记争抢，时间类判定降为警告。</li></ul><p><strong>在役 ADR</strong>：</p><ul><li><code>DRAFT-gate-test-result-handoff-and-runner-contract</code>：<code>FLIGHT_</code> / <code>GATE_</code> 前缀是每次运行都变的变量，项目缓存键须剔除，白名单重建环境时须放行 <code>FLIGHT_</code> 前缀。本设计新增的 <code>FLIGHT_LOCK_*</code> 沿用这条约定，不偏离。</li><li><code>DRAFT-test-tiers-unit-baseline-by-audit-probe</code>：G10 慢候选单独重跑确认。本设计不改这套判定，只在确知争抢的那一次把结论降级。</li><li><code>DRAFT-gate-evidence-not-self-reported</code>：留痕由脚本写。排队与耗时同样由脚本写进时间线。</li><li>没有需要 supersede 的 ADR。</li></ul><p>``` C4 · 组件图（轻量 C4 风格；★ 新增，◆ 修改）</p><p>飞行 A（仓库 X）            飞行 B（仓库 Y）          人 / CI ◆ slice-gate.py            ◆ slice-gate.py           flight-lock.py run … -- pytest baseline / final ─独占─┐    gate S3 ─共享─┐                │独占 / 共享 ◆ test-tiers.py run ─独占┤                  │                │ ▼                  ▼                ▼ ★ flight-lock.py（acquire / release / holders / note） │ flock                         │ 读写 ▼                               ▼ ~/.claude/flight-lock/gate.lock · main.lock      holders/&lt;pid&gt;.json │ lock 信息 ──────┴──▶ ◆ 输出 JSON 的 lock / sec ──▶ ◆ timeline.md 备注 │ 读 ▼ ◆ flight-doctor.py  cost（排队、final 秒数）· doctor [checks] [lock] ```</p><ul><li><strong>边界</strong>：锁逻辑只在 <code>flight-lock.py</code>；<code>slice-gate.py</code> 与 <code>test-tiers.py</code> 只有「取锁 / 放锁 / 把 info 写进输出」三类调用点。</li><li><strong>强制力</strong>：锁是协作式的，只约束经门禁或 <code>flight-lock.py run</code> 启动的运行；人直接敲 <code>pytest</code> 不受约束。</li><li><strong>假设</strong>：同一个用户在一台机器上跑多条飞行（体检取证的情形）；多用户共用机器不在范围。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals</strong>：</p><ul><li>同一用户、同一台机器上，同一时刻至多一套全量类测试在跑；同一 wave 的切片 verify 仍然并行。</li><li>每次门禁运行留下排队秒数、起止负载；final 留下 gate.test 与每项检查的秒数；<code>cost</code> 据此归因。</li><li>锁出任何问题门禁照跑，并留下「这次没拿到锁」的原因。</li><li>确知争抢的那一次，时间类判定不再判红。</li></ul><p><strong>Non-Goals</strong>：</p><ul><li>共享方之间的并行度配额。</li><li>先来先到的严格公平。</li><li>多用户、多机、网络文件系统上的互斥。</li><li>逐用例耗时账本、分层预算（另一个 change）；baseline 回写 <code>slices.json</code>（另一个 change）。</li><li>给 gate.test 加运行超时。</li></ul></div><div class="design-block"><h3>Decisions</h3><details><summary>共享方</summary><p>取闸口（独占）→ 取主锁（共享）→ 放闸口。</p></details><details><summary>独占方</summary><p>取闸口（独占）并<strong>一直拿着</strong>→ 取主锁（独占）→ 放闸口。</p></details><details><summary>独占方在等主锁时握着闸口，后来的共享方过不了闸口，所以不会被源源不断的共享方饿死。</summary></details><details><summary><strong>为什么用 <code>flock</code></strong></summary><p>进程退出（含 SIGKILL）时内核放锁，没有「死锁文件」要清；标准库 <code>fcntl</code> 就有，零依赖。</p></details><details><summary><strong>否决</strong></summary></details><details><summary>pid 文件 + 轮询存活</summary><p>进程崩溃后要靠别人判死，判错就双持或永久占用；</p></details><details><summary>单把 <code>flock</code> 直接用 <code>LOCK_SH</code> / <code>LOCK_EX</code></summary><p>BSD 语义不保证写方不饿死；</p></details><details><summary>信号量文件（N 个槽位）</summary><p>能做配额，但「全量独占」要一次拿满 N 个槽，死锁与部分持有的处理都更复杂；配额本身是 Non-Goal。</p></details><details><summary><strong>描述符不外泄</strong></summary><p>两个锁文件用 <code>os.open</code> 打开，Python 缺省不可继承，被测子进程拿不到这把锁。门禁进程一退出锁就释放，哪怕它起的测试进程还活着。</p></details><details><summary><strong>为什么</strong></summary><p>排队期间要做三件事——第一次失败立刻打印在等谁、每 30 秒再打印、判断持有者是否停滞（D5）。阻塞调用做不了。</p></details><details><summary><strong>代价</strong></summary><p>不保证先来先到（谁先轮询到谁拿）。写进 ADR 的已知天花板。</p></details><details><summary><code>baseline</code></summary><p>写完运行标记之后取锁，到检查全部结束、结束快照之前放锁。</p></details><details><summary><code>final</code></summary><p>同树沿用判定之后（沿用就不取锁）、G7 实跑之前取锁，到检查全部结束放锁。</p></details><details><summary><code>gate</code></summary><p>verify 之前取锁，G7 之后放锁。</p></details><details><summary><code>test-tiers.py run</code> / <code>probe</code></summary><p>整个子命令。</p></details><details><summary><strong>为什么不逐条命令</strong></summary></details><details><summary>一次 final 有 G7、gate.test、若干区域、若干检查，逐条取锁要重新排 5–8 次队，总等待不可预期，时间线也没法用一个数字说明；</summary></details><details><summary>baseline 有「运行期间的改动」检测（开跑快照与结束快照之差），拉长墙钟只会增加误报；</summary></details><details><summary>整段持有时，一次测量内部的各步骤彼此不受别的飞行干扰，秒数才可比。</summary></details><details><summary><strong>代价</strong></summary><p>lint / typecheck 夹在中间也占着独占锁。它们通常远短于测试；真成问题再拆。</p></details><details><summary><strong>baseline 的取锁点为什么在运行标记之后</strong></summary><p>preflight 靠运行标记分辨「还在跑」与「缺基线」，排队期间也应该报「还在跑」。开跑快照仍在运行标记之前取（保持 unified-test-result-reuse design D12：快照失败不碰现有基线）；排队期间的改动会被结束快照比出来、判基线无效，这是对的。</p></details><details><summary><strong>为什么带目录</strong></summary><p>本仓的测试套件会把 <code>FLIGHT_LOCK_DIR</code> 指到会话临时目录（D9）。外层门禁（真实锁目录）下跑的测试再起门禁时，应该在临时目录里真正取锁并判定，而不是被外层标记短路。</p></details><details><summary><strong>不做祖先进程检查</strong></summary><p>包装脚本若按白名单重建环境又没放行 <code>FLIGHT_</code> 前缀，被测进程里再调门禁会排到持有上限后不加锁继续。契约第 1 节已要求放行 <code>FLIGHT_</code> 前缀；文档再点名一次。</p></details><details><summary>持有者取锁时在 <code>holders/&lt;pid&gt;.json</code> 里声明自己的持有上限 <code>cap_sec</code></summary></details><details><summary>设了 <code>FLIGHT_LOCK_MAX_HOLD_SEC</code> → 取它；</summary></details><details><summary>否则有上次全量耗时 → <code>max(300, 3 × 耗时)</code>；</summary></details><details><summary>否则 1800。</summary></details><details><summary>排队方每次轮询读在世的持有者</summary><p>最早的那个已持有超过它的 <code>cap_sec</code> → 放弃，状态 <code>timeout</code>，<code>why</code> 写「&lt;change&gt; · &lt;标签&gt; 已持有 N 秒，超过上限 M 秒」。</p></details><details><summary>读不到任何持有者信息（刚取到锁还没写文件的瞬间）→ 按排队方自己的同一公式兜底。</summary></details><details><summary><strong>为什么改</strong></summary></details><details><summary>按排队方算，小仓库排在大仓库后面必然超时</summary><p>本仓全量约 5 分钟，afa 约 10 分钟，再排两条 afa 的飞行就是 20 分钟——正常排队被当成超时，一超时就并跑，等于没锁；</p></details><details><summary>方案页 Q2 的前提写的是「超时只对应持有者真的跑了很久」，按持有者判才是这句话的字面意思；</summary></details><details><summary>队伍里每换一个持有者，时钟自然重置，排多久都不算超时，只有某一个持有者卡住才算。</summary></details><details><summary><strong>上次全量耗时从哪来</strong></summary><p>本 change <code>gate-baseline.json</code> 的 <code>test.sec</code>（baseline 命令读覆盖前的旧基线）；读不到再退 <code>slices.json</code> 的 <code>gate.full_suite_sec</code>。另一个 change 要把后者挪走，先读基线使两边都成立。</p></details><details><summary><strong>数字都是草案</strong></summary><p>3 倍、300 秒、1800 秒没有数据支撑，上线后看时间线里的排队秒数再调。</p></details><details><summary><strong>为什么</strong></summary></details><details><summary><code>timeout</code> 是<strong>确知</strong>有别的运行同时在跑，秒数必然不可信；</summary></details><details><summary><code>unavailable</code>（没有 <code>flock</code> 的平台、锁目录不可写）下如果也降级，这些环境里 G10 就永远不会红——相对今天是放宽，违背「门禁只能加严」；今天的行为（带单独重跑确认的判定）应当保持；</summary></details><details><summary><code>off</code> 是人显式声明「这里已经隔离」（CI 容器），正是最该照常判的地方；如果 <code>off</code> 就降级，CI 里 G10 永不判红。</summary></details><details><summary><strong>降级的形状</strong></summary><p>把以 <code>G10 slow unit test</code> 开头的失败项挪进警告，原文保留，末尾加「（排队放弃后未持锁，时间类判定降为警告：&lt;why&gt;）」。G11（纯度）与差分判定不动。</p></details><details><summary><strong>实现位置</strong></summary><p><code>slice-gate.py</code> 一个纯函数处理 <code>(failed, warnings, lock_info)</code>，在 baseline 与 final 取得 G10 / G11 结论的各处调用（简写形态的全量与增量、部件形态的 <code>_baseline_parts</code> / <code>_final_parts</code>）。</p></details><details><summary><code>flight-lock.py run &lt;exclusive|shared&gt; [--change NAME] [--label TEXT] [--expect-sec N] -- CMD [ARG…]</code></summary><p>取锁 → 不经 shell 运行 CMD → 放锁 → stderr 末行 <code>flight-lock: &lt;info 的 JSON&gt;</code> → 以 CMD 的退出码退出（CMD 起不来为 127）。</p></details><details><summary><code>flight-lock.py status [--json]</code></summary><p><code>holders()</code> 的内容，另带 <code>dir</code> 与 <code>enabled</code>；恒退出 0。</p></details><details><summary><strong>final</strong></summary><p><code>[全量（…）|增量（…）] [单元 Xs · 集成 Ys] [测试 Xs] [检查 a Xs / b Ys] &lt;锁片段&gt; ok|red</code>。新片段之间、以及与前面的分层片段之间用 <code> · </code> 连接；与「全量（…）」「增量（…）」之间仍是一个空格；结论词前一个空格。同树沿用的备注不变。</p></details><details><summary><strong>gate</strong></summary><p><code>S1 [单元 Xs · 集成 Ys] &lt;锁片段&gt; ok|red</code>，连接规则同上。integrator 的 <code>record</code> 写回分支的那一行不变（见 Risks）。</p></details><details><summary><strong>baseline</strong></summary><p>现有三种备注末尾各接 <code>；&lt;锁片段&gt;</code>。</p></details><details><summary>例</summary><p><code>全量（没有可用锚点） 测试 524.3s · 检查 ratchet 3.1s / linkage 2.4s · 排队 212.0s · 负载 2.9→17.8/18 ok</code>。</p></details><details><summary>三个命令都加 <code>lock</code>（即 <code>info</code>）；baseline 同时写进 <code>gate-baseline.json</code>（入池与锚点只挑固定键，不带它）。</summary></details><details><summary>final 加 <code>sec</code></summary><p><code>{&quot;test&quot;: 秒 | null, &quot;checks&quot;: {名: 秒}}</code>。<code>test</code> 是 gate.test 这一步的墙钟（全量、增量重跑或 <code>gate.impacted</code>，不含区域）；没跑到（G7 红、scope 复核未过、部件形态）为 <code>null</code>，此时备注没有「测试」片段。<code>checks</code> 只含本次实际运行的检查。</p></details><details><summary><code>测试 ([\d.]+)s</code> → 该 final 的秒数；全量时计入 <code>final.full_sec</code> 与 <code>full_runs[].sec</code>；</summary></details><details><summary><code>排队 ([\d.]+)s</code> → 排队秒数，按事件累加到新的顶层键 <code>wait_sec</code>；</summary></details><details><summary><code>检查 (.+?)(?= · | ok$| red$)</code> 再按 <code> / </code> 拆成「名 秒」；</summary></details><details><summary>没有这些片段的行按旧逻辑，结果与改动前相同；<code>baseline</code> / <code>final</code> 两个对象不加键（现有测试整体断言）。</summary></details><details><summary><strong>为什么不用 <code>FLIGHT_LOCK=off</code></strong></summary><p>关掉之后门禁输出里就没有 <code>held</code> 状态可测；而且套件应当走真实的取锁路径。</p></details><details><summary><strong>为什么够用</strong></summary><p>套件里的门禁子进程在临时目录取锁，串行执行、互不等待；外层若有真实门禁持锁，重入标记里的目录不同（D4），不会短路。</p></details><details><summary>专测并发的用例各自再建锁目录，经环境显式传给每个子进程。</summary></details><details><summary><code>[checks]</code></summary><p>每个在途 change 取时间线里最近一条带「测试」片段的 final 备注；某项检查 ≥ 10 秒且 ≥ 测试秒数的一半 → 一行点名 change、检查、两个秒数，写「疑似检查在重跑测试，改读 <code>$GATE_TEST_RESULT</code>（契约第 3 节）」。没有命中写「无」。阈值是草案。</p></details><details><summary><code>[lock]</code></summary><p>锁目录、是否启用、<code>holders()</code>；没有持有者写「空闲」；<code>FLIGHT_LOCK=off</code> 写「已关闭（FLIGHT_LOCK=off）」。<code>flight-lock.py</code> 加载失败写原因。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[共享方之间仍可能超订]</strong> 五个切片同时 verify 且各自满核并行 → 不做配额；时间线里有负载数字，上线后据此决定。</summary></details><details><summary><strong>[不保证先来先到]</strong> 轮询取锁，后到的可能先拿 → 独占方握着闸口，最多被一个后到的独占方插队；写进 ADR。</summary></details><details><summary><strong>[锁只在用户级目录]</strong> 多用户共用机器互不可见；主目录在网络文件系统上时 <code>flock</code> 可能不可靠 → 文档写明可用 <code>FLIGHT_LOCK_DIR</code> 指到本机路径。</summary></details><details><summary><strong>[包装脚本剥掉 <code>FLIGHT_LOCK_HELD</code> 且被测进程里再调门禁]</strong> → 内层排到持有上限后不加锁继续；契约文档点名这个变量须放行。</summary></details><details><summary><strong>[baseline 排队期间运行标记显示「仍在跑」]</strong> 起始时间早于实际开跑 → 排队提示打在 baseline 的 stderr 里；preflight 的文案不改。</summary></details><details><summary><strong>[切片 gate 的排队秒数到不了分支的时间线]</strong> gate 在临时 worktree 里跑，integrator 用 <code>record --json</code> 写回的只有固定字段 → 本 change 不改工作流脚本与 <code>record</code></summary><p>切片 gate 的排队信息只在它的输出 JSON（<code>lock</code>）与临时 worktree 的时间线里，分支上的 <code>cost</code> 只统计 baseline 与 final 的排队。要带回分支得给工作流的门禁结构加字段，留给后续 change。</p></details><details><summary><strong>[并发测试的时序]</strong> 用「开始文件 / 放行文件 / stderr 里的排队提示」作同步点，只有「持有者超过上限」一条依赖真实时间（0.3 秒上限，轮询 0.2 秒）→ 断言留足余量（等待上限 10 秒）。</summary></details><details><summary><strong>[gate.test 挂死会占着锁]</strong> 本 change 不给 gate.test 加超时 → 排队方按 D5 放弃并留痕，不会被永久卡住。</summary></details><details><summary><strong>[与并行中的 plan-hygiene change 冲突]</strong> 两边都改 <code>slice-gate.py</code> 的 baseline 段与 <code>flight-doctor.py</code> → 后合的那个 PR 预合并 main 时解冲突；本设计不依赖 <code>gate.full_suite_sec</code> 的去留（D5）。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><p>1. 合入后各仓库 <code>./install.sh --upgrade</code>，新 hook 随 <code>.claude/hooks/</code> 下发；无配置、无数据迁移。 2. 第一次运行自动建锁目录。 3. 观察一周 <code>flight-doctor.py cost</code> 的排队秒数与时间线里的负载，回头定 D5 的数字和要不要做共享配额。 4. <strong>回退</strong>：环境里设 <code>FLIGHT_LOCK=off</code> 即恢复改动前的行为（不排队、G10 照常判）；删掉 <code>flight-lock.py</code> 效果相同（状态 <code>unavailable</code>）。时间线与 JSON 的新片段不影响旧版解析。</p></div><div class="design-block"><h3>Open Questions</h3><ul><li><strong>D5 与 D6 两处偏离方案页</strong>，请在 <code>spec.html</code> 审批时确认：按持有者判停滞；<code>off</code> / <code>unavailable</code> 不降级。</li><li>D5 的三个数字（3 倍、300 秒下限、1800 秒缺省）与 D10 的阈值（10 秒、一半）都是草案。</li><li>lint / typecheck 是否该留在独占段内（D3）：现在留着，等时间线数据。</li><li>没有需要 supersede 的在役 ADR。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody><tr><td class="mono">S1</td><td>flight-lock.py：全机读写锁（独占 / 共享 / 闸口防饿死 / 重入 / 持有者停滞即放弃 / 回退）与 run、status 两个子命令；测试套件用会话临时锁目录</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/flight-lock.py<br>tests/test_flight_lock.py<br>tests/lock_helpers.py<br>tests/conftest.py</td><td><code>python3 -m pytest -q tests/test_flight_lock.py tests/test_evidence_timeline.py tests/test_flight_doctor.py tests/test_tiers_cli.py</code></td></tr><tr><td class="mono">S2</td><td>flight-doctor.py cost 读新备注：final 的秒数取自「测试」片段，排队秒数进顶层 wait_sec，旧时间线结果不变</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/flight-doctor.py<br>tests/test_flight_doctor_cost_lock.py</td><td><code>python3 -m pytest -q tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py</code></td></tr><tr><td class="mono">S3</td><td>slice-gate.py 持锁：baseline / final 整段独占、gate 整段共享；输出 JSON 带 lock，时间线带排队与负载；放弃等待的那次 G10 降为警告</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_gate_lock.py<br>template/.claude/hooks/flight-lock.py<br>tests/test_flight_lock.py<br>tests/test_gate_checks_baseline.py</td><td><code>python3 -m pytest -q tests/test_gate_lock.py tests/test_flight_lock.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_tiers_gate.py tests/test_tiers_timing.py tests/test_tiers_parts_gate.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_baseline_incremental.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_flight_doctor.py tests/test_evidence_timeline.py</code></td></tr><tr><td class="mono">S4</td><td>flight-doctor.py doctor 新增 [checks]（检查耗时接近测试耗时 → 疑似重跑测试）与 [lock]（当前持有者 / 空闲 / 已关闭）</td><td>wave 2</td><td>S1, S2</td><td>template/.claude/hooks/flight-doctor.py<br>tests/test_flight_doctor_lock.py</td><td><code>python3 -m pytest -q tests/test_flight_doctor_lock.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py</code></td></tr><tr><td class="mono">S5</td><td>final 留下 gate.test 与各项检查的秒数（JSON 的 sec 与时间线的「测试」「检查」片段）；test-tiers.py run / probe 持独占锁</td><td>wave 3</td><td>S3</td><td>template/.claude/hooks/slice-gate.py<br>template/.claude/hooks/test-tiers.py<br>tests/test_gate_cost_note.py<br>tests/test_gate_checks_baseline.py</td><td><code>python3 -m pytest -q tests/test_gate_cost_note.py tests/test_gate_lock.py tests/test_gate_checks_final.py tests/test_gate_test_result.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_final_impacted.py tests/test_slice_gate_final.py tests/test_tiers_timing.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_tiers_probe.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py</code></td></tr><tr><td class="mono">S6</td><td>文档：运行器契约新增「全机测试锁」一节；opsx-apply / opsx-propose 命令与同名 skill、test-tiers.md、README 各补一句排队说明</td><td>wave 3</td><td>S3</td><td>template/.claude/flight-runner-contract.md<br>template/.claude/commands/opsx-apply.md<br>template/.claude/commands/opsx-propose.md<br>template/.claude/commands/test-tiers.md<br>template/.claude/skills/openspec-apply-change/SKILL.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>README.md<br>tests/test_lock_docs.py</td><td><code>python3 -m pytest -q tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_template_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_docs_iron_rules.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_goal_takeoff_docs.py tests/test_glossary_docs.py tests/test_submodule_docs.py tests/test_agents_workflow.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_flight_doctor.py</code></td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><table class="flight-table"><thead><tr><th>触发项</th><th>理由</th></tr></thead><tbody><tr><td><code>tests/conftest.py</code></td><td>S1 要在 conftest.py 里给整个测试套件指定会话临时锁目录（design D9）：套件里以子进程跑门禁的用例都受它影响，final 全量是必要的</td></tr></tbody></table><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>machine-test-lock#exclusive-holders-mutually-exclude</td><td><code>tests/test_flight_lock.py::test_exclusive_holders_mutually_exclude</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#shared-holders-run-together</td><td><code>tests/test_flight_lock.py::test_shared_holders_run_together</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#exclusive-waiter-blocks-new-shared</td><td><code>tests/test_flight_lock.py::test_exclusive_waiter_blocks_new_shared</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#killed-holder-releases-lock</td><td><code>tests/test_flight_lock.py::test_killed_holder_releases_lock</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#status-lists-live-holders</td><td><code>tests/test_flight_lock.py::test_status_lists_live_holders</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#nested-run-does-not-wait</td><td><code>tests/test_flight_lock.py::test_nested_run_does_not_wait</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#test-suite-uses-isolated-lock-dir</td><td><code>tests/test_flight_lock.py::test_test_suite_uses_isolated_lock_dir</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#waiter-gives-up-on-stalled-holder</td><td><code>tests/test_flight_lock.py::test_waiter_gives_up_on_stalled_holder</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#lock-off-or-unavailable-runs-unlocked</td><td><code>tests/test_flight_lock.py::test_lock_off_or_unavailable_runs_unlocked</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#cost-reads-final-seconds-and-wait</td><td><code>tests/test_flight_doctor_cost_lock.py::test_cost_reads_final_seconds_and_wait</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#baseline-and-final-hold-exclusive-lock</td><td><code>tests/test_gate_lock.py::test_baseline_and_final_hold_exclusive_lock</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#slice-gate-holds-shared-lock</td><td><code>tests/test_gate_lock.py::test_slice_gate_holds_shared_lock</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#final-queues-behind-exclusive-holder</td><td><code>tests/test_gate_lock.py::test_final_queues_behind_exclusive_holder</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#gate-runs-when-lock-module-missing</td><td><code>tests/test_gate_lock.py::test_gate_runs_when_lock_module_missing</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#contended-run-downgrades-slow-unit-verdict</td><td><code>tests/test_gate_lock.py::test_contended_run_downgrades_slow_unit_verdict</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#lock-off-keeps-slow-unit-verdict</td><td><code>tests/test_gate_lock.py::test_lock_off_keeps_slow_unit_verdict</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#timeline-records-wait-and-load</td><td><code>tests/test_gate_lock.py::test_timeline_records_wait_and_load</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#doctor-flags-check-as-slow-as-tests</td><td><code>tests/test_flight_doctor_lock.py::test_doctor_flags_check_as_slow_as_tests</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#doctor-reports-lock-holders</td><td><code>tests/test_flight_doctor_lock.py::test_doctor_reports_lock_holders</code></td><td><span class="chip" data-state="passed">passed</span></td></tr><tr><td>machine-test-lock#final-note-records-test-and-check-seconds</td><td><code>tests/test_gate_cost_note.py::test_final_note_records_test_and_check_seconds</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#test-tiers-run-and-probe-hold-exclusive-lock</td><td><code>tests/test_gate_cost_note.py::test_test_tiers_run_and_probe_hold_exclusive_lock</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#contract-documents-machine-test-lock</td><td><code>tests/test_lock_docs.py::test_contract_documents_machine_test_lock</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>machine-test-lock#commands-and-skills-mention-queueing</td><td><code>tests/test_lock_docs.py::test_commands_and_skills_mention_queueing</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>incremental</code></td><td>-</td><td>27.6</td></tr><tr><td>final</td><td><code>full</code></td><td>Δ 含全局文件：tests/conftest.py</td><td>-</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><table class="flight-table"><thead><tr><th>时间</th><th>事件</th><th>备注</th></tr></thead><tbody><tr><td class="mono">2026-11-18T00:46:42Z</td><td>baseline</td><td>增量（经锚点 grill-glossary@c209e095e7，补跑 6 个测试文件 27.6s） ok</td></tr><tr><td class="mono">2026-11-18T01:11:33Z</td><td>approve</td><td>2026-11-18T01:10:00Z · 起飞 machine-test-lock</td></tr><tr><td class="mono">2026-11-18T01:16:00Z</td><td>gate</td><td>S1 ok</td></tr><tr><td class="mono">2026-11-18T01:16:00Z</td><td>gate</td><td>S2 ok</td></tr><tr><td class="mono">2026-11-18T01:16:07Z</td><td>integrate</td><td>wave 1</td></tr><tr><td class="mono">2026-11-18T01:33:50Z</td><td>gate</td><td>S4 ok</td></tr><tr><td class="mono">2026-11-18T01:33:58Z</td><td>integrate</td><td>wave 2</td></tr><tr><td class="mono">2026-11-18T01:35:13Z</td><td>review</td><td>findings=12 blocking=0 deferred=12</td></tr><tr><td class="mono">2026-11-18T01:35:42Z</td><td>final</td><td>red</td></tr></tbody></table>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 flight-lock.py：全机读写锁（独占 / 共享 / 闸口防饿死 / 重入 / 持有者停滞即放弃 / 回退）与 run、status 两个子命令；测试套件用会话临时锁目录 （deps: - · verify: <code>python3 -m pytest -q tests/test_flight_lock.py tests/test_evidence_timeline.py tests/test_flight_doctor.py tests/test_tiers_cli.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 flight-doctor.py cost 读新备注：final 的秒数取自「测试」片段，排队秒数进顶层 wait_sec，旧时间线结果不变 （deps: - · verify: <code>python3 -m pytest -q tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 slice-gate.py 持锁：baseline / final 整段独占、gate 整段共享；输出 JSON 带 lock，时间线带排队与负载；放弃等待的那次 G10 降为警告 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_gate_lock.py tests/test_flight_lock.py tests/test_slice_gate.py tests/test_slice_gate_final.py tests/test_slice_gate_baseline_preflight.py tests/test_tiers_gate.py tests/test_tiers_timing.py tests/test_tiers_parts_gate.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_baseline_incremental.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_flight_doctor.py tests/test_evidence_timeline.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 flight-doctor.py doctor 新增 [checks]（检查耗时接近测试耗时 → 疑似重跑测试）与 [lock]（当前持有者 / 空闲 / 已关闭） （deps: S1, S2 · verify: <code>python3 -m pytest -q tests/test_flight_doctor_lock.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S5 final 留下 gate.test 与各项检查的秒数（JSON 的 sec 与时间线的「测试」「检查」片段）；test-tiers.py run / probe 持独占锁 （deps: S3 · verify: <code>python3 -m pytest -q tests/test_gate_cost_note.py tests/test_gate_lock.py tests/test_gate_checks_final.py tests/test_gate_test_result.py tests/test_final_incremental.py tests/test_final_reuse.py tests/test_final_impacted.py tests/test_slice_gate_final.py tests/test_tiers_timing.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_tiers_probe.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S6 文档：运行器契约新增「全机测试锁」一节；opsx-apply / opsx-propose 命令与同名 skill、test-tiers.md、README 各补一句排队说明 （deps: S3 · verify: <code>python3 -m pytest -q tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_template_docs.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_docs_iron_rules.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_install.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_goal_takeoff_docs.py tests/test_glossary_docs.py tests/test_submodule_docs.py tests/test_agents_workflow.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_flight_doctor.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-18 01:55 · 章节 8 · 图示 0 · 任务 6
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>

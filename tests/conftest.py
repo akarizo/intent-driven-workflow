@@ -1,16 +1,26 @@
 """本仓库自身的测试基座：按路径加载 template/.claude/hooks/*.py，并提供临时 git 仓库。"""
+import atexit
 import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 HOOKS = ROOT / "template" / ".claude" / "hooks"
+
+# 全机测试锁：整个套件用会话临时锁目录，不碰 ~/.claude/flight-lock；外层的锁开关 / 持有上限不漏进来（design D9）
+_FLIGHT_LOCK_DIR = tempfile.mkdtemp(prefix="flight-lock-test-")
+os.environ["FLIGHT_LOCK_DIR"] = _FLIGHT_LOCK_DIR
+atexit.register(shutil.rmtree, _FLIGHT_LOCK_DIR, True)
+for _k in ("FLIGHT_LOCK", "FLIGHT_LOCK_MAX_HOLD_SEC"):
+    os.environ.pop(_k, None)
 
 
 def hook_path(name: str) -> pathlib.Path:
