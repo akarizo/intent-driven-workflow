@@ -5,9 +5,10 @@
 #   flight-doctor.py forecast --change-dir DIR [--json]   起飞前预告 baseline / final 走全量还是增量
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
-#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare]
+#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock]
 #
-# 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用 _interfaces.md「S4 提供」列出的函数。
+# 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用 _interfaces.md「S4 提供」列出的函数；
+# [lock] 同法加载 flight-lock.py，只调用 holders() / lock_dir()（machine-test-lock design D7、D10）。
 # 纯标准库，兼容 Python 3.9。
 import argparse
 import importlib.util
@@ -54,13 +55,24 @@ CHECKS_RE = re.compile(r"检查 (.+?)(?= · | ok$| red$|$)")
 CHECK_ITEM_RE = re.compile(r"^(.+) ([\d.]+)s$")
 INC_MARKS = ("增量", "同树沿用")
 FULL_MARKS = ("全量：", "全量（")
+# [checks] 的「检查耗时接近测试」阈值（design D10，草案）：秒数 ≥ SLOW_CHECK_MIN_SEC 且 ≥ 测试秒数 × SLOW_CHECK_RATIO
+SLOW_CHECK_MIN_SEC = 10.0
+SLOW_CHECK_RATIO = 0.5
 
 
-def load_gate():
-    spec = importlib.util.spec_from_file_location("slice_gate", os.path.join(HOOKS_DIR, "slice-gate.py"))
+def _load(mod_name, file_name):
+    spec = importlib.util.spec_from_file_location(mod_name, os.path.join(HOOKS_DIR, file_name))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def load_gate():
+    return _load("slice_gate", "slice-gate.py")
+
+
+def load_lock():
+    return _load("flight_lock", "flight-lock.py")
 
 
 def _err(e):
@@ -380,6 +392,59 @@ def doctor_declare(openspec_root):
     return lines
 
 
+def _last_final_costs(change_dir):
+    """timeline 里最近一条带「测试 Xs」的 final 备注的 note_costs；没有 → None。"""
+    try:
+        with open(os.path.join(change_dir, TIMELINE), "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        cols = line.split("\t")
+        if len(cols) >= 3 and cols[1] == "final":
+            nc = note_costs(cols[2])
+            if nc["test"] is not None:
+                return nc
+    return None
+
+
+def doctor_checks(changes):
+    lines = ["[checks]"]
+    for name, d in changes:
+        nc = _last_final_costs(d)
+        if nc is None:
+            continue
+        test = nc["test"]
+        for check, sec in nc["checks"].items():
+            if sec >= SLOW_CHECK_MIN_SEC and sec >= test * SLOW_CHECK_RATIO:
+                lines.append("  %s：检查 %s %s 秒，接近测试 %s 秒 → 疑似检查在重跑测试，改读 $GATE_TEST_RESULT"
+                             "（见 .claude/flight-runner-contract.md 第 3 节）" % (name, check, sec, test))
+    if len(lines) == 1:
+        lines.append("  无：最近的 final 里没有耗时接近测试的检查")
+    return lines
+
+
+def doctor_lock():
+    lines = ["[lock]"]
+    try:
+        fl = load_lock()
+        lines.append("  锁目录：%s" % fl.lock_dir())
+    except (Exception, SystemExit) as e:
+        lines.append("  flight-lock.py 加载失败：%s" % _err(e))
+        return lines
+    if os.environ.get("FLIGHT_LOCK", "").strip().lower() == "off":
+        lines.append("  已关闭（FLIGHT_LOCK=off）")
+        return lines
+    hs = fl.holders()
+    for h in hs:
+        lines.append("  %s · %s · %s · pid %s · 已持有 %s 秒" % (
+            "独占" if h.get("mode") == "exclusive" else "共享", h.get("change") or "-",
+            h.get("label") or "-", h.get("pid"), h.get("held_sec")))
+    if not hs:
+        lines.append("  空闲")
+    return lines
+
+
 def doctor(openspec_root):
     openspec_root = os.path.abspath(openspec_root)
     changes = _changes(openspec_root)
@@ -391,6 +456,8 @@ def doctor(openspec_root):
         out += ["[anchors]", "  slice-gate.py 加载失败：%s" % _err(e)]
     out += doctor_gate_test(changes, baselines)
     out += doctor_declare(openspec_root)
+    out += doctor_checks(changes)
+    out += doctor_lock()
     return "\n".join(out)
 
 

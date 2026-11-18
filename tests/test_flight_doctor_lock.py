@@ -3,12 +3,8 @@
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from lock_helpers import Locks
-
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S4 未实现")
 
 FINAL_NOTE = "全量（没有可用锚点） 测试 100.0s · 检查 ratchet 95.0s / style 1.0s · 排队 0.0s ok"
 
@@ -24,7 +20,6 @@ def doctor(repo, **env):
     return p.stdout
 
 
-@PENDING
 def test_doctor_flags_check_as_slow_as_tests(git_repo):
     # Given: 在途 change c1 的最近一条 final 备注：测试 100 秒，检查 ratchet 95 秒、style 1 秒
     d = git_repo / "openspec" / "changes" / "c1"
@@ -40,7 +35,6 @@ def test_doctor_flags_check_as_slow_as_tests(git_repo):
     assert "style" not in sec, sec
 
 
-@PENDING
 def test_doctor_reports_lock_holders(git_repo, tmp_path):
     # Given: 一个进程以 --change demo --label "final gate" 在锁目录持有独占锁
     with Locks(tmp_path) as lk:
