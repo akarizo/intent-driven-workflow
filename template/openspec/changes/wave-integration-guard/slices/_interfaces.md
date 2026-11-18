@@ -37,3 +37,9 @@
 - S1 `template/.claude/hooks/slice-gate.py:5764` `_guard_checks(gate)`；`:5770` `_run_guards(root, change_dir, checks, baseline, phase, log_tag)`，与上文约定一致。
 - S4 `template/.claude/workflows/opsx-apply.js:39` `const landed = args.landed || {}`；派发 label `integrate:w<i>[:retry]`、`fix:w<i>[:retry]`、`integrate:w<i>:fix[:retry]`（`:244` `:263` `:276`）。
 - S6 仅文档与 schema（`flight-runner-contract.md`、`opsx-propose.md`、`openspec-propose/SKILL.md`、`schema.yaml`），无代码签名。
+
+## 实际签名（wave 3 合回后核对，S3 / S5 / S7）
+
+- S3 `template/.claude/hooks/slice-gate.py:3621` `cmd_landed(args)`；`:2649` `_owned_file_count(root, commit, owns, cache=None)`，owns 分档与 `landed` 子命令与上文约定一致。
+- S5 仅文档与测试（`opsx-apply.md`、`openspec-apply-change/SKILL.md`、`pr-ship.md`、`README.md`），无代码签名。
+- S7 `template/.claude/hooks/spec_html.py:660` `render_guards(gate)`；`template/.claude/hooks/flight-doctor.py:241` `wave_cost(lines)`。
