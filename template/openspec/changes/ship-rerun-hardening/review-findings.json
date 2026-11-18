@@ -1,0 +1,99 @@
+{
+  "blocked": [],
+  "blocking": [
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5967,
+      "summary": "_final_fresh 用 `git diff --name-only final_commit HEAD` 取差集，没带 --no-renames。git diff 默认开改名检测，改名时只列出新路径。S1 之前任何非记账路径都会判过期，所以这个问题不暴露；加了 inert 之后就成了漏洞：把源码文件改名到 inert 目录（例如 `git mv src/legacy.py docs/legacy.py`，inert=[\"docs/**\"]），差集只剩 docs/legacy.py，命中 inert 后 ship 判为新鲜，但 src/legacy.py 实际已删除，final 结论失效却不会触发重跑。已在临时仓库抽查确认：默认只输出 `docs/legacy.py`，加 --no-renames 才同时输出 `src/legacy.py`。_delta 已用 --no-renames，三处里只有 ship 新鲜度这一处有这个问题。",
+      "fix": "改成 `git(root, \"diff\", \"--name-only\", \"--no-renames\", final_commit, \"HEAD\")`，与 _delta 同口径。路径含非 ASCII 字符时也可以考虑改用 _git_raw 加 -z 拆分。另补一条用例：源码文件改名进 inert 目录后，ship 的 reasons 里要有「final 过期」。"
+    }
+  ],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5799,
+      "summary": "_try_reuse 按切片包要求用 recon=False 去掉 inert 路径，不参考候选基线本身测到的依赖图。候选（本 change 旧基线或基线池条目）的 deps 若显示有测试读了某条 inert 路径，这条路径仍会被去掉，对应测试不会补跑。符合 design D2/D3 的分工，靠 S2 在 baseline 开跑前用池里最新锚点做静态对账兜底；但对账用的锚点与候选基线不一定是同一份测量，残余缺口需进一步确认。",
+      "fix": "可选：候选带 deps 时把 cand 当作 anchor 传给 drop（`_inert_drop(..., recon=False)[0](tdelta, cand if cand.get(\"deps\") else None)`），与 _pick_anchor 同口径；或者在 design 里写明这个残余风险由 S2 的静态对账承担。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3868,
+      "summary": "矛盾警告按（路径, 测试文件）逐对展开。一条被几十个测试依赖的 inert 路径会产生几十条几乎相同的 warnings，淹没其他警告。",
+      "fix": "按路径合并：每条路径只出一条警告，列出至多 5 个依赖它的测试文件，超出部分写「等 N 个」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/pr-ship.md",
+      "line": 54,
+      "summary": "step 2b 说「不重跑 final」的第一种情形是「沉淀只动了记账文件」，但这种情形实际不会出现。沉淀 commit 写的是 CLAUDE.md 或记忆文件，而 BOOKKEEPING（slice-gate.py:4757）只有 changes/<name>/ 下的 timeline.md、gate-report.md 等几份文件。真正会出现的是两种：一是没有产生沉淀 commit，final 之后只多了记账文件；二是这些路径写进了 inert。读者照原文理解会以为写 CLAUDE.md 不会让 final 过期。不影响裁决，因为是否重跑由 ship 机械决定。",
+      "fix": "把第一种情形改写为「本轮没有沉淀 commit（final 之后只多了记账文件，例如 ship 自己写的时间线行）」，第二种 inert 的说法保留；test_ship_rerun_docs 断言的「不重跑 final」「final 过期」两个词不要动。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/pr-ship.md",
+      "line": 51,
+      "summary": "step 2b 现在先跑 slice-gate.py ship。只要 reasons 不为空（例如飞行里留下的 blocking 评审项），ship 就以退出码 1 结束，属于正常结果。原文没有说明这一点，执行者可能把退出 1 当成命令失败，或者因此停下。",
+      "fix": "在 ship 命令后补半句：「退出码 1 只表示 draft，不是出错；这里只看输出 JSON 的 reasons 是否含 `final 过期`」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 44,
+      "summary": "结果文件字段表的 mode 一行已加入 tests-only，但 inherited 一行仍写「`impacted` 为 `null`」，nodes 一行仍写「`impacted` 或依赖图未测时为 `null`」。tests-only 时这两项也是 null（design D6），这条只写在下方「用法」里，表格本身前后不一致。",
+      "fix": "inherited 一行改为「`impacted` / `tests-only` 为 `null`」；nodes 一行补上 `tests-only`。必要时在 junit 一行注明 tests-only 时只含重跑部分。注意 test_runner_contract_docs 钉住的固定词不要改。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 92,
+      "summary": "「inert 的边界」第一点写「glob 匹配到已跟踪的测试路径、全局文件或 global 路径时 lint 判红」。按 design D3，静态核对在 lint、preflight、baseline 开跑前三处都会跑，文档只写了 lint，与紧接着的对账一条（写的是 lint / preflight）口径不一致。",
+      "fix": "改为「lint / preflight / baseline 开跑前判红」，与 D3 的选测复核时机一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 372,
+      "summary": "_inert_recon 把 doctor_anchors 里定位锚点池的逻辑（git-common-dir 拼 ANCHOR_DIR、listdir 过滤 .json / .tmp-、_read_json）整段重写了一遍，两处以后可能改得不一致。另外 git 顶层这里用的是 sg._git_top，doctor_anchors 用的是 sg.git(--show-toplevel)，两边取法也不一样。",
+      "fix": "抽一个 _anchor_pool(sg, root) -> [(name, entry)] 让两处共用，并统一用同一种方式取 git 顶层；切片包只要求读锚点池的方式照 doctor_anchors，复用比复制更稳。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 390,
+      "summary": "gate-scope.json 里 inert 写了但形状不合法（例如写成字符串）时，_scope_extras 会退回缺省 []，_inert_paths 因此没有可匹配的路径，doctor 照样输出「inert：与 N 条锚点的依赖图无矛盾」，会让人以为对账已经通过。",
+      "fix": "对账前检查 ctx[\"inert\"]：为空而 decl 里确实有 inert 时，改报「inert：声明形状错误或为空，无法对账」；也可以调 _scope_extra_ok('inert', decl['inert']) 判形状。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1942,
+      "summary": "_lint_inert 排在 _lint_scope_provider 前面。仓库没声明 builtin/cmd 提供方、却写了 inert 时，lint 只报 inert 违规，提示用户先声明选测范围的那条（scope:undeclared）要等 inert 修好才会出现，用户得分两轮修。",
+      "fix": "可接受的话保持现状。否则在 provider[\"kind\"] 为 None 时跳过 inert 核对，或把 inert 违规和提供方违规合并后一起返回（切片包写的是「有违规就直接返回」，改的话需要同步改 design）。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6066,
+      "summary": "无图退路的重跑集合里，blind 命中的已跟踪测试文件没做基线预存红检查。预存红只在 kept（改动的测试文件）里查（6055-6058 行），但 6066 行把 blind 文件也并进了重跑。cmd_final 3923-3927 行又把重跑中的全部 FAILED/ERROR 直接判为「新增失败」，没有像内建增量（3979-3981 行的 known/new）那样扣掉基线 failed_nodes。后果：只要某个 blind 测试文件在基线里有预存红，只改测试文件的 final 就会被误判为红，报错文字也不对（说是新增失败）。用户只能靠 --full 绕开，--full 时全量按基线差分反而能过。方向是偏严，不会漏测，但这是误报阻断。spec 只要求在 kept 里查，所以这是 spec 的空缺被原样实现了。",
+      "fix": "二选一：① 在 _tests_only_pick 里把预存红检查扩到最终的重跑集合（files），也就是把 blind 并入之后、对 sorted(files) 按 stems / failed_nodes 再判一遍，命中就返回 (None, \"上次绿 final … 后改动的测试文件有预存红：…\")；② 或在 cmd_final 的 tests-only 分支照内建增量的做法，用 known = set(bt.get(\"failed_nodes\") or []) 过滤出 new 再判红，被排除的写一条 warning。① 不用改 D5 的判定文字，更贴合 design 的思路，即「失败都是新的」这一前提由判定函数保证。可补一条用例：blind 文件含基线预存红、只改另一个测试文件。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6040,
+      "summary": "_tests_only_pick 里把 lambda 赋给名字 fkey（PEP 8 E731）。另外函数内又调了一次 _scope_extras(change_dir)，而 cmd_final 手上已经有 extras，等于对同一文件多读一次。",
+      "fix": "把 fkey 改成一个小的嵌套 def，或直接内联成一个元组比较。_scope_extras 重读只是轻微浪费，可以留着，保持函数签名与 _interfaces.md 一致。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "74bc4573a2f060cc6733dd4e88993721a79d9d49",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 20/20；增量：重跑 70 个文件（488 个用例）/ 沿用 164 个，锚点 1dabeac9c2。fix 说明：slices.json 无 fix 条目，start 以 2 退出已按指示跳过（基点 G0 已校验通过、sub-sync ok）。HIGH 修复：_final_fresh 改用 _git_raw(['diff','--name-only','--no-renames','-z',final_commit,'HEAD']).split('\\0')，与 _delta 同口径；新增先红后绿用例 tests/test_inert_paths.py::test_rename_into_inert_dir_makes_final_stale（inert=['docs/**']，git mv scripts/helper.sh docs/helper.sh 后 ship reasons 含「final 过期」）。未改任何骨架断言。全量 pytest 652 passed、schema validate 绿、hooks compileall 绿。"
+  }
+}
