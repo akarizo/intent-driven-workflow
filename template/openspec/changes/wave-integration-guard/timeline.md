@@ -15,3 +15,6 @@
 2026-11-18T12:46:41Z	integrate	wave 3
 2026-11-18T12:46:41Z	wave-check	wave 3/3 · 测试跳过（受影响测试约 516.7 秒（92 个文件），超过预算 120 秒，留给 final） · 排队 0.0s · 负载 8.0→8.0/18 ok
 2026-11-18T12:48:41Z	review	findings=16 blocking=0 deferred=16
+2026-11-18T12:49:17Z	review	findings=21 blocking=0 deferred=21
+2026-11-18T12:58:32Z	final	增量（锚点 2cc616742f，重跑 92 个文件 / 沿用 141 个用例） 测试 564.2s · 检查 schema-validate 1.7s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 2.9→5.4/18 ok
+2026-11-18T12:58:38Z	apply-done	blocked=1 blocking=0
