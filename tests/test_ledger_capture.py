@@ -1,13 +1,11 @@
 """slice-gate.py 的逐用例采集：依赖图插件记耗时、junit 兜底、增量重跑恒取耗时、部件上报
 （scenario: test-ledger#deps-run-records-case-seconds 等 4 条）。
 骨架：strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
-import pytest
 
 from conftest import load_hook
 from final_helpers import PY, PYTEST, TEST_CMD, make_repo
 from test_tiers_parts_gate import setup_parts
 
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S2 未实现")
 
 SLOW = "import time\n\n\ndef test_slow():\n    time.sleep(0.3)\n"
 # 只把 --junitxml 传给 pytest、丢掉 -p 插件参数的包装脚本（与 tests/test_runner_contract.py 的 DROPPING 同形）
@@ -19,7 +17,6 @@ exec %s -m pytest -q -p no:cacheprovider $J tests
 NODE_A = "tests/test_a.py::test_a"
 
 
-@PENDING
 def test_deps_run_records_case_seconds(git_repo):
     # Given: gate.test 是直接的 pytest 调用，其中一条用例睡 0.3 秒
     make_repo(git_repo, extra={"tests/test_slow.py": SLOW})
@@ -41,7 +38,6 @@ def test_deps_run_records_case_seconds(git_repo):
     assert set(new[0]["outcomes"]) == set(new[0]["secs"]) == set(deps["nodes"]), new
 
 
-@PENDING
 def test_junit_fallback_when_deps_unmeasured(git_repo):
     # Given: gate.test 是只转发 --junitxml、丢掉 -p 参数的包装脚本
     make_repo(git_repo, extra={"tools/gate.sh": DROPPING}, gate_extra={"test": "bash tools/gate.sh"})
@@ -61,7 +57,6 @@ def test_junit_fallback_when_deps_unmeasured(git_repo):
     assert all(isinstance(v, float) and v >= 0 for v in new[0]["secs"].values()), new
 
 
-@PENDING
 def test_incremental_rerun_records_seconds(git_repo):
     # Given: 被测仓库有多个测试文件
     make_repo(git_repo)
@@ -83,7 +78,6 @@ def test_incremental_rerun_records_seconds(git_repo):
     assert len(sg.ledger_observations()) == before + 2
 
 
-@PENDING
 def test_part_adapter_run_is_observed(git_repo):
     # Given: 部件形态的被测仓库，部件 sh 的单元命令是往 $FLIGHT_JUNIT 写报告的脚本
     d = setup_parts(git_repo)

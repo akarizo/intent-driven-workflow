@@ -317,6 +317,7 @@ _blind = set()
 _files = set()
 _keys = {}
 _nodes = []
+_secs = {}  # 仓库相对 nodeid → 秒（setup + call + teardown）
 _edges = {}
 _fxcur = [None]  # 正在 setup 的 session / package 级 fixture 名（只执行一次，读到的文件归全部使用者）
 _fx = {}
@@ -434,13 +435,16 @@ def _rootdir():
 def pytest_runtest_logreport(report):
     if _nested():
         return
+    head, sep, rest = report.nodeid.partition("::")
+    key = _keys.get(report.nodeid) or _abs_rel(os.path.normpath(os.path.join(_rootdir(), head)))
+    nid = None if key is None else key + sep + rest
+    if nid is not None:  # 逐用例耗时：setup + call + teardown 累加
+        _secs[nid] = _secs.get(nid, 0.0) + (getattr(report, "duration", 0.0) or 0.0)
     out = _outcome(report)
     if out is None:
         return
-    head, sep, rest = report.nodeid.partition("::")
-    key = _keys.get(report.nodeid) or _abs_rel(os.path.normpath(os.path.join(_rootdir(), head)))
-    if key is not None:
-        _nodes.append([key + sep + rest, out])
+    if nid is not None:
+        _nodes.append([nid, out])
 
 
 def _chain(path):
@@ -557,6 +561,7 @@ def pytest_sessionfinish(session):
         recs.append({"file": key, "deps": sorted(d), "test": True})
     recs += [{"file": k, "blind": True} for k in sorted(_blind)]
     recs += [{"node": n, "outcome": o} for n, o in _nodes]
+    recs += [{"sec_node": n, "sec": round(s, 4)} for n, s in sorted(_secs.items())]  # 键不能叫 node：_read_deps 会当结局
     if getattr(session.config, "workerinput", None) is None:  # 会话结束标记只由外层 controller 写（xdist worker 不写）
         recs.append({"flight_deps": "end"})
     _emit(recs)
@@ -891,8 +896,9 @@ def _flight_plugins(tmp, env, root, deps):
 def _read_deps(path):
     """读依赖图 jsonl（path 与各进程的 path.<pid>）→ ({"deps": {文件: [路径...]}, "blind", "files", "nodes": {nodeid: outcome}} | None, why | None)。
     没有开跑记录、没有会话结束标记（外层 controller 的 sessionfinish 末尾写）或有坏行（写入被中断，整条记录丢失）→ 不可度量；
-    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先。"""
-    started, ended, deps, blind, files, nodes = False, False, {}, set(), set(), {}
+    同一 nodeid 多条（xdist 主进程与 worker、call 与 teardown）以 FAILED / ERROR 优先；
+    另返回 "secs": {nodeid: 秒}（sec_node 记录，同一用例多条取最大值）。"""
+    started, ended, deps, blind, files, nodes, secs = False, False, {}, set(), set(), {}, {}
     d, base = os.path.split(path)
     try:
         names = sorted(n for n in os.listdir(d or ".") if n == base or n.startswith(base + "."))
@@ -924,6 +930,11 @@ def _read_deps(path):
             if nodes.get(rec["node"]) not in ("FAILED", "ERROR"):
                 nodes[rec["node"]] = rec.get("outcome")
             continue
+        if isinstance(rec.get("sec_node"), str):
+            sec = _num(rec.get("sec"))
+            if sec is not None:
+                secs[rec["sec_node"]] = max(secs.get(rec["sec_node"], 0.0), float(sec))
+            continue
         f = rec.get("file")
         if not isinstance(f, str):
             continue
@@ -938,7 +949,7 @@ def _read_deps(path):
     if not ended:
         return None, "依赖图记录不完整（会话未正常结束）"
     return {"deps":{f: sorted(v) for f, v in sorted(deps.items())}, "blind": sorted(blind),
-            "files": sorted(files), "nodes": nodes}, None
+            "files": sorted(files), "nodes": nodes, "secs": secs}, None
 
 
 def _deps_merge(a, b):
@@ -958,7 +969,8 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
     """跑 gate.test，经 PYTEST_ADDOPTS 注入 --junitxml 并恒加载防护插件 flight_guard（design D1）。
     返回 {"rc", "out", "failed": [classname::name, ...] | None, "why": str | None, "cases": set | None,
           "probe": {nodeid: {"sec", "hits"}} | None, "probe_why": str | None,
-          "deps": {"deps", "blind", "files", "nodes"} | None, "deps_why": str | None, "deps_kind": str | None}；
+          "deps": {"deps", "blind", "files", "nodes", "secs"} | None, "deps_why": str | None, "deps_kind": str | None}；
+    deps 的 secs = {nodeid: 秒}（逐用例耗时，口径同 nodes）。
     deps=True 时另加载依赖图插件（design D2）；deps=False 时 deps / deps_why / deps_kind 恒为 None。
     依赖图没测到时 deps_kind 是 not-pytest / plugins-dropped / plugin-import-failed / incomplete 之一，deps_why 带修法
     （unified-test-result-reuse design D4）。加载插件时另导出契约变量 FLIGHT_PLUGIN_PATH（插件目录）与
@@ -1024,6 +1036,13 @@ def run_test_gate(cmd, root, probe=False, deps=False, _plain=False, extra_env=No
                                     else "plugins-dropped" if ran else "not-pytest")
                 if res["deps_kind"] != "incomplete":
                     res["deps_why"] = DEPS_KIND_WHY[res["deps_kind"]]
+        if cwd is None:  # 逐用例观测（test-ledger design D3）：部件运行（带 cwd）由 run_part 自己上报
+            if res["deps"] is not None:
+                _ledger_observe("nodeid", res["deps"]["nodes"], res["deps"].get("secs"))
+            else:
+                j_out, j_secs = _junit_cases(junit)
+                if j_out is not None:
+                    _ledger_observe("junit", j_out, j_secs)
         if rc == 0:
             try:
                 res["cases"] = {tc.get("classname") or "" for tc in ET.parse(junit).getroot().iter("testcase")}
@@ -1250,6 +1269,25 @@ def _junit_secs(paths, root, name):
     return secs if parsed else None
 
 
+def _junit_cases(path):
+    """解析一份 junit → ({classname::name: passed|failed|error|skipped}, {id: 秒}) | (None, None)（文件不存在 / 解析失败）；
+    time 解析不了的用例不记耗时。"""
+    try:
+        tree = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return None, None
+    outcomes, secs = {}, {}
+    for tc in tree.iter("testcase"):
+        tid = "%s::%s" % (tc.get("classname") or "", tc.get("name") or "")
+        outcomes[tid] = ("failed" if tc.find("failure") is not None else "error" if tc.find("error") is not None
+                         else "skipped" if tc.find("skipped") is not None else "passed")
+        try:
+            secs[tid] = float(tc.get("time"))
+        except (TypeError, ValueError):
+            pass
+    return outcomes, secs
+
+
 def run_part(top, name, part, probe=True):
     """在 <top>/<root> 下运行部件单元层 → {"rc", "out", "failed", "why", "sec", "probe", "probe_why", "secs", "secs_why"}，
     id 均相对顶层；不记依赖图。部件写了 unit.probe（且 probe=True）→ 运行适配器 probe.cmd 包住 unit.cmd，按退出码判；
@@ -1278,6 +1316,7 @@ def run_part(top, name, part, probe=True):
         res["secs"], res["secs_why"] = None, None
         if res["probe"] is not None:
             res["secs"] = {n: float(r.get("sec") or 0.0) for n, r in res["probe"].items()}
+            _ledger_observe("nodeid", {}, res["secs"], tier="unit")
             return res
         res["secs"] = _junit_secs([junit], root, name) if os.path.isfile(junit) else None
         pattern = unit.get("junit")
@@ -1289,6 +1328,8 @@ def run_part(top, name, part, probe=True):
         if res["secs"] is None:
             res["secs_why"] = "没有逐用例耗时（探针无记录、$FLIGHT_JUNIT 未写%s）" % (
                 "、unit.junit 无本次运行的报告" if pattern else "、未配 unit.junit")
+    if res["secs"] is not None:  # 部件结局未知，只报耗时
+        _ledger_observe("nodeid", {}, res["secs"], tier="unit")
     return res
 
 
@@ -1323,6 +1364,25 @@ def part_tier_verdicts(name, res, rerun, allow):
         (k, why), = gaps.items()
         warnings.append("%s 不可度量：部件 %s：%s" % (k, name, why))
     return failed, warnings
+
+
+_LEDGER_OBS = []  # 本进程门禁实测的逐用例观测（test-ledger design D2 / D3）：只采集、不落盘
+
+
+def _ledger_observe(form, outcomes, secs, tier=None):
+    """追加一条观测 {"form": "nodeid" | "junit", "outcomes": {id: 结局}, "secs": {id: 秒}[, "tier"]}；任何异常都吞掉。"""
+    try:
+        obs = {"form": form, "outcomes": dict(outcomes or {}), "secs": dict(secs or {})}
+        if tier is not None:
+            obs["tier"] = tier
+        _LEDGER_OBS.append(obs)
+    except Exception:
+        pass
+
+
+def ledger_observations():
+    """观测表的浅拷贝。"""
+    return list(_LEDGER_OBS)
 
 
 _FLIGHT_LOCK_MOD = None  # flight-lock.py 模块对象；加载失败时为原因字符串（只加载一次）
@@ -3079,8 +3139,7 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, pr
         env.update(extra_env or {})
         sec_out = os.path.join(tmp, "seconds.jsonl")
         env.pop("FLIGHT_G7_SEC", None)  # 外层门禁的耗时文件不得漏给本次运行
-        if isinstance(durations, dict):
-            env["FLIGHT_G7_SEC"] = sec_out
+        env["FLIGHT_G7_SEC"] = sec_out  # 恒取逐用例耗时（进观测表）
         dout = _flight_plugins(tmp, env, root, True) if isinstance(deps_out, dict) else None
         flight = ["-p", "flight_guard", "-p", "flight_deps"] if dout else []
         tier_out = os.path.join(tmp, "tier-probe.jsonl")
@@ -3116,12 +3175,16 @@ def _pytest_outcomes(root, targets, gate=None, durations=None, deps_out=None, pr
         if os.path.isfile(out):
             with open(out, "r", encoding="utf-8") as f:
                 outcomes = [tuple(json.loads(line)) for line in f if line.strip()]
-        if isinstance(durations, dict) and os.path.isfile(sec_out):
+        run_secs = {}
+        if os.path.isfile(sec_out):
             with open(sec_out, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         nid, sec = json.loads(line)
-                        durations[nid] = durations.get(nid, 0.0) + sec
+                        run_secs[nid] = run_secs.get(nid, 0.0) + sec
+                        if isinstance(durations, dict):
+                            durations[nid] = durations.get(nid, 0.0) + sec
+        _ledger_observe("nodeid", outcomes, run_secs)  # outcomes 是 [(nodeid, 结局)]，在 _ledger_observe 内转 dict
         if dout:
             parsed, _ = _read_deps(dout)
             if parsed is not None:
