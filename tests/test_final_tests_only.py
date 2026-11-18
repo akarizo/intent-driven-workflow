@@ -6,16 +6,12 @@ ship-rerun-decision#claude-md-commit-without-graph-or-inert-runs-full-and-names-
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import SCOPE_DECL, commit_all, git, run_hook
 from final_helpers import baseline, change_and_commit, final, make_repo, timeline_rows
 from test_flight_doctor import forecast
 from test_gate_test_result import COPY_RESULT, _copy_check
 from test_runner_contract import DROPPING
 from test_runner_statement import REASON
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S3 实现后去掉")
 
 TEST_A2 = """
     import os
@@ -69,7 +65,6 @@ def _ship(repo, d):
     return json.loads(p.stdout.strip().splitlines()[-1])
 
 
-@PENDING
 def test_tests_only_rerun_after_green_final(git_repo, tmp_path):
     # Given: 依赖图测不到的仓库，final 已绿；之后只提交了 tests/test_a.py 的改动。
     #        另一个同样的仓库没有 gate.pytest（增量重跑无法等价复现 gate.test）
@@ -94,7 +89,6 @@ def test_tests_only_rerun_after_green_final(git_repo, tmp_path):
     assert (out2.get("incremental") or {}).get("mode") == "full", (out2, p2.stderr)
 
 
-@PENDING
 def test_tests_only_refused_when_source_changed(git_repo):
     # Given: 依赖图测不到的仓库，final 已绿；之后提交了 src/a.py 的改动
     d = _nograph(git_repo)
@@ -109,7 +103,6 @@ def test_tests_only_refused_when_source_changed(git_repo):
     assert "没有可用锚点" in inc["full_why"] and "src/a.py" in inc["full_why"], inc
 
 
-@PENDING
 def test_tests_only_red_when_rerun_fails(git_repo):
     # Given: 依赖图测不到的仓库，final 已绿；之后提交的 tests/test_a.py 里有一条会失败的新用例
     d = _nograph(git_repo)
@@ -125,7 +118,6 @@ def test_tests_only_red_when_rerun_fails(git_repo):
                for f in out["failed"]), out["failed"]
 
 
-@PENDING
 def test_tests_only_result_handoff_marks_mode(git_repo, tmp_path):
     # Given: 同样的仓库，计划配了一项把 GATE_TEST_RESULT 复制到仓库外的检查；final 已绿；之后只改了 tests/test_a.py
     out_path = tmp_path / "result.json"
@@ -143,7 +135,6 @@ def test_tests_only_result_handoff_marks_mode(git_repo, tmp_path):
     assert rec["failed_nodes"] == [], rec
 
 
-@PENDING
 def test_forecast_predicts_tests_only_rerun(git_repo):
     # Given: 依赖图测不到的仓库，final 已绿；之后只提交了 tests/test_a.py 的改动
     d = _nograph(git_repo)
@@ -159,7 +150,6 @@ def test_forecast_predicts_tests_only_rerun(git_repo):
     assert any("final 过期" in r and "补跑将是增量" in r and "无图" in r for r in res["reasons"]), res["reasons"]
 
 
-@PENDING
 def test_cost_attributes_tests_only_rerun(git_repo):
     # Given: 依赖图测不到的仓库先跑了一次全量 final，之后只改测试文件又跑了一次 final
     d = _nograph(git_repo)
@@ -176,7 +166,6 @@ def test_cost_attributes_tests_only_rerun(git_repo):
     assert j["final"]["full"] == 1 and j["final"]["incremental"] == 1, j
 
 
-@PENDING
 def test_claude_md_commit_without_graph_or_inert_runs_full_and_names_file(git_repo):
     # Given: 依赖图测不到、也没有声明 inert 的仓库，final 已绿；之后只提交了 CLAUDE.md 的改动
     d = _nograph(git_repo, extra={"CLAUDE.md": "# 记忆\n"})
