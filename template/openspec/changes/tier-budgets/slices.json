@@ -1,0 +1,199 @@
+{
+ "gate": {
+  "test": "python3 -m pytest -q tests",
+  "lint": "python3 -m compileall -q template/.claude/hooks",
+  "typecheck": null,
+  "checks": [
+   {
+    "name": "schema-validate",
+    "baseline": "cd template && openspec schema validate intent-driven",
+    "final": "cd template && openspec schema validate intent-driven",
+    "timeout_sec": 120
+   }
+  ]
+ },
+ "slices": [
+  {
+   "id": "S1",
+   "title": "test-ledger.py：预算判定 budget()（集成层棘轮 G13、层总量 G14）、预算变更比较 budget_changes()、「测试变更」的预算段、对账里两个噪声项不再对区域计数",
+   "packet": "slices/S1.md",
+   "owns": [
+    "template/.claude/hooks/test-ledger.py",
+    "tests/test_budget_core.py"
+   ],
+   "deps": [],
+   "verify": "python3 -m pytest -q tests/test_budget_core.py tests/test_ledger_core.py tests/test_ledger_delta.py tests/test_flight_doctor_tests.py",
+   "scenarios": [
+    "tier-budgets#new-integration-case-over-line-is-red",
+    "tier-budgets#existing-cases-over-line-only-warn",
+    "tier-budgets#unmeasured-and-unbudgeted-cases-not-judged",
+    "tier-budgets#allow-entry-moves-integration-case-line",
+    "tier-budgets#missing-baseline-ledger-degrades-to-warning",
+    "tier-budgets#unit-total-over-budget-is-red",
+    "tier-budgets#region-total-over-budget-only-warns",
+    "tier-budgets#total-not-judged-when-seconds-missing",
+    "tier-budgets#render-lists-budget-section",
+    "tier-budgets#budget-changes-are-listed",
+    "tier-budgets#noisy-delta-items-skip-region-cases"
+   ]
+  },
+  {
+   "id": "S2",
+   "title": "slice-gate.py：分层文件的 budget / limit_sec / expires 形状校验，tier_budgets / budget_scope_of / allow_view，单元层 G10 取预算线并认放行的上限与期限",
+   "packet": "slices/S2.md",
+   "owns": [
+    "template/.claude/hooks/slice-gate.py",
+    "tests/test_budget_shape.py"
+   ],
+   "deps": [],
+   "verify": "python3 -m pytest -q tests/test_budget_shape.py tests/test_tiers_verdict.py tests/test_tiers_plan.py tests/test_tiers_parts_plan.py tests/test_tiers_gate.py tests/test_tiers_parts_gate.py tests/test_tiers_parts_runner.py tests/test_final_tiers.py tests/test_tier_file_incremental.py tests/test_gate_lock.py tests/test_tiers_cli.py",
+   "scenarios": [
+    "tier-budgets#budget-shape-validated",
+    "tier-budgets#allow-entry-limit-and-expires-validated",
+    "tier-budgets#parts-budget-shape-validated",
+    "tier-budgets#budget-scopes-resolved",
+    "tier-budgets#unit-case-budget-replaces-default-line",
+    "tier-budgets#unit-case-budget-applies-in-baseline",
+    "tier-budgets#allowed-slow-over-limit-is-red",
+    "tier-budgets#expired-allow-is-red-and-soon-is-flagged",
+    "tier-budgets#part-unit-budget-applies-per-part"
+   ]
+  },
+  {
+   "id": "S3",
+   "title": "test-tiers.py allow-slow：--limit-sec 与 --expires（校验、写入、缺省时的提示）",
+   "packet": "slices/S3.md",
+   "owns": [
+    "template/.claude/hooks/test-tiers.py",
+    "tests/test_budget_allow_cli.py"
+   ],
+   "deps": [
+    "S2"
+   ],
+   "verify": "python3 -m pytest -q tests/test_budget_allow_cli.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_tiers_probe.py",
+   "scenarios": [
+    "tier-budgets#allow-slow-writes-limit-and-expires",
+    "tier-budgets#allow-slow-rejects-bad-limit-or-date"
+   ]
+  },
+  {
+   "id": "S4",
+   "title": "slice-gate.py：baseline / final 落账后接入预算判定（G13 / G14 进 failed / reasons、timeout 降级、预算变更警告、tests.budget 摘要），只重跑区域的增量 final 保留其余用例",
+   "packet": "slices/S4.md",
+   "owns": [
+    "template/.claude/hooks/slice-gate.py",
+    "tests/test_budget_gate.py"
+   ],
+   "deps": [
+    "S1",
+    "S2"
+   ],
+   "verify": "python3 -m pytest -q tests/test_budget_gate.py tests/test_budget_shape.py tests/test_ledger_final.py tests/test_ledger_baseline.py tests/test_gate_lock.py tests/test_tiers_gate.py tests/test_tiers_parts_gate.py tests/test_final_tiers.py tests/test_tier_file_incremental.py tests/test_final_incremental.py tests/test_final_nodes_diff.py tests/test_gate_checks_baseline.py tests/test_gate_test_result.py tests/test_final_tests_only.py tests/test_slice_gate_final.py",
+   "scenarios": [
+    "tier-budgets#final-red-on-new-slow-integration-case",
+    "tier-budgets#debt-keeps-baseline-and-final-green",
+    "tier-budgets#baseline-red-on-unit-total-over-budget",
+    "tier-budgets#contended-run-downgrades-budget-verdicts",
+    "tier-budgets#budget-failure-does-not-fail-gate",
+    "tier-budgets#final-reports-budget-changes",
+    "tier-budgets#parts-unit-total-judged-per-part",
+    "tier-budgets#region-only-rerun-keeps-unit-cases",
+    "tier-budgets#no-budget-keeps-output-unchanged"
+   ]
+  },
+  {
+   "id": "S5",
+   "title": "flight-doctor.py doctor 的 [tests]：各范围预算对实际、超线条数、放行名单的到期情况",
+   "packet": "slices/S5.md",
+   "owns": [
+    "template/.claude/hooks/flight-doctor.py",
+    "tests/test_budget_doctor.py"
+   ],
+   "deps": [
+    "S1",
+    "S2"
+   ],
+   "verify": "python3 -m pytest -q tests/test_budget_doctor.py tests/test_flight_doctor_tests.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_surfaces.py",
+   "scenarios": [
+    "tier-budgets#doctor-tests-lists-budgets",
+    "tier-budgets#doctor-tests-names-allow-entries"
+   ]
+  },
+  {
+   "id": "S6",
+   "title": "文档：运行器契约新增第 10 节「时间预算与放行」、第 8 节把 G13 / G14 与 G10 并列；test-tiers.md 写出 budget 与放行的新参数；README 补一行",
+   "packet": "slices/S6.md",
+   "owns": [
+    "template/.claude/flight-runner-contract.md",
+    "template/.claude/commands/test-tiers.md",
+    "README.md",
+    "tests/test_budget_docs.py"
+   ],
+   "deps": [
+    "S3",
+    "S4"
+   ],
+   "verify": "python3 -m pytest -q tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_template_docs.py tests/test_ship_rerun_docs.py tests/test_plan_hygiene_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_scope_docs.py tests/test_incremental_final_docs.py tests/test_baseline_incremental_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_clean_after_merged_docs.py",
+   "scenarios": [
+    "tier-budgets#docs-describe-budgets-and-allow-fields"
+   ]
+  },
+  {
+   "id": "S7",
+   "title": "slice-gate.py：部件形态的区域运行进账本（junit → 观测表）；全机测试锁的预计耗时取全量秒数",
+   "packet": "slices/S7.md",
+   "owns": [
+    "template/.claude/hooks/slice-gate.py",
+    "tests/test_budget_parts.py"
+   ],
+   "deps": [
+    "S4"
+   ],
+   "verify": "python3 -m pytest -q tests/test_budget_parts.py tests/test_budget_gate.py tests/test_tiers_parts_gate.py tests/test_tiers_parts_runner.py tests/test_ledger_final.py tests/test_ledger_capture.py tests/test_gate_lock.py tests/test_flight_lock.py",
+   "scenarios": [
+    "tier-budgets#parts-region-run-is-observed",
+    "tier-budgets#parts-region-new-slow-case-is-red",
+    "tier-budgets#lock-cap-uses-full-suite-seconds"
+   ]
+  }
+ ],
+ "scenario_tests": {
+  "tier-budgets#new-integration-case-over-line-is-red": "tests/test_budget_core.py::test_new_integration_case_over_line_is_red",
+  "tier-budgets#existing-cases-over-line-only-warn": "tests/test_budget_core.py::test_existing_cases_over_line_only_warn",
+  "tier-budgets#unmeasured-and-unbudgeted-cases-not-judged": "tests/test_budget_core.py::test_unmeasured_and_unbudgeted_cases_not_judged",
+  "tier-budgets#allow-entry-moves-integration-case-line": "tests/test_budget_core.py::test_allow_entry_moves_integration_case_line",
+  "tier-budgets#missing-baseline-ledger-degrades-to-warning": "tests/test_budget_core.py::test_missing_baseline_ledger_degrades_to_warning",
+  "tier-budgets#unit-total-over-budget-is-red": "tests/test_budget_core.py::test_unit_total_over_budget_is_red",
+  "tier-budgets#region-total-over-budget-only-warns": "tests/test_budget_core.py::test_region_total_over_budget_only_warns",
+  "tier-budgets#total-not-judged-when-seconds-missing": "tests/test_budget_core.py::test_total_not_judged_when_seconds_missing",
+  "tier-budgets#render-lists-budget-section": "tests/test_budget_core.py::test_render_lists_budget_section",
+  "tier-budgets#budget-changes-are-listed": "tests/test_budget_core.py::test_budget_changes_are_listed",
+  "tier-budgets#noisy-delta-items-skip-region-cases": "tests/test_budget_core.py::test_noisy_delta_items_skip_region_cases",
+  "tier-budgets#budget-shape-validated": "tests/test_budget_shape.py::test_budget_shape_validated",
+  "tier-budgets#allow-entry-limit-and-expires-validated": "tests/test_budget_shape.py::test_allow_entry_limit_and_expires_validated",
+  "tier-budgets#parts-budget-shape-validated": "tests/test_budget_shape.py::test_parts_budget_shape_validated",
+  "tier-budgets#budget-scopes-resolved": "tests/test_budget_shape.py::test_budget_scopes_resolved",
+  "tier-budgets#unit-case-budget-replaces-default-line": "tests/test_budget_shape.py::test_unit_case_budget_replaces_default_line",
+  "tier-budgets#unit-case-budget-applies-in-baseline": "tests/test_budget_shape.py::test_unit_case_budget_applies_in_baseline",
+  "tier-budgets#allowed-slow-over-limit-is-red": "tests/test_budget_shape.py::test_allowed_slow_over_limit_is_red",
+  "tier-budgets#expired-allow-is-red-and-soon-is-flagged": "tests/test_budget_shape.py::test_expired_allow_is_red_and_soon_is_flagged",
+  "tier-budgets#part-unit-budget-applies-per-part": "tests/test_budget_shape.py::test_part_unit_budget_applies_per_part",
+  "tier-budgets#allow-slow-writes-limit-and-expires": "tests/test_budget_allow_cli.py::test_allow_slow_writes_limit_and_expires",
+  "tier-budgets#allow-slow-rejects-bad-limit-or-date": "tests/test_budget_allow_cli.py::test_allow_slow_rejects_bad_limit_or_date",
+  "tier-budgets#final-red-on-new-slow-integration-case": "tests/test_budget_gate.py::test_final_red_on_new_slow_integration_case",
+  "tier-budgets#debt-keeps-baseline-and-final-green": "tests/test_budget_gate.py::test_debt_keeps_baseline_and_final_green",
+  "tier-budgets#baseline-red-on-unit-total-over-budget": "tests/test_budget_gate.py::test_baseline_red_on_unit_total_over_budget",
+  "tier-budgets#contended-run-downgrades-budget-verdicts": "tests/test_budget_gate.py::test_contended_run_downgrades_budget_verdicts",
+  "tier-budgets#budget-failure-does-not-fail-gate": "tests/test_budget_gate.py::test_budget_failure_does_not_fail_gate",
+  "tier-budgets#final-reports-budget-changes": "tests/test_budget_gate.py::test_final_reports_budget_changes",
+  "tier-budgets#parts-unit-total-judged-per-part": "tests/test_budget_gate.py::test_parts_unit_total_judged_per_part",
+  "tier-budgets#region-only-rerun-keeps-unit-cases": "tests/test_budget_gate.py::test_region_only_rerun_keeps_unit_cases",
+  "tier-budgets#no-budget-keeps-output-unchanged": "tests/test_budget_gate.py::test_no_budget_keeps_output_unchanged",
+  "tier-budgets#doctor-tests-lists-budgets": "tests/test_budget_doctor.py::test_doctor_tests_lists_budgets",
+  "tier-budgets#doctor-tests-names-allow-entries": "tests/test_budget_doctor.py::test_doctor_tests_names_allow_entries",
+  "tier-budgets#docs-describe-budgets-and-allow-fields": "tests/test_budget_docs.py::test_docs_describe_budgets_and_allow_fields",
+  "tier-budgets#parts-region-run-is-observed": "tests/test_budget_parts.py::test_parts_region_run_is_observed",
+  "tier-budgets#parts-region-new-slow-case-is-red": "tests/test_budget_parts.py::test_parts_region_new_slow_case_is_red",
+  "tier-budgets#lock-cap-uses-full-suite-seconds": "tests/test_budget_parts.py::test_lock_cap_uses_full_suite_seconds"
+ }
+}

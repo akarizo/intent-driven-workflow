@@ -7,12 +7,14 @@
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
 #   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock] [tests]
 #                                                         [declare] 声明了 inert 时另与锚点池的依赖图对账，列出矛盾
+#                                                         [tests] 分层文件写了预算 / 放行时另列各范围预算对实际、区域超线条数与放行到期
 #
 # 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用它的 load_plan / load_baseline /
 # final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）；inert 对账另调
 # _git_top / _git_raw / _inert_ctx / _inert_paths / _pool_order。
 # [lock] 同法加载 flight-lock.py，只调用 holders() / lock_dir()（machine-test-lock design D7、D10）。
-# [tests] 同法加载 test-ledger.py，只调用 load / summary / parse_segment / segment / _sort_key（test-ledger design D11）。
+# [tests] 同法加载 test-ledger.py，只调用 load / summary / parse_segment / segment / _sort_key / budget（test-ledger design D11）；
+# 预算与放行另调 slice-gate.py 的 _load_tiers_file / tier_parts / tier_budgets / budget_scope_of / allow_view（tier-budgets）。
 # 纯标准库，兼容 Python 3.9。
 import argparse
 import importlib.util
@@ -469,6 +471,42 @@ def _last_segment(change_dir, tl):
     return None
 
 
+def _tests_budget(path, tl, best):
+    """[tests] 的预算与放行行（tier-budgets）：各范围合计对预算、区域单条超线、放行名单到期；都没写 → []。"""
+    sg = load_gate()
+    tiers, _ = sg._load_tiers_file(path)
+    if tiers is None:
+        return ["  分层文件不合法，预算与放行未列出"]
+    budgets = sg.tier_budgets(tiers)
+    view = sg.allow_view(tiers.get("slow_allow") or {})
+    has_budget = any("budget" in t for part in sg.tier_parts(tiers).values()
+                     for t in [part["unit"]] + list((part.get("regions") or {}).values()))
+    out = []
+    if best is not None and has_budget:
+        led, scope_of = best[2], sg.budget_scope_of(tiers)
+        b = tl.budget(led, None, budgets, scope_of, view, "baseline")
+        for sc, tot in sorted(b["totals"].items()):
+            if tot["budget"] is None:
+                continue
+            mark = "（未判）" if tot["over"] is None else "（超预算）" if tot["over"] else ""
+            out.append("  预算 %s：合计 %.1fs / %gs%s" % (sc, tot["sec"], tot["budget"], mark))
+        for sc, spec in sorted(budgets.items()):
+            if spec["kind"] != "region" or spec["case_sec"] is None:
+                continue
+            one = tl.budget(led, None, {sc: spec}, scope_of, view, "baseline")
+            if one["debt_n"] > 0:
+                cid, s = one["debt"][0][0], one["debt"][0][1]
+                out.append("  区域 %s 单条上限 %gs：超线 %d 条，最慢 %s %.1fs" % (sc, spec["case_sec"], one["debt_n"], cid, s))
+    if view:
+        expired = sorted(k for k, v in view.items() if v["expired"])
+        soon = sum(1 for v in view.values() if v["soon"])
+        bare = sum(1 for v in view.values() if not v["expired"] and v["limit"] is None)
+        out.append("  放行：共 %d 条 · 已过期 %d 条%s · %d 天内到期 %d 条 · 无上限 %d 条"
+                   % (len(view), len(expired), "（%s）" % "、".join(expired) if expired else "",
+                      sg.ALLOW_SOON_DAYS, soon, bare))
+    return out
+
+
 def doctor_tests(openspec_root, changes):
     lines = ["[tests]"]
     tl = load_ledger()
@@ -502,7 +540,12 @@ def doctor_tests(openspec_root, changes):
                                                        else c["t"]))
     if not os.path.isfile(os.path.join(openspec_root, "test-tiers.json")):
         lines.append("  未配置测试分层：账本不分层；跑 /test-tiers 划分后才有各层数字")
-    recent = [(r[0], name, r[1]) for name, d in changes for r in (_last_segment(d, tl),) if r is not None]
+    else:
+        try:
+            lines += _tests_budget(os.path.join(openspec_root, "test-tiers.json"), tl, best)
+        except (Exception, SystemExit) as e:
+            lines.append("  预算与放行未列出：%s" % _err(e))
+    recent =[(r[0], name, r[1]) for name, d in changes for r in (_last_segment(d, tl),) if r is not None]
     if recent:
         recent.sort(key=lambda x: x[0], reverse=True)
         lines.append("  最近的测试变更：")
