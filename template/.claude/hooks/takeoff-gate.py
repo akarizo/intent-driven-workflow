@@ -8,7 +8,7 @@
 #     exit 3  无批准 / 批准早于计划最后改动；stderr 给 spec.html 绝对路径与补救方式
 #
 # hook 模式（无 --change-dir，从 stdin 收 PreToolUse JSON）：
-#   1. 非起飞类派发（Workflow 带 args.changeDir / Agent·Task 派 slice-executor·integrator 之外）→ 静默放行
+#   1. 非起飞类派发（Workflow 带 args.changeDir / Agent·Task 派 slice-executor·slice-executor-large·integrator 之外）→ 静默放行
 #   2. tool_input 里找不到 openspec/changes/<name> → 静默放行（fail-open，不碰无关派发）
 #   3. 定位不到 / 读不了转录                        → 静默放行（坏门禁不锁死派发）
 #   4. 判定不成立                                   → permissionDecision=deny，reason 含 spec.html 与 /opsx-apply
@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 EXIT_NO_APPROVAL = 3
 DISPATCH_TOOLS = ("Workflow", "Agent", "Task")
 # 起飞类 subagent：评审 / 探索类派发即使 prompt 提到 change 目录也不判定，否则铁律 4 的独立评审会被自家门禁拦死
-TAKEOFF_AGENTS = ("slice-executor", "integrator")
+TAKEOFF_AGENTS = ("slice-executor", "slice-executor-large", "integrator")
 PLAN_FILES = ("proposal.md", "design.md", "slices.json")
 SUMMARY_LIMIT = 40
 WORD_LIMIT = 40
@@ -314,8 +314,8 @@ def locate_hook(payload):
 
 
 def is_takeoff_dispatch(payload):
-    """只有起飞类派发才判定：Workflow 带 args.changeDir，或 Agent/Task 派 slice-executor / integrator。
-    强制点仍然完整——一次飞行的第一个动作必是这两者之一；评审 / 探索 / 通用派发一律放行。"""
+    """只有起飞类派发才判定：Workflow 带 args.changeDir，或 Agent/Task 派 slice-executor / slice-executor-large / integrator。
+    强制点仍然完整——一次飞行的第一个动作必是其中之一；评审 / 探索 / 通用派发一律放行。"""
     tool = payload.get("tool_name")
     if tool not in DISPATCH_TOOLS:
         return False

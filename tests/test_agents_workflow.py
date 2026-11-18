@@ -160,9 +160,9 @@ def test_workflow_retry_resumes_previous_commit():
     schema = text[text.index("const GATE = {"):text.index("const FINDINGS = {")]
     node_ok = subprocess.run(["node", "--check", str(WORKFLOW)], capture_output=True, text=True).returncode == 0 if shutil.which("node") else True
 
-    # Then: 重试分支含 git cherry-pick 与 retryOf.commit，并以 --base 传 retryOf.base；schema 有 base；node --check 通过
-    assert "git cherry-pick" in prompt and "retryOf.commit" in prompt
-    assert "--base" in prompt and "retryOf.base" in prompt
+    # Then: 重试分支以 --continue 传 retryOf.commit，回退句（hooks 未升级）里有 git cherry-pick；schema 有 base；node --check 通过
+    assert "--continue" in prompt and "retryOf.commit" in prompt
+    assert "git cherry-pick" in prompt
     assert re.search(r"base:\s*\{\s*type:\s*'string'", schema), schema
     assert node_ok
 
@@ -267,13 +267,14 @@ def test_workflow_start_carries_expect_branch(tmp_path):
     execs = {c["opts"]["label"]: c["prompt"] for c in out["calls"] if re.fullmatch(r"S\d+(:retry)?", c["opts"]["label"])}
     starts = {label: start_cmds(prompt) for label, prompt in execs.items()}
 
-    # Then: 五次执行体派发的 start 命令都带 --expect-branch worktree-c；S1 重派不 cherry-pick 且走首轮任务行（含「按切片包 TDD 实现」、不含「只修这些门禁项」），S2 重派 cherry-pick 且 start 带上一轮 --base；脚本不再出现 expectHead
+    # Then: 五次执行体派发的 start 命令都带 --expect-branch worktree-c；S1 重派不 cherry-pick 且走首轮任务行（含「按切片包 TDD 实现」、不含「只修这些门禁项」），S2 重派的 start 带 --continue <上一轮 commit>、不带 --base；脚本不再出现 expectHead
     assert sorted(execs) == ["S1", "S1:retry", "S2", "S2:retry", "S3"], sorted(execs)
     for label, cmds in starts.items():
         assert cmds and all("--expect-branch worktree-c" in c for c in cmds), (label, cmds)
     assert "cherry-pick" not in execs["S1:retry"]
     assert "按切片包 TDD 实现" in execs["S1:retry"] and "只修这些门禁项" not in execs["S1:retry"]
-    assert "cherry-pick" in execs["S2:retry"] and any("--base " + "b" * 40 in c for c in starts["S2:retry"])
+    assert any("--continue " + "e" * 40 in c for c in starts["S2:retry"])
+    assert not any("--base" in c for c in starts["S2:retry"]), starts["S2:retry"]
     assert "expectHead" not in WORKFLOW.read_text(encoding="utf-8")
 
 
