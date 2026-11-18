@@ -3,12 +3,9 @@ wave-check#cost-reports-wave-checks，共 2 条）。
 骨架：strict xfail，断言是真实的；切片 S7 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from test_spec_html import artifacts, render
 
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S7 未实现")
 
 TIMELINE = (
     "<!-- timeline: ISO时间\\t事件\\t备注（由 hooks 自动追加） -->\n"
@@ -18,7 +15,6 @@ TIMELINE = (
 )
 
 
-@PENDING
 def test_spec_html_shows_guards_and_wide_owns(tmp_path):
     # Given: 计划的检查 layering 带 slice 命令，gate.wave_test_budget_sec 为 300，切片 S1 的 owns_wide 为通配写了理由
     change = artifacts(tmp_path / "openspec" / "changes" / "add-export")
@@ -41,7 +37,6 @@ def test_spec_html_shows_guards_and_wide_owns(tmp_path):
         assert word in html, word
 
 
-@PENDING
 def test_cost_reports_wave_checks(git_repo):
     # Given: 时间线有两条 wave-check 事件：一条守护 1.2 秒、测试 12.3 秒，一条守护 0.4 秒、测试跳过
     d = git_repo / "openspec" / "changes" / "c"

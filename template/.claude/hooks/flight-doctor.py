@@ -5,6 +5,7 @@
 #   flight-doctor.py forecast --change-dir DIR [--json]   起飞前预告 baseline / final 走全量还是增量
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
+#                                                         wave-check 事件另汇总到 wave（次数 / 守护秒 / 测试秒 / 跳过测试次数）
 #   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock] [tests]
 #                                                         [declare] 声明了 inert 时另与锚点池的依赖图对账，列出矛盾
 #
@@ -55,6 +56,8 @@ TEST_RE = re.compile(r"测试 ([\d.]+)s")
 WAIT_RE = re.compile(r"排队 ([\d.]+)s")
 CHECKS_RE = re.compile(r"检查 (.+?)(?= · | ok$| red$|$)")
 CHECK_ITEM_RE = re.compile(r"^(.+) ([\d.]+)s$")
+GUARD_RE = re.compile(r"守护 (.+?)(?= · | ok$| red$|$)")
+GUARD_SEC_RE = re.compile(r"(?:^| )([\d.]+)s(?= / |$)")
 INC_MARKS = ("增量", "同树沿用")
 FULL_MARKS = ("全量：", "全量（")
 # [checks] 的「检查耗时接近测试」阈值（design D10，草案）：秒数 ≥ SLOW_CHECK_MIN_SEC 且 ≥ 测试秒数 × SLOW_CHECK_RATIO
@@ -231,7 +234,27 @@ def cost(change_dir):
             out[cols[1]]["full_sec"] += sec or 0.0
             out["full_runs"].append({"event": cols[1], "reason": reason, "class": classify(reason), "sec": sec})
     out["wait_sec"] = {ev: round(s, 1) for ev, s in wait.items()}
+    out["wave"] = wave_cost(lines)
     return out
+
+
+def wave_cost(lines):
+    """时间线的 wave-check 行 → {"count", "guard_sec", "test_sec", "skipped"}（wave-integration-guard；不进 baseline / final）。"""
+    count, guard, test, skipped = 0, 0.0, 0.0, 0
+    for line in lines:
+        cols = line.split("\t")
+        if len(cols) < 3 or cols[1] != "wave-check":
+            continue
+        note = cols[2]
+        count += 1
+        g = GUARD_RE.search(note)
+        guard += sum(float(s) for s in GUARD_SEC_RE.findall(g.group(1))) if g else 0.0
+        if "测试跳过" in note:
+            skipped += 1
+        else:
+            t = TEST_RE.search(note)
+            test += float(t.group(1)) if t else 0.0
+    return {"count": count, "guard_sec": round(guard, 1), "test_sec": round(test, 1), "skipped": skipped}
 
 
 def cost_text(c):
@@ -243,6 +266,10 @@ def cost_text(c):
     for r in c["full_runs"]:
         lines.append("  - %s 全量 [%s]：%s%s" % (r["event"], r["class"], r["reason"] or "（无原因）",
                                                "（%s 秒）" % r["sec"] if r["sec"] is not None else ""))
+    w = c.get("wave") or {}
+    if w.get("count"):
+        lines.append("  wave 集成检查 %d 次：守护 %.1f 秒 · 测试 %.1f 秒 · 跳过测试 %d 次" % (
+            w["count"], w["guard_sec"], w["test_sec"], w["skipped"]))
     return "\n".join(lines)
 
 
