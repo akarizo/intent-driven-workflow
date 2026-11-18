@@ -20,6 +20,11 @@ def bash_event(cmd, stdout="", stderr="", event="PostToolUse", cwd="."):
 
 # ---------------------------------------------------------------- test-evidence
 
+def slice_log(git_repo):
+    """有切片标记时留痕的去处：<git common dir>/flight-evidence/c/S1.log。"""
+    return git_repo / ".git" / "flight-evidence" / "c" / "S1.log"
+
+
 def test_evidence_log_records_test_runs(git_repo):
     # Given: 根目录有指向切片 S1 的 .openspec-slice 标记；一条 PostToolUse Bash 事件，命令是 pytest 且输出 "3 passed"
     change = marker_repo(git_repo)
@@ -28,23 +33,24 @@ def test_evidence_log_records_test_runs(git_repo):
     # When: 运行 test-evidence.py
     p = run_hook("test-evidence", stdin=event, cwd=git_repo)
 
-    # Then: evidence.log 追加一行，含切片 S1、PASS 与命令
-    line = (change / "evidence.log").read_text(encoding="utf-8").strip().splitlines()[-1]
+    # Then: 共用目录里 S1 的留痕文件追加一行，含切片 S1、PASS 与命令；工作树里不写 evidence.log
+    line = slice_log(git_repo).read_text(encoding="utf-8").strip().splitlines()[-1]
     assert "\tS1\t" in line
     assert "\tPASS\t" in line
     assert "pytest" in line
+    assert not (change / "evidence.log").exists()
 
 
 def test_evidence_log_records_failed_run(git_repo):
     # Given: 同上标记；一条 PostToolUseFailure Bash 事件，命令是 pytest
-    change = marker_repo(git_repo)
+    marker_repo(git_repo)
     event = bash_event("python3 -m pytest -q tests", stdout="1 failed", event="PostToolUseFailure", cwd=git_repo)
 
     # When: 运行 test-evidence.py
     run_hook("test-evidence", stdin=event, cwd=git_repo)
 
-    # Then: evidence.log 最后一行标记为 FAIL
-    line = (change / "evidence.log").read_text(encoding="utf-8").strip().splitlines()[-1]
+    # Then: 共用目录里 S1 的留痕文件最后一行标记为 FAIL
+    line = slice_log(git_repo).read_text(encoding="utf-8").strip().splitlines()[-1]
     assert "\tFAIL\t" in line
 
 
@@ -56,7 +62,9 @@ def test_evidence_ignores_non_test_commands(git_repo):
     # When: 运行 test-evidence.py
     run_hook("test-evidence", stdin=event, cwd=git_repo)
 
-    # Then: 不创建 evidence.log
+    # Then: 共用目录里 S1 的留痕文件存在但没有行（心跳）；工作树里不创建 evidence.log
+    assert slice_log(git_repo).is_file()
+    assert slice_log(git_repo).read_text(encoding="utf-8").strip() == ""
     assert not (change / "evidence.log").exists()
 
 
@@ -380,10 +388,11 @@ def test_evidence_single_candidate_fallback(git_repo):  # 既有行为守卫：�
     change_c = marker_repo(git_repo)
     run_hook("test-evidence", stdin=event, cwd=git_repo)
 
-    # Then: 单候选时写进 a；有标记时写进 c 且切片列为 S1
+    # Then: 单候选时写进 a；有标记时写进共用目录里 c 的 S1 留痕文件且切片列为 S1，c 的工作树 evidence.log 不出现
     assert (git_repo / "openspec" / "changes" / "a" / "evidence.log").exists()
-    line = (change_c / "evidence.log").read_text(encoding="utf-8").strip().splitlines()[-1]
+    line = slice_log(git_repo).read_text(encoding="utf-8").strip().splitlines()[-1]
     assert "\tS1\t" in line
+    assert not (change_c / "evidence.log").exists()
 
 
 # ---------------------------------------------------------------- 无 agentType 时按 label 判角色（scenario: route-audit-role-resolution#*）

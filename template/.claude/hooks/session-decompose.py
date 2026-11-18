@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 # 角色判定三级顺序：agentType → label 前缀 → 阶段（前一级判不出才看后一级）
 # agentType → 路由角色（主键：wave integrator 在 Implement 阶段派发，只看阶段会误判成 executor）
-AGENT_ROLE = {"slice-executor": "executor", "code-reviewer": "reviewer", "integrator": "integrator"}
+AGENT_ROLE = {"slice-executor": "executor", "slice-executor-large": "executor", "code-reviewer": "reviewer", "integrator": "integrator"}
 # label 前缀 → 路由角色（次键：meta 无 agentType 时，按 opsx-apply.js 派发 label 的显式格式判；含 :retry 后缀）
 LABEL_ROLE = (("integrate:", "integrator"), ("final-gate", "integrator"), ("review:", "reviewer"))
 # 阶段 → 路由角色（兜底：agentType 缺失且 label 不匹配显式格式）

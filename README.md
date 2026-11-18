@@ -174,7 +174,7 @@ your-project/
 ├── .claude/
 │   ├── commands/       # 17 个 slash 命令（见下方）
 │   ├── skills/         # 16 个 skill + 1 个 legacy（见下方）
-│   ├── agents/         # 3 个 agent：slice-executor / integrator / code-reviewer（见下方）
+│   ├── agents/         # 4 个 agent：slice-executor / slice-executor-large / integrator / code-reviewer（见下方）
 │   ├── workflows/      # opsx-apply.js：飞行流程的命名 Workflow 调度器
 │   ├── hooks/          # 分级门禁 intent-gate.py + 飞行门禁 slice-gate.py 等 + 提醒 intent-reminder.py + hooks.json 片段（需 python3）
 │   ├── settings.json   # 合并注入上述 hooks（已存在则只并 hooks 节，保留你其余配置）
@@ -296,6 +296,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 - **GWT 注释先于代码**：测试函数体首行是 `// Given:`（Python 用 `#`）、`When:`、`Then:` 三段中文注释，之后才是 setup / mock / 被测调用 / 断言
 - 一个测试只触发一个被测动作（When 块单一）
 - 测试运行由 hook 留痕（`evidence.log`），**不接受自述**；反模式（mock 滥用、生产类塞测试方法、不懂依赖就 mock、不完整 mock、测试事后补救）在 `testing-anti-patterns.md` 列出
+- **切片留痕与临时 worktree 回收**：切片执行体的测试留痕先写 `<git common dir>/flight-evidence/<change>/<切片>.log`，integrator 记录门禁结论时并进分支上的 `evidence.log`；`slice-gate.py merge` 合回后回收提交已合回、没有其他未提交内容的切片临时 worktree，收不掉的留着并在 `warnings` 里说明，存量仍走 `/clean-after-merged`
 
 #### 运行器契约
 
@@ -521,13 +522,19 @@ PR 被人类合并后跑 `/clean-after-merged [target-branch]`：先 `--ff-only`
 
 ---
 
-## 3 个 agent（`.claude/agents/`）
+## 4 个 agent（`.claude/agents/`）
 
 | Agent | 职责 |
 | --- | --- |
 | `slice-executor` | 飞行模式的切片执行体：按切片包做 TDD 实现，只写 `owns` 内文件，收尾跑 `slice-gate.py gate` 并原样回传门禁 JSON。`model: inherit` · `maxTurns: 40` · `permissionMode: acceptEdits`。 |
+| `slice-executor-large` | 大片档执行体：frontmatter 的 `maxTurns` 为 80，正文只指向 `slice-executor.md`（纪律完全相同）。 |
 | `integrator` | 飞行模式的集成员：把并行切片的 commit 合回 change 分支、抽公开接口摘要、跑全量门禁、记 timeline 事件。低推理机械活，`model: sonnet`。 |
 | `code-reviewer` | 干净、**物理只读**（工具集只有 Read/Grep/Glob/Bash，无 Write/Edit）的代码评审员。按 CRITICAL/HIGH/MEDIUM/LOW 分级输出 finding（每条带 `文件:行号` + 修法）。只保留 **`full` / `follow-up` 两种模式**：以门禁报告与 `evidence.log` 为准，**不重跑测试套件**，至多 1 次定向抽查。**多处共用**：飞行模式每切片门禁绿后的离路径评审、`/pr-ship` 的 PR 评审与复核、legacy 逐 task 守门。prompt 自包含、不带主会话上下文，避免「我审我自己」的 confirmation bias。 |
+
+**轮次档**：标准档 40 轮（`slice-executor`）、大片档 80 轮（`slice-executor-large`）。
+- **怎么定**：`slice-gate.py turns` 按 `owns` 展开后在基线 commit 上的现存文件数算，超过 8 个为大片档；计划里可写 `"turns": "large"` 升档，不能降档
+- **无上限的情形**：agent 类型未注册的仓库（先读定义文件的默认 subagent）没有轮次上限
+- **撞上限**：重派一次仍未返回记 blocked，理由里写明档位、该档上限与半成品快照位置 `refs/flight/<change>/<切片>`
 
 ---
 

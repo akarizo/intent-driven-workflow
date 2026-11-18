@@ -1,0 +1,155 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3650,
+      "summary": "带 --continue 但不带 --expect-branch、也不带 --base 时，base 取的是接续之后的 HEAD。刚接上的上一轮提交因此落在门禁区间 base..HEAD 之外，gate 看不到这些提交（测试、实现都在里面）。spec/D2 只写了「缺省为 HEAD」，没说清是接续前还是接续后的 HEAD；工作流目前总会传 --expect-branch，所以实际影响限于 per-task 回退和手工调用。需进一步确认意图。",
+      "fix": "在 cmd_start 调 _continue_from 之前记下 pre_head = git rev-parse HEAD，非 expect-branch 分支改为 base = args.base or pre_head；或者 argparse 层要求 --continue 必须和 --expect-branch 同时给（不满足就报 G0），同时在 design D2 补一句说明。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3312,
+      "summary": "回滚步骤 `reset -q --keep pre` 的返回码没有检查。reset 失败时 HEAD 会停在部分重放的状态，但 err 只报「冲突」，调用方会以为已经回到接续前的 HEAD。spec 的要求是 MUST 回到接续前 HEAD。按现有流程，前面成功的 pick 不会碰脏文件，reset 实际失败的概率很低。",
+      "fix": "检查 _run_git(root, \"reset\", \"-q\", \"--keep\", pre) 的 returncode：非 0 时在 err 末尾追加「；回滚到 %s 失败：<首行报错>」，让调用方知道仓库处于半截状态。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_start_continue.py",
+      "line": 97,
+      "summary": "冲突用例在第一个 cherry-pick 就冲突了，这时 `cherry-pick --abort` 本身就回到了 pre，`reset --keep pre` 什么也没做。「先成功重放 N 个、第 N+1 个才冲突，再撤销已重放提交」这条真正的回滚路径没有测试覆盖。",
+      "fix": "加一个用例（或在 backlog 记一条）：上一轮两个提交，第一个改 b.py 能干净重放，第二个改 a.py 与分支冲突。断言 HEAD == tip、b.py 不在、status 干净。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3308,
+      "summary": "如果上一轮的某个提交已经以等价补丁的形式进了分支（比如 squash 或 cherry-pick 合回），`git cherry-pick` 会因为空提交返回非 0，被当成「冲突」处理，回滚后报 G0，文案里是 git 的英文首行。本仓库的 integrate 用的是 merge 提交，这种情况会走 noop 分支，所以属于边界情况，需进一步确认是否值得处理。",
+      "fix": "spec 明确规定用 `rev-list <commit> --not HEAD`，所以不改取区间的方式。可以在失败分支里用 `_unmerged` 为空并且 stderr 含 empty 来识别这种情况，把文案改成「接续 %s 的提交已等价存在于 HEAD」；或者暂时只记 backlog。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-evidence.py",
+      "line": 140,
+      "summary": "在无标记的会话里，原来非测试命令在 TEST_RE 判断后就直接返回；现在每条 Bash 事件都要先跑一次 `git rev-parse --show-toplevel` 并读标记文件，每条命令多一次 git 子进程。功能上不变，但 spec 说的「无标记时行为不变」在开销上有回退。",
+      "fix": "可以接受（心跳需要先知道 root）。如果要省：先用 cwd 往上找 `.openspec-slice`，找不到且未命中 TEST_RE 就直接返回，找到了再调 git。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-evidence.py",
+      "line": 80,
+      "summary": "标记里的 slice 没做校验就直接拼进文件名（第 147 行 `slice_id + \".log\"`）：值含 `/` 或 `..` 时会写到 flight-evidence 之外；值不是字符串（比如数字）时会抛 TypeError，被 fail-open 吞掉，本片留痕静默丢失、门禁只看到 hook 缺失。标记由 slice-gate 写入，属于可信来源，所以只是边界问题。",
+      "fix": "read_marker 里用 `str(...)` 规整，再用 `re.fullmatch(r\"[A-Za-z0-9._-]+\", s)` 校验，不合法时当作无标记处理（返回 (None, None)），或回退写工作树。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_evidence_timeline.py",
+      "line": 23,
+      "summary": "`slice_log(git_repo)` 和 tests/test_evidence_shared_hook.py:10 的 `shared_log(...)` 都是拼 `<.git>/flight-evidence/<change>/<slice>.log`，算重复 helper（shared_hook 本来就从 timeline 导入了 bash_event 和 marker_repo）。",
+      "fix": "保留一个带参数的 helper，比如在 timeline 里定义 `shared_log(git_repo, slice_id=\"S1\", change=\"c\")`，由 shared_hook 导入复用。或者维持现状，在后续片里收敛。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_evidence_timeline.py",
+      "line": 388,
+      "summary": "缺两个守卫：一是无标记（分支名或单候选回退）时，共用目录下不能创建 flight-evidence（切片包「注意」里写明了）；二是有标记但取不到共用目录时，回退写工作树的 evidence.log。两条都没有断言，日后回归测不出来。另外，执行体改写 test_evidence_single_candidate_fallback 后半段的申报成立：原断言和 spec「有标记时 MUST NOT 写工作树」相矛盾，改法合理，不算 finding。",
+      "fix": "在 test_evidence_resolves_change_from_branch 或 single_candidate_fallback 的无标记阶段加上 `assert not (git_repo / \".git\" / \"flight-evidence\").exists()`；视需要再补一条在非 git 目录放标记的用例，断言写进了工作树的 evidence.log。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_turn_tiers.py",
+      "line": 47,
+      "summary": "scenario turns-computed-from-owned-files 的 AND 子句「工作树里未提交的文件不改变结果」没有真正测到：未提交文件写在 lib/untracked.py，它不在任何切片的 owns 里（S2 只 own lib/one.py，S1 只 own src/**）。所以就算实现改成 os.walk 或 git ls-files，这条断言也照样绿。实现本身用的是 git ls-tree，抽查行为是对的；问题出在测试骨架，切片又禁止改断言，所以记为非阻断。",
+      "fix": "后续补丁里把未提交文件放进 S1 的 owns 范围，并放在 8 个文件的状态下检查：第一次 turns 之前写 src/m99.py 但不提交，断言 S1 仍是 standard。或者在 t2 状态下改为断言加了未提交的 src 文件后结果不变，但这种写法区分力弱，优先用前一种。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2509,
+      "summary": "gitlink 分支只认以「<gitlink 路径>/」开头的 owns。如果 owns 从外层盖住整个 submodule（例如 owns 写 vendor/** 或 vendor/lib，而 gitlink 是 vendor/lib），这个 submodule 计为 0 个文件。门禁的所有权判定（_sub_diff_names 拼成 p/x 后再做 glob_match）认为 vendor/** 覆盖子仓文件，两边口径不一致。结果是大片可能少算，计划写 standard 时降档检查被放过。这个分支也没有任何测试覆盖。",
+      "fix": "给 gitlink 条目换算 owns：o 以 path+'/' 开头的，去掉前缀；o == path，或 o 以 '/**' 结尾且 path 以 o[:-3]+'/' 开头的，换成 '**'；其余不计。再在 test_turn_tiers 或现有的 submodule 夹具里补一个用例：owns 从外层盖住 submodule，期望文件数等于子仓树上的文件数。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2524,
+      "summary": "slice_turns 每个切片都对整棵树跑一次 git ls-tree -r。切片已写 turns: large 时，结果不看文件数，ls-tree 照样会跑。lint_plan 的降档检查也是每个写 standard 的切片各跑一次。最多 9 片，开销不大，但属于可以省掉的重复 git 调用。",
+      "fix": "把 ls-tree 的结果每个 (root, commit) 只取一次，在函数内缓存路径列表；s.get('turns') == 'large' 时短路，不再数文件。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2490,
+      "summary": "_turn_tree 判断非空时用的是 commit.strip()，传给 git cat-file 的却是没去空白的原值。基线 commit 带首尾空白时，会悄悄退回按 HEAD 数，不报任何提示。",
+      "fix": "一开始就 commit = commit.strip()，再拿它做校验并返回。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 123,
+      "summary": "回退句（hooks 未升级时）在手工 cherry-pick 之后要求运行「不带 --continue 的 start」，但没有带上一轮的 --base。旧版 hooks（main 上 slice-gate.py 第 3608 行附近：base = args.base or HEAD，没有按 --expect-branch 取 merge-base 的逻辑）会把 cherry-pick 之后的 HEAD 记成区间起点，于是重派门禁只看到修复 diff，上一轮 commit 里的所有权 / 配对问题会掉出区间，可能被误判为通过。旧 prompt 正是为此强调「不要不带 --base 重跑」。这个写法是切片包照原文规定的，所以属于规格层面的缺口，不算执行体偏离。",
+      "fix": "回退句在 retryOf.base 存在时改为运行 `${startCmd(s)} --base ${retryOf.base}`（或者新增一个 startCmd 变体，拼 --base 而不拼 --continue），并在 design / 切片包里补一句理由；没有 base 时维持现状。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_agents_workflow.py",
+      "line": 276,
+      "summary": "S2 重派的用例删掉了 `\"cherry-pick\" in execs[\"S2:retry\"]`，没有换成对回退句的断言。test_workflow_retry_resumes_previous_commit 只是在整段 prompt 源码里 grep 一下有没有 `git cherry-pick`，渲染出来的 S2:retry prompt 里有没有回退句、回退句里的 commit 是否为 eeee…，都没有覆盖。",
+      "fix": "在 test_workflow_start_carries_expect_branch 里补一条：`assert \"unrecognized arguments: --continue\" in execs[\"S2:retry\"] and \"git cherry-pick \" + \"e\" * 40 in execs[\"S2:retry\"]`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/agents/slice-executor.md",
+      "line": 19,
+      "summary": "「prompt 另给了接续步骤（如 hooks 未升级时的手工 git cherry-pick）就按 prompt 先做」里的「先做」有歧义。新版 prompt 的顺序是先跑 start --continue，只有它报 unrecognized arguments 时才 cherry-pick；执行体可能误读为先 cherry-pick 再 start。按 S1 的 --continue noop 语义，大概率无害，但措辞和新版 prompt 的顺序不一致。",
+      "fix": "改为「prompt 另给了接续步骤（旧 prompt 的第零步，或 start 不认 --continue 时的手工 git cherry-pick）就按 prompt 给的顺序做」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3772,
+      "summary": "首轮 start 清理共用留痕的条件写成了 `not (args.continue_from or args.base)`，多出来的 `--base` 豁免和 spec 原文对不上。specs/slice-evidence-shared/spec.md 第 27 行与 design D6 写的是：不带 --continue、不带 --resume-checkpoint、没有同片标记时 SHALL 删除，只有两种接续 MUST 保留。现在手工调用或 per-task 回退路径在新 worktree 里用 `start --base` 起跑时，上一次飞行留在共用目录的本片 PASS/FAIL 行不会被清，会被本轮 G5 当成留痕，铁律 3 因此变弱。执行体已在 summary 里申报这一偏差，理由是骨架测试 test_gate_reads_rows_written_from_another_worktree 用 --base 模拟接续；但 spec、design 与测试之间的矛盾目前只靠代码消化，三者没有对齐。",
+      "fix": "二选一。一是保留实现，同步改 spec 第 27 行和 design D6 的「首轮清残留」：把 `--base` 列为第三种保留形式，写明它是旧工作流重派的接续形式，并在 scenario first-round-start-clears-stale-evidence 的 WHEN 里补上 --base 不清理的分支。二是让测试改用 `--continue <commit>` 模拟接续、去掉 --base 豁免，这条要由计划方改骨架，执行体不能自己改。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4931,
+      "summary": "回收候选只看「HEAD 落在本次合入的提交集合里、不是当前 worktree、没被锁」，不核对这间 worktree 是不是这次飞行建的切片临时 worktree。假如用户另开了一间 worktree 叠在某个切片提交上（例如分支刚建、还没有提交、工作树干净），merge 会把它连同分支（tip 等于 HEAD 时 branch -d）一起回收。提交不会丢，但超出了铁律 6 例外的字面范围：「切片临时 worktree」。（需进一步确认：临时 worktree 收口时 `.openspec-slice` 标记是否仍在。）",
+      "fix": "给候选加一条正向识别：wt 里存在 MARKER，且其中的 slice 等于 sid；或者路径落在 Workflow 隔离 worktree 的约定目录下。不满足就跳过，不记警告，免得在 test_merge_plain_repo_equals_no_ff 里多出警告。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4908,
+      "summary": "第 3 步对已跟踪的飞行记录用 `git checkout -- p`，它只从 index 还原。飞行记录如果是已暂存的改动（XY 为 `M `/`A `），这一步什么也不做，第 4 步 `git worktree remove` 不带 --force 会拒绝。而第 2 步已经把子仓 worktree 拆掉、补了空目录，父 worktree 就停在「子仓已拆、自身未删」的半回收状态。不会丢数据（子仓提交已核对并入），但会留下不一致的残局。实现与切片包第 7.3 条字面一致，所以只记 LOW。",
+      "fix": "把「父 worktree 能否干净移除」的判定挪到第 2 步之前：已跟踪的条目若 X 列不是空格（有暂存改动），直接按「有未提交改动」记警告并跳过。或者第 3 步改用 `git checkout HEAD -- p`（对 HEAD 中存在的路径），把 index 一起还原。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 70,
+      "summary": "回退路径的 blocked 理由模板写的是 `<档位>上限 <N> 轮`，没说明 `<档位>` 要填「标准档」/「大片档」，也没说 `<N>` 要取定义文件的 maxTurns（40/80）。手工回退的主会话可能填成 `standard` / `large`，跟 opsx-apply.js 的 TIER_NAME 文案对不上。同样的问题在 SKILL.md:78。",
+      "fix": "两份文档同改，把模板旁的说明改成：`<档位>` 填「标准档」或「大片档」，`<N>` 取对应定义文件 frontmatter 的 maxTurns（40 / 80）。也可以直接写出两档的完整示例。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 42,
+      "summary": "新加的 `slice-gate.py turns` 步骤没写非 0 退出怎么办（接口约定计划不合法时退出 2）。它前后的 lint 和 preflight 都写了「非 0 停下报告」，口径不一致。不过 turns 内部跑的是同一套 lint 规则，lint 通过后它实际很少会非 0。同样的问题在 SKILL.md:50。",
+      "fix": "两份文档同改，在这句后面补一句「exit 非 0 → 停下把 stderr 原样报告，不进入实现」，和 lint / preflight 的写法对齐。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "02a56c7d656420eece3de6bd26f4bf55372c16ed",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 31/31；增量：重跑 81 个文件（584 个用例）/ 沿用 100 个，锚点 b1be3db4be。修复说明（fix 提交 02a56c7）：HIGH test-evidence.py:131 已修，不再按子串匹配脚本路径。记号只取执行位置上的词：命令按 ; && || | & 换行 括号切段，取段首词，或紧跟 bash/sh/zsh/python/python3/node/npx/tsx 的那个词；命中 TEST_RE 的段不出记号；判定改为两边执行位置记号求交集。先失败的测试是 tests/test_evidence_shared_hook.py::test_hook_ignores_non_run_commands_naming_verify_files（改前 cat/sed/git add 被记成 3 行 FAIL，已亲眼看到红）。关于 spec 意图：判定为 D6 原意是指被执行的包装脚本，属于收紧，不是放宽。spec.md、design.md D6、spec.html 里相应的一句已改成执行位置的措辞，scenario 原文和骨架断言没有改动。没改的部分：DRAFT ADR（template/openspec/adr/DRAFT-slice-evidence-in-git-common-dir.md:21）仍写着「命令文本里出现脚本路径」，可以由主会话决定是否同步。start fix 被拒（slices.json 里没有 fix 条目），按指示跳过；基点 HEAD 就是 worktree-slice-resume-deterministic 的最新提交 1a2c490，sub-sync 为空操作。全量 pytest 684 项通过，openspec schema validate 和 openspec validate 都通过，hooks compileall 通过。",
+    "base": "1a2c4901c32ed39ad0f82891c7de39ed064d1e8c"
+  }
+}
