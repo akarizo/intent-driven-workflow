@@ -4,12 +4,8 @@
 import datetime
 import json
 
-import pytest
-
 from conftest import run_hook, write
 from test_tiers_cli import human, transcript
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S3 未实现")
 
 BIG = "tests/unit/test_a.py::test_big"
 OTHER = "tests/unit/test_a.py::test_other"
@@ -28,7 +24,6 @@ def in_days(n):
     return (datetime.datetime.now(datetime.timezone.utc).date() + datetime.timedelta(days=n)).isoformat()
 
 
-@PENDING
 def test_allow_slow_writes_limit_and_expires(git_repo):
     # Given: 分层文件的 slow_allow 为空；最新一条人类消息放行了 test_big 与 test_other
     path, session = setup(git_repo)
@@ -50,7 +45,6 @@ def test_allow_slow_writes_limit_and_expires(git_repo):
     assert any("--limit-sec" in l and "--expires" in l for l in p2.stderr.splitlines()), p2.stderr
 
 
-@PENDING
 def test_allow_slow_rejects_bad_limit_or_date(git_repo):
     # Given: 同样的分层文件与转录
     path, session = setup(git_repo)
