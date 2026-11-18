@@ -9,15 +9,10 @@ import os
 import sys
 import time
 
-import pytest
-
 from conftest import hook_path
 from lock_helpers import INFO_PREFIX, Locks, wait_for
 
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S1 未实现")
 
-
-@PENDING
 def test_exclusive_holders_mutually_exclude(tmp_path):
     # Given: 进程 A（标签 holder-a）持有独占锁，命令尚未结束
     with Locks(tmp_path) as lk:
@@ -40,7 +35,6 @@ def test_exclusive_holders_mutually_exclude(tmp_path):
         assert info["mode"] == "exclusive" and info["state"] == "held" and info["waited"] > 0, info
 
 
-@PENDING
 def test_shared_holders_run_together(tmp_path):
     # Given: 进程 A 持有共享锁，命令尚未结束
     with Locks(tmp_path) as lk:
@@ -57,7 +51,6 @@ def test_shared_holders_run_together(tmp_path):
         assert b.info()["state"] == "held", b.info()
 
 
-@PENDING
 def test_exclusive_waiter_blocks_new_shared(tmp_path):
     # Given: 进程 A 持有共享锁；进程 X 请求独占并已在排队
     with Locks(tmp_path) as lk:
@@ -81,7 +74,6 @@ def test_exclusive_waiter_blocks_new_shared(tmp_path):
         assert c.release() == 0
 
 
-@PENDING
 def test_killed_holder_releases_lock(tmp_path):
     # Given: 进程 A 持有独占锁，进程 B 请求独占并在排队
     with Locks(tmp_path) as lk:
@@ -101,7 +93,6 @@ def test_killed_holder_releases_lock(tmp_path):
         assert b.release() == 0
 
 
-@PENDING
 def test_status_lists_live_holders(tmp_path):
     # Given: 进程 A 以 --change demo --label "final gate" 持有独占锁
     with Locks(tmp_path) as lk:
@@ -117,7 +108,6 @@ def test_status_lists_live_holders(tmp_path):
         assert a.release() == 0
 
 
-@PENDING
 def test_nested_run_does_not_wait(tmp_path):
     # Given: 外层 run exclusive 的命令是以同一锁目录再次 run exclusive（内层命令什么都不做）
     inner = [sys.executable, str(hook_path("flight-lock")), "run", "exclusive", "--label", "inner", "--",
@@ -134,7 +124,6 @@ def test_nested_run_does_not_wait(tmp_path):
         assert infos[1]["state"] == "held", infos
 
 
-@PENDING
 def test_test_suite_uses_isolated_lock_dir():
     # Given: 本仓的 pytest 会话（tests/conftest.py 已导入）
     home_claude = os.path.realpath(os.path.join(os.path.expanduser("~"), ".claude"))
@@ -148,7 +137,6 @@ def test_test_suite_uses_isolated_lock_dir():
     assert "FLIGHT_LOCK" not in os.environ
 
 
-@PENDING
 def test_waiter_gives_up_on_stalled_holder(tmp_path):
     # Given: 进程 A（标签 stuck-a）以 FLIGHT_LOCK_MAX_HOLD_SEC=0.3 持有独占锁且一直不结束
     with Locks(tmp_path) as lk:
@@ -165,7 +153,6 @@ def test_waiter_gives_up_on_stalled_holder(tmp_path):
         assert info["state"] == "timeout" and "stuck-a" in info["why"], info
 
 
-@PENDING
 def test_lock_off_or_unavailable_runs_unlocked(tmp_path):
     # Given: 进程 A 持有独占锁；另有一个普通文件 plainfile
     blocker = tmp_path / "plainfile"
