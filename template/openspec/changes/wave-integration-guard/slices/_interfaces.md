@@ -11,15 +11,14 @@
   - `_run_guards(root, change_dir, checks, baseline, phase, log_tag) -> (failed, guards)`：逐个核对基线记录并运行；`phase` 是 `"slice"` 或 `"wave"`（进 `GATE_PHASE`），`log_tag` 决定日志名 `.gate-<log_tag>.log`（门禁传 `slice-<切片 id>`，集成检查传 `wave`）；`failed` 的每项以 `G15 guard <名>` 开头；`guards = {名: {"exit", "sec"}}`（没运行的不出现）。
 - 门禁 JSON：有守护时多 `guards`；时间线 gate 备注多一段 `守护 a 1.2s / b 0.4s`。
 
-## S2（`slice-gate.py`：wave 集成检查）
+## S2（`slice-gate.py`：wave 集成检查，已合回）
 
-- `slice-gate.py wave-check --change-dir DIR [--wave N] [--of M] [--fix-base SHA]`，退出码按 `ok`，stdout 末行是 JSON：
+- `slice-gate.py wave-check --change-dir DIR [--wave N] [--of M] [--fix-base SHA]`（`cmd_wave_check(args)`），退出码按 `ok`，stdout 末行是 JSON：
   `{"slice": "wave", "ok", "commit", "failed", "warnings", "summary", "wave", "of", "guards", "tests": {"mode", "why", "files", "rerun_tests", "est_sec", "sec", "budget_sec"}, "lock"[, "fix": {"base", "files", "outside_owns"}]}`。
-- `failed` 的前缀：`G15 guard <名>`（守护）、`G16 wave test`（受影响的测试）、`G6 flight-record` 与 `G0 base`（只在 `--fix-base` 时）。
-- 时间线事件 `wave-check`，备注：`wave N/M · 守护 <名> Xs[ / <名> Ys] · 测试 Zs（K 个文件）| 测试跳过（<原因>） [· 跨片修复 A 个文件（owns 外 B 个）] · <锁片段> ok|red`。没有守护时省掉守护段；`tests.mode` 为 `none` 时测试段写 `测试 0.0s（0 个文件）`。
-- `gate-report.md` 的行：切片列固定为 `wave`。
-- `record --json '<上面的 JSON>'`：写同样的一行与同样的事件。
-- 计划：`gate.wave_test_budget_sec`，可选，正数；缺省 120。
+- `failed` 前缀：`G15 guard <名>`、`G16 wave test`、`G6 flight-record` 与 `G0 base`（仅 `--fix-base`）。
+- 时间线事件 `wave-check`，备注由 `_wave_note(result)` 生成（`cmd_record` 共用）；`gate-report.md` 行切片列固定 `wave`。
+- `record --json '<上面的 JSON>'`：写同样的行与事件；`ship` 见最新 `wave` 行红则判 draft。
+- 常量 `WAVE_TEST_BUDGET_SEC = 120`；计划 `gate.wave_test_budget_sec`（正数，可选）覆盖。
 
 ## S3（`slice-gate.py`：owns 分档与 landed）
 
