@@ -7,16 +7,12 @@
 import json
 import shlex
 
-import pytest
-
 from conftest import git, load_hook, run_hook, write
 from final_helpers import timeline_rows
 from test_baseline_incremental import baseline, read_bl
 from test_final_tests_only import _second_repo
 from test_gate_checks_baseline import check_cmd, check_dir, runs, setup_checks
 from test_slice_gate import gate_repo, plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S1 未实现")
 
 
 def lint(change):
@@ -53,7 +49,6 @@ def phase_cmd(path):
     return "printf '%s\\n' \"$GATE_PHASE\" >> " + shlex.quote(str(path))
 
 
-@PENDING
 def test_lint_accepts_slice_command(tmp_path):
     # Given: 计划的检查 layering 带 slice 命令与 final 命令
     change = tmp_path / "openspec" / "changes" / "c"
@@ -69,7 +64,6 @@ def test_lint_accepts_slice_command(tmp_path):
     assert blank.returncode == 2 and "layering" in blank.stderr and "slice" in blank.stderr, blank.stderr
 
 
-@PENDING
 def test_lint_requires_slice_declared_by_repo_default(tmp_path):
     # Given: gate-checks.json 里的检查 layering 带 slice；计划里的 layering 只有 final
     change = tmp_path / "openspec" / "changes" / "c"
@@ -87,7 +81,6 @@ def test_lint_requires_slice_declared_by_repo_default(tmp_path):
     assert skipped.returncode == 0, skipped.stderr
 
 
-@PENDING
 def test_slice_command_is_part_of_plan_sha():
     # Given: 两份只差检查 layering 有没有 slice 命令的计划，以及一份把 slice 写成 null 的计划
     sg = load_hook("slice-gate")
@@ -103,7 +96,6 @@ def test_slice_command_is_part_of_plan_sha():
     assert b != a
 
 
-@PENDING
 def test_baseline_runs_and_records_slice_command(git_repo):
     # Given: 检查 layering 没有 baseline 命令，slice 命令把收到的环境变量写进共用目录
     cmd = check_cmd(git_repo, "slice", "ok")
@@ -122,7 +114,6 @@ def test_baseline_runs_and_records_slice_command(git_repo):
     assert env["GATE_PHASE"] == "slice", env
 
 
-@PENDING
 def test_baseline_red_when_slice_command_fails(git_repo):
     # Given: 检查 layering 的 slice 命令以 3 退出
     d = setup_checks(git_repo, [{"name": "layering", "baseline": None, "slice": check_cmd(git_repo, "slice", "exit3"),
@@ -137,7 +128,6 @@ def test_baseline_red_when_slice_command_fails(git_repo):
     assert any("layering" in r and "slice" in r for r in bl["reasons"]), bl["reasons"]
 
 
-@PENDING
 def test_gate_runs_guards_in_slice_phase(git_repo):
     # Given: 已开工的切片 S1，改动都在 owns 内；检查 layering 的 slice 命令在基线上是绿的
     seen = git_repo.parent / "phase.txt"
@@ -153,7 +143,6 @@ def test_gate_runs_guards_in_slice_phase(git_repo):
     assert "守护 layering" in timeline_rows(change, "gate")[-1]
 
 
-@PENDING
 def test_gate_reds_g13_when_guard_fails(git_repo):
     # Given: 已开工的切片 S1；检查 layering 的 slice 命令打印 boom 后以 3 退出
     guard_gate(git_repo, "echo boom; exit 3")
@@ -167,7 +156,6 @@ def test_gate_reds_g13_when_guard_fails(git_repo):
     assert "exit 3" in item and "boom" in item and ".gate-slice-S1.log" in item, item
 
 
-@PENDING
 def test_gate_g13_needs_green_baseline_record(git_repo, tmp_path):
     # Given: 已开工的切片 S1，计划里的检查 layering 带 slice 命令但没有基线；
     #        另一个仓库里基线记录的 slice 命令与计划不同
