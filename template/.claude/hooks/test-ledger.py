@@ -215,6 +215,8 @@ def delta(base, final, rerun_files=None, root=None):
     """final 账本对基线账本 → (对账结果, None)；基线缺失 → (None, 原因)。"""
     if base is None:
         return None, "基线账本不在本机（或基线早于测试账本）"
+    if base.get("complete") is False:  # 没补跑的用例不在基线里，对账会把它们编成新增
+        return None, "基线账本不完整（复用的基线没有可沿用的来源账本），不对账"
     form = final.get("id_form") or "nodeid"
     bc, fc = base.get("cases") or {}, final.get("cases") or {}
     if (base.get("id_form") or "nodeid") != form:

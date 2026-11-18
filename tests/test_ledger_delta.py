@@ -71,6 +71,20 @@ def test_delta_handles_missing_or_junit_baseline():
     assert d2["top_added"] == [["tests.test_a.TestC::test_m", 0.2, None]], d2
 
 
+def test_delta_skips_incomplete_baseline():
+    # Given: 基线账本不完整（复用的基线没有可沿用的来源账本，只收录了补跑的 a）；全量 final 的用例集合与原来相同
+    tl = load_hook("test-ledger")
+    base = base_ledger({"a": case(0.1)})
+    base["complete"] = False
+    final = ledger({"a": case(0.1), "b": case(2.0), "c": case(2.0)})
+
+    # When: 对账
+    d, why = tl.delta(base, final)
+
+    # Then: 不对账，给出原因，不把没补跑的 b / c 编成新增
+    assert d is None and "基线账本不完整" in (why or ""), (d, why)
+
+
 def test_segment_and_markdown_are_bounded():
     # Given: 新增 14 条（其中 12 条有耗时，共 8.4 秒）、删除 1 条、变慢 7 条的对账结果
     tl = load_hook("test-ledger")
