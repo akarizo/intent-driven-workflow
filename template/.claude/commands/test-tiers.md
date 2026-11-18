@@ -10,13 +10,17 @@ description: 把仓库测试重划分为单元层与集成区域（多语言 mon
 
 ```json
 {
-  "unit": {"paths": ["tests/unit/**"], "cmd": "python3 -m pytest -q tests/unit"},
+  "unit": {"paths": ["tests/unit/**"], "cmd": "python3 -m pytest -q tests/unit", "budget": {"case_sec": 3, "total_sec": 120}},
   "regions": {
-    "hooks": {"paths": ["tests/integration/hooks/**"], "covers": ["src/hooks/**"], "cmd": "python3 -m pytest -q tests/integration/hooks"}
+    "hooks": {"paths": ["tests/integration/hooks/**"], "covers": ["src/hooks/**"], "cmd": "python3 -m pytest -q tests/integration/hooks",
+              "budget": {"case_sec": 60, "total_sec": 600}}
   },
-  "slow_allow": {"tests/unit/test_a.py::test_big": {"reason": "…", "approved": "<ISO 时间> · <原话摘要>"}}
+  "slow_allow": {"tests/unit/test_a.py::test_big": {"reason": "…", "approved": "<ISO 时间> · <原话摘要>", "limit_sec": 8, "expires": "<YYYY-MM-DD>"}}
 }
 ```
+
+- `"budget"`（可选，单元层与区域条目里都可写，部件形态写在部件的 `unit` 与区域里）：`case_sec` 是单条用例的线，`total_sec` 是整层的总量预算，两个字段都可选；不写即现状（单元层单条 3 秒，区域不判）。
+- `slow_allow` 条目的 `limit_sec` / `expires`（可选）：放行的上限秒数与到期日，由「放行慢单测」的命令写入；不写即现状。判定细则见 `.claude/flight-runner-contract.md` 第 10 节。
 
 **部件形态**（多语言 monorepo：每个子项目 × runner 是一个部件，各有单元层与区域）：
 
@@ -169,11 +173,13 @@ pytest 部件不写 `probe`，走内置探针。其他语言的部件写 `unit.p
 2. 由**人类**在对话里写明「放行 <用例函数名>，理由…」；
 3. 模型随即运行：
    ```bash
-   python3 .claude/hooks/test-tiers.py allow-slow <nodeid> --reason "<理由>"
+   python3 .claude/hooks/test-tiers.py allow-slow <nodeid> --reason "<理由>" [--limit-sec <秒>] [--expires <YYYY-MM-DD>]
    ```
    脚本按 takeoff-gate 的方式定位会话转录，**只认时间最新的一条人类消息**：须同时含该用例的函数名（nodeid 最后一个 `::` 之后、去掉参数化后缀 `[...]`）与放行词（放行 / 允许 / allow / approve）。成立 → 写入 `slow_allow[<nodeid>] = {reason, approved}`，退出 0；不成立或找不到转录 → 退出 3、不改文件。模型不得自己写这句话，也不得直接编辑 `slow_allow`。
+   - `--limit-sec`（大于 0）与 `--expires`（不早于今天 UTC 的真实日期）都可选，给了就在条目里多写 `limit_sec` / `expires`；不合法 → 退出 2、不改文件；
+   - 两个都不给时照常写入，stderr 提示一行「没有上限也没有到期日」。
 
-放行后该用例超线只给警告（带 `approved`），不再判红。放行（或撤销放行）后 final 不退回全量，只重跑该用例所在的测试文件。
+放行后该用例超线只给警告（带 `approved`），不再判红；超过 `limit_sec` 仍判红，过了 `expires` 放行不再算数、回到判红，到期前 14 天警告里带到期提示。放行（或撤销放行）后 final 不退回全量，只重跑该用例所在的测试文件。
 
 ## 非 pytest 仓库
 
@@ -195,3 +201,5 @@ G12 照常校验。非 pytest 部件按退出码判，不做逐条失败差分�
 - 输出位置：`summary` 末尾追加「单元 X.Xs · 集成 Y.Ys」，飞行记录（timeline 备注）在结论词之前插入同样文字；baseline 同时写进 `gate-baseline.json`；
 - 未配置分层时没有 `tier_sec`，输出不变。
 - 测试账本按分层文件给每条用例归层（`unit` 或区域名），没有分层文件时账本不分层（层记 `null`）；细则见 `.claude/flight-runner-contract.md` 第 9 节。
+
+写了 `budget` 后，门禁按账本判单条与总量（单元层 G10 / G14 判红，集成层 G13 只对本 change 新增的超线用例判红，其余与区域总量只警告），预算或放行相对基线的改动进 PR 正文的「## 测试变更」；细则见 `.claude/flight-runner-contract.md` 第 10 节。
