@@ -5,7 +5,7 @@ ship-rerun-decision#claude-md-commit-with-inert-keeps-ship-fresh，共 7 条）�
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
 import json
 
-from conftest import SCOPE_DECL, commit_all, run_hook, write
+from conftest import SCOPE_DECL, commit_all, git, run_hook, write
 from final_helpers import baseline, change_and_commit, final, make_repo
 from test_runner_contract import DROPPING
 from test_runner_statement import REASON
@@ -117,6 +117,22 @@ def test_inert_never_covers_test_files_added_later(git_repo):
     res = _ship(git_repo, d)
 
     # Then: 测试文件永不按 inert 处理：final 过期
+    assert [r for r in res["reasons"] if "final 过期" in r], res["reasons"]
+
+
+def test_rename_into_inert_dir_makes_final_stale(git_repo):
+    # Given: 声明 inert ["docs/**"]；final 已绿；之后把非 inert 的 scripts/helper.sh 原样改名到 docs/helper.sh 并提交
+    _decl(git_repo, inert=["docs/**"])
+    d = make_repo(git_repo)
+    _green_final(git_repo, d)
+    (git_repo / "docs").mkdir()
+    git(git_repo, "mv", "scripts/helper.sh", "docs/helper.sh")
+    commit_all(git_repo, "move helper into docs")
+
+    # When: 运行 ship
+    res = _ship(git_repo, d)
+
+    # Then: 改名的删除端 scripts/helper.sh 不是 inert：final 过期
     assert [r for r in res["reasons"] if "final 过期" in r], res["reasons"]
 
 

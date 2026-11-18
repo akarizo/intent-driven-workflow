@@ -6073,7 +6073,7 @@ def _final_fresh(root, change_dir, final_commit, data=None):
     其余路径全部按 inert 生效（ship-rerun-hardening D2，对账锚点见 _recon_anchor）也算新鲜；
     不要求祖先关系；任一 git 调用失败（commit 不存在等）→ 不新鲜。"""
     try:
-        names = git(root, "diff", "--name-only", final_commit, "HEAD").splitlines()
+        names = _git_raw(root, ["diff", "--name-only", "--no-renames", "-z", final_commit, "HEAD"]).split("\0")
     except RuntimeError:
         return False
     changes_rel = os.path.relpath(os.path.dirname(os.path.abspath(change_dir)), root).replace(os.sep, "/")
