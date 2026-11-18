@@ -38,6 +38,7 @@
 #                                              配了 gate.checks 时在每片 verify 之后跑每个 baseline 非空的检查（共用目录
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
+#                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
 #                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
@@ -1403,6 +1404,61 @@ def _load_flight_lock():
         except Exception as e:
             _FLIGHT_LOCK_MOD = "flight-lock 加载失败：%s: %s" % (type(e).__name__, e)
     return _FLIGHT_LOCK_MOD
+
+
+_LEDGER_MOD = None  # test-ledger.py 模块对象；加载失败时为原因字符串（只加载一次）
+
+
+def _ledger_mod():
+    """按路径加载同目录的 test-ledger.py（同 _load_flight_lock）。→ 模块，或失败原因（str）。"""
+    global _LEDGER_MOD
+    if _LEDGER_MOD is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test-ledger.py")
+        try:
+            if not os.path.isfile(path):
+                raise FileNotFoundError("test-ledger.py 缺失：%s" % path)
+            spec = importlib.util.spec_from_file_location("test_ledger", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _LEDGER_MOD = mod
+        except Exception as e:
+            _LEDGER_MOD = "test-ledger 加载失败：%s: %s" % (type(e).__name__, e)
+    return _LEDGER_MOD
+
+
+def _ledger_commit(root, name, meta, tiers, universe=None, source=None, rerun_files=None):
+    """→ (账本 | None, 警告 | None)。meta = {"commit", "phase", "mode", "lock"}；内部补上 change 与 at。
+    整体包在 try 里：模块不可用或任何异常 → (None, "测试账本未写：<原因>")。"""
+    try:
+        mod = _ledger_mod()
+        if isinstance(mod, str):
+            return None, "测试账本未写：%s" % mod
+        tier_of = None
+        if tiers is not None:
+            tier_of = lambda f: (tiers_matching(f, tiers, root) or [None])[0]  # noqa: E731
+        led = mod.build(dict(meta, change=name, at=now_iso()), ledger_observations(), universe, source,
+                        rerun_files, root, tier_of)
+        mod.save(root, name, meta["phase"], led)
+        return led, None
+    except Exception as e:
+        return None, "测试账本未写：%s: %s" % (type(e).__name__, e)
+
+
+def _ledger_secs(led):
+    """账本存在且 id_form 为 nodeid → {nodeid: 秒}（锚点的 secs）；否则 None。"""
+    mod = _ledger_mod()
+    if led is None or isinstance(mod, str) or led.get("id_form") != "nodeid":
+        return None
+    return mod.secs_of(led)
+
+
+def _ledger_source(root, change, commit):
+    """本 change 的基线账本且其 commit 等于 commit → 该账本（复用旧基线时的来源）；否则 None。"""
+    mod = _ledger_mod()
+    if isinstance(mod, str) or not change:
+        return None
+    led = mod.load(root, change, "baseline")
+    return led if led is not None and led.get("commit") == commit else None
 
 
 class _NoLock:
@@ -4501,6 +4557,24 @@ def cmd_baseline(args):
     bl["test_ok"] = test_ok and len(reasons) == n_valid
     # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
     # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）；部件形态不写锚点（design D8）
+    # 基线账本（test-ledger design D1 / D4）：写锚点之前落账，基线红也照落；部件形态由 S5 落账
+    led, lwarn, lmod = None, None, _ledger_mod()
+    lmeta = {"commit": bl["commit"], "phase": "baseline", "mode": "incremental", "lock": hold.info.get("state")}
+    if hit is None and not parts:
+        led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="full"), tiers,
+                                    universe=_nodes_lower(adeps["nodes"]) if adeps is not None else None)
+    elif apart is not None:
+        led, lwarn = _ledger_commit(root, name, lmeta, tiers, universe=apart.get("nodes") or None,
+                                    source=None if isinstance(lmod, str) else lmod.from_anchor(src["pick"][0]),
+                                    rerun_files=hit["rerun_files"])
+    elif hit is not None:  # 复用旧基线 / 基线池：来源账本在 save 覆盖之前读
+        led, lwarn = _ledger_commit(root, name, lmeta, tiers,
+                                    source=_ledger_source(root, src.get("change"), src.get("commit")),
+                                    rerun_files=hit["rerun_files"])
+    if lwarn:
+        warnings.append(lwarn)
+    if led is not None:
+        bl["ledger"] = lmod.summary(led)
     if hit is None and not parts:
         measured = adeps is not None and not deps_un and not deps_whys and not reasons
         if deps_un:
@@ -4519,13 +4593,16 @@ def cmd_baseline(args):
             "deps": ad["deps"], "blind": ad["blind"], "tests": _node_counts(ad.get("nodes") or {}),
             "nodes": _nodes_lower(ad.get("nodes")), "deps_kind": deps_un[0][0] if deps_un else None,
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
+            # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
+            "secs": _ledger_secs(led) if measured else None,
             "measured": measured, "source": "baseline", "hops": 0})
         if w:
             warnings.append(w)
     elif apart is not None:  # 经锚点的增量基线（design D7）：写新锚点，hops = 来源 + 1；基线无效时 measured false
+        # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
         w = _anchor_write(root, dict(apart, change=name, commit=bl["commit"], at=now_iso(), snapshot=s1,
                                      byproducts=byproducts, cmd_key=akey, tiers_key=None, tiers_detail=None,
-                                     measured=apart["measured"] and not reasons))
+                                     measured=apart["measured"] and not reasons, secs=_ledger_secs(led)))
         if w:
             warnings.append(w)
     if warnings:
