@@ -1,11 +1,7 @@
 """文档：pr-ship 先裁决再重跑；契约与规划指引写明 inert 与无图退路
 （scenario: ship-rerun-decision#pr-ship-asks-ship-before-rerunning-final、inert-paths#docs-describe-inert-and-tests-only，共 2 条）。
 骨架：每个 scenario 一个 strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S4 实现后去掉")
 
 T = ROOT / "template"
 PR_SHIP = T / ".claude" / "commands" / "pr-ship.md"
@@ -19,7 +15,6 @@ def _read(p):
     return p.read_text(encoding="utf-8")
 
 
-@PENDING
 def test_pr_ship_asks_ship_before_rerunning_final():
     # Given: template/.claude/commands/pr-ship.md 的 step 2b（记忆层沉淀）
     text = _read(PR_SHIP)
@@ -34,7 +29,6 @@ def test_pr_ship_asks_ship_before_rerunning_final():
     assert "沉淀 commit 之后重跑：" not in s2b, s2b
 
 
-@PENDING
 def test_docs_describe_inert_and_tests_only():
     # Given: 运行器契约、propose 命令与同名 skill、schema 的 tasks instruction、README
     contract = _read(CONTRACT)
