@@ -8,8 +8,9 @@
 # 留痕去处：来自 ① 标记 → <git common dir>/flight-evidence/<change 目录名>/<切片>.log（同仓任何 worktree 可读，
 #   不写工作树）；来自 ②③ 或取不到共用目录 → <change>/evidence.log。
 # 心跳：有标记时任何 Bash 事件都先确保 <切片>.log 存在（无行即空文件 = hook 在工作）；无标记不在共用目录建任何东西。
-# 认定测试运行：命中 TEST_RE 运行器名字，或命令含本片 verify / 顶层 gate.test 里的脚本路径记号
-#   （按空白与 ; & | ( ) 引号切开，含 / 且以 .sh .py .js .mjs .ts 结尾）；slices.json 读不到 → 只按运行器名字认。
+# 认定测试运行：命中 TEST_RE 运行器名字，或命令执行位置上的脚本路径记号与本片 verify / 顶层 gate.test 的相同
+#   （按 ; && || | & 换行 ( ) 切段；执行位置 = 段首词，或紧跟 bash/sh/zsh/python/python3/node/npx/tsx 的那个词；
+#   含 / 且以 .sh .py .js .mjs .ts 结尾；命中 TEST_RE 的段不出记号）；slices.json 读不到 → 只按运行器名字认。
 # 结果判定：事件为 PostToolUseFailure → FAIL；否则 stdout/stderr 命中 failed|error|FAIL → FAIL；其余 PASS。
 # fail-open：任何异常静默退出。兼容 Python 3.8+。
 import json
@@ -26,7 +27,9 @@ MARKER = ".openspec-slice"
 BRANCH_PREFIX = "worktree-"
 EVIDENCE = "evidence.log"
 SHARED = "flight-evidence"
-TOKEN_SPLIT = re.compile(r"[\s;&|()'\"]+")
+SEG_SPLIT = re.compile(r"&&|\|\||[;|\n()]|(?<![<>])&")
+WORD_SPLIT = re.compile(r"[\s'\"]+")
+RUNNERS = ("bash", "sh", "zsh", "python", "python3", "node", "npx", "tsx")
 SCRIPT_EXT = (".sh", ".py", ".js", ".mjs", ".ts")
 
 
@@ -119,16 +122,29 @@ def text_of(resp):
     return str(resp or "")
 
 
+def exec_tokens(text):
+    """各命令段执行位置上的脚本路径记号：段首词，或紧跟 RUNNERS 之后的那个词；命中 TEST_RE 的段不出记号。"""
+    out = set()
+    for seg in SEG_SPLIT.split(text):
+        words = [w for w in WORD_SPLIT.split(seg) if w]
+        if not words or TEST_RE.search(seg):
+            continue
+        word = words[1] if os.path.basename(words[0]) in RUNNERS and len(words) > 1 else words[0]
+        if "/" in word and word.endswith(SCRIPT_EXT):
+            out.add(word)
+    return out
+
+
 def script_tokens(change_dir, slice_id):
-    """本片 verify 与顶层 gate.test 里的脚本路径记号；读不到或解析失败返回空列表。"""
+    """本片 verify 与顶层 gate.test 里执行位置上的脚本路径记号；读不到或解析失败返回空集合。"""
     try:
         with open(os.path.join(change_dir, "slices.json"), "r", encoding="utf-8") as f:
             plan = json.load(f)
         texts = [str((plan.get("gate") or {}).get("test") or "")]
         texts += [str(s.get("verify") or "") for s in plan.get("slices") or [] if s.get("id") == slice_id]
     except (OSError, ValueError, AttributeError, TypeError):
-        return []
-    return [t for text in texts for t in TOKEN_SPLIT.split(text) if "/" in t and t.endswith(SCRIPT_EXT)]
+        return set()
+    return {t for text in texts for t in exec_tokens(text)}
 
 
 def main():
@@ -146,7 +162,7 @@ def main():
         os.makedirs(shared, exist_ok=True)
         log = os.path.join(shared, slice_id + ".log")
         open(log, "a", encoding="utf-8").close()
-        if not (TEST_RE.search(cmd) or any(t in cmd for t in script_tokens(change_dir, slice_id))):
+        if not (TEST_RE.search(cmd) or exec_tokens(cmd) & script_tokens(change_dir, slice_id)):
             return
     else:
         if not TEST_RE.search(cmd):

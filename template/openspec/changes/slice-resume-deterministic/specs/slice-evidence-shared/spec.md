@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: 切片的测试留痕写在 git 共用目录
-`test-evidence.py` 在工作树根有切片标记时 SHALL 把留痕写到 `<git common dir>/flight-evidence/<change>/<切片>.log`（`<change>` 为标记里 change 目录的目录名），行格式不变：`ISO 时间\t切片\tPASS|FAIL\t命令前 120 字符`；此时 MUST NOT 写工作树里的 `<change>/evidence.log`。有标记时任何 Bash 事件都 SHALL 确保该文件存在（没有可记的行时是空文件）。命令被认作测试运行的条件 SHALL 是：命中原有的运行器名字，或命令文本包含本片 `verify` 或计划 `gate.test` 里的脚本路径记号（按空白与 `;` `&` `|` `(` `)` 引号切开后，含 `/` 且以 `.sh`、`.py`、`.js`、`.mjs`、`.ts` 结尾的记号）；读不到计划时只按运行器名字认。没有切片标记时行为 MUST 不变。hook 任何异常 MUST 静默并以 0 退出。
+`test-evidence.py` 在工作树根有切片标记时 SHALL 把留痕写到 `<git common dir>/flight-evidence/<change>/<切片>.log`（`<change>` 为标记里 change 目录的目录名），行格式不变：`ISO 时间\t切片\tPASS|FAIL\t命令前 120 字符`；此时 MUST NOT 写工作树里的 `<change>/evidence.log`。有标记时任何 Bash 事件都 SHALL 确保该文件存在（没有可记的行时是空文件）。命令被认作测试运行的条件 SHALL 是：命中原有的运行器名字，或命令执行位置上的脚本路径记号与本片 `verify` 或计划 `gate.test` 执行位置上的记号相同（命令按 `;` `&&` `||` `|` `&` 换行与括号切段；执行位置是段首词，或紧跟 `bash`、`sh`、`zsh`、`python`、`python3`、`node`、`npx`、`tsx` 的那个词；记号含 `/` 且以 `.sh`、`.py`、`.js`、`.mjs`、`.ts` 结尾；命中运行器名字的段不出记号，只是读写这些文件的命令不算）；读不到计划时只按运行器名字认。没有切片标记时行为 MUST 不变。hook 任何异常 MUST 静默并以 0 退出。
 Feature: 同一仓库的任何 worktree 都读得到切片的留痕
 Rule: 留痕按切片分文件放在共用目录；文件在就说明 hook 在工作
 
