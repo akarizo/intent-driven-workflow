@@ -13,3 +13,4 @@
 2026-11-18T12:46:32Z	gate	S5 d47925bfb4e68fe451e49375d213e6c4eab58ffd ok
 2026-11-18T12:46:32Z	gate	S7 405bb6c8cec320c6937317d8c5ddba6880ddbd9c ok
 2026-11-18T12:46:41Z	integrate	wave 3
+2026-11-18T12:46:41Z	wave-check	wave 3/3 · 测试跳过（受影响测试约 516.7 秒（92 个文件），超过预算 120 秒，留给 final） · 排队 0.0s · 负载 8.0→8.0/18 ok
