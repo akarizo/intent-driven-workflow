@@ -176,11 +176,11 @@ def test_apply_docs_mirror_retry_and_preflight():
     def hooks(t):
         return set(re.findall(r"(slice-gate\.py|spec_html\.py|timeline\.py|session-decompose\.py)", t))
 
-    # Then: 两者都在 lint 之后跑 preflight 并说明非 0 停飞；回退路径都含 cherry-pick 与 --base；hook 脚本集合一致
+    # Then: 两者都在 lint 之后跑 preflight 并说明非 0 停飞；回退路径都含 --continue；hook 脚本集合一致
     for t in (cmd, skill):
         assert t.index("slice-gate.py lint") < t.index("slice-gate.py preflight")
         assert "停" in t[t.index("slice-gate.py preflight"):t.index("slice-gate.py preflight") + 400]
-        assert "cherry-pick" in t and "--base" in t
+        assert "--continue" in t
     assert hooks(cmd) == hooks(skill)
 
 
