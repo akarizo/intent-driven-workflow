@@ -4,11 +4,13 @@
 # 子命令：
 #   run unit   [--part P] [--openspec-root DIR]
 #              驱动（gate.test = TIER_DRIVER_CMD）：按名字依次在各部件 <顶层>/<root> 下运行 unit.cmd（简写形态 = root 为 .
-#              的单个部件 main），输出直通，每部件末尾打印「部件 P：exit N · T s」；--part 只跑一个
+#              的单个部件 main），输出直通，每部件末尾打印「部件 P：exit N · T s」；--part 只跑一个；
+#              整个运行期间持全机测试锁（独占）
 #   probe      [--root DIR] [--cmd CMD] [--adapter CMD] [--json PATH]
 #              在 <顶层>/<root>（缺省 .）下带单元层探针跑测试（缺省 `<python> -m pytest -q`；有 --adapter 时按适配器契约运行），
 #              按文件汇总层级：全纯 = 单元、全不纯 = 集成、都有 = 混合；用例 id 与文件路径都相对顶层；
-#              stdout 每文件一行（首列层级标签）+ 末行合计；--json 写 {total, tests, files}
+#              stdout 每文件一行（首列层级标签）+ 末行合计；--json 写 {total, tests, files}；
+#              整个运行期间持全机测试锁（独占）
 #   check      [--openspec-root DIR]
 #              git 跟踪 / 未忽略的测试文件逐个按 <openspec 根>/test-tiers.json 归层，点名未归层与匹配多层的文件；
 #              部件形态另点名不属于任何部件 / 属于多个部件的文件（金丝雀文件不参与），层在所属部件内判
@@ -90,6 +92,14 @@ def cmd_probe(args):
     root = posixpath.normpath(args.root or ".")
     if not os.path.isdir(os.path.join(top, root)):
         fail("--root %s 不是 git 顶层下存在的目录" % root)
+    hold = sg.flight_lock("exclusive", label="test-tiers probe")  # 校验之后取：校验失败不排队
+    try:
+        return _probe(args, top, root)
+    finally:
+        hold.release()
+
+
+def _probe(args, top, root):
     cmd = args.cmd or "%s -m pytest -q" % shlex.quote(sys.executable)
     unit = {"paths": ["**"], "cmd": cmd}
     if args.adapter:
@@ -196,13 +206,17 @@ def cmd_run(args):
             fail("分层文件里没有部件 %s（有：%s）" % (args.part, "、".join(names)))
         names = [args.part]
     bad = False
-    for name in names:
-        part = parts[name]
-        t0 = time.time()
-        sys.stdout.flush()
-        rc = subprocess.call(part["unit"]["cmd"], cwd=os.path.join(top, part["root"]), shell=True)
-        print("部件 %s：exit %d · %.1fs" % (name, rc, time.time() - t0), flush=True)
-        bad = bad or rc != 0
+    hold = sg.flight_lock("exclusive", label="test-tiers run")  # 校验之后取：校验失败不排队
+    try:
+        for name in names:
+            part = parts[name]
+            t0 = time.time()
+            sys.stdout.flush()
+            rc = subprocess.call(part["unit"]["cmd"], cwd=os.path.join(top, part["root"]), shell=True)
+            print("部件 %s：exit %d · %.1fs" % (name, rc, time.time() - t0), flush=True)
+            bad = bad or rc != 0
+    finally:
+        hold.release()
     return 1 if bad else 0
 
 

@@ -7,13 +7,9 @@ import shlex
 import subprocess
 import sys
 
-import pytest
-
 from conftest import commit_all, hook_path, write
 from final_helpers import baseline, change_and_commit, final, make_repo, timeline_rows
 from lock_helpers import QUEUED, Locks, wait_for
-
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S5 未实现")
 
 PY = shlex.quote(sys.executable)
 CHECK = {"name": "probe-check", "baseline": "true", "final": "true", "timeout_sec": 60}
@@ -23,7 +19,6 @@ def number(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-@PENDING
 def test_final_note_records_test_and_check_seconds(git_repo):
     # Given: 计划配了一项检查 probe-check，baseline 已绿，之后改了 src/a.py
     d = make_repo(git_repo, gate_extra={"checks": [CHECK]})
@@ -45,7 +40,6 @@ def test_final_note_records_test_and_check_seconds(git_repo):
     assert note.endswith(" ok"), note
 
 
-@PENDING
 def test_test_tiers_run_and_probe_hold_exclusive_lock(git_repo, tmp_path):
     # Given: 一个有分层文件的仓库（单元层一个纯函数用例）
     write(git_repo / "pytest.ini", "[pytest]\n")
