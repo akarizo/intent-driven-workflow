@@ -31,7 +31,7 @@
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
-#                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
+#                                              分层文件合法时：单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒），已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
 #   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
@@ -45,7 +45,7 @@
 #                                              <git common dir>/flight-gate-checks/<change>/<name>，记 checks.<name>；沿用条件同 lint / typecheck
 #                                              且目录仍在），检查红 / 超时 → 基线红
 #                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
-#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
+#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒；红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
@@ -92,7 +92,7 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 MAX_SLICES = 9
 MAX_DEPTH = 3
@@ -650,9 +650,12 @@ DEPS_KIND_WHY = {
 # 逐用例结局的对外口径（结果文件与锚点 nodes）：插件内部的大写结论 → 小写
 OUTCOME_LOWER = {"PASSED": "passed", "FAILED": "failed", "ERROR": "error", "SKIPPED": "skipped", "XFAIL": "xfailed",
                  "XPASS": "xpassed"}
-# 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
+# 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限的缺省值（秒，
+# 分层文件的 unit.budget.case_sec 可改）；放行到期前 ALLOW_SOON_DAYS 天起警告带「将于」（tier-budgets D1、D2）
 TIER_FILE = "test-tiers.json"
 UNIT_MAX_SEC = 3.0
+ALLOW_SOON_DAYS = 14
+BUDGET_FIELDS = ("case_sec", "total_sec")
 TIER_NAME_RE = re.compile(r"[a-z0-9-]+")
 # 部件形态（test-tiers-polyglot D3、D4、D8）：gate.test 须是驱动命令；list 选择器超时；内置测试命名 = TEST_FILE_RE ∪ 其他语言
 # （Rust 的 root/tests/*.rs 按部件 root 判，见 part_test_files）
@@ -1220,28 +1223,75 @@ def _selected_regions(gate):
     return [n for n in integration if isinstance(n, str)] if isinstance(integration, list) else []
 
 
-def slow_candidates(probe):
-    """首跑耗时 >= UNIT_MAX_SEC 的 nodeid（排序）；probe 为 None → []。"""
+def slow_candidates(probe, case_sec=UNIT_MAX_SEC):
+    """首跑耗时 >= case_sec 的 nodeid（排序）；probe 为 None → []。"""
     if not probe:
         return []
-    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= UNIT_MAX_SEC)
+    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= case_sec)
 
 
-def tier_verdicts(probe, probe_why, rerun, allow):
-    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选须单独重跑仍超线（或重跑无记录）才确认。"""
+def _iso_day(v):
+    """形如 YYYY-MM-DD 的真实日期 → date；否则 None。"""
+    if not (isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
+        return None
+    try:
+        return date.fromisoformat(v)
+    except ValueError:
+        return None
+
+
+def _pos_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+
+
+def allow_view(allow, today=None):
+    """slow_allow 的判定视图（tier-budgets D2）：{用例 id: {limit, expires, expired, soon, approved, reason}}。
+    today 缺省 UTC 当天；expires 解析不了按没有期限处理（形状错由 lint 管）。"""
+    today = today or datetime.now(timezone.utc).date()
+    view = {}
+    for nid, item in (allow or {}).items():
+        exp = _iso_day(item.get("expires"))
+        limit = item.get("limit_sec")
+        view[nid] = {"limit": float(limit) if _pos_num(limit) else None,
+                     "expires": exp.isoformat() if exp else None,
+                     "expired": bool(exp and today > exp),
+                     "soon": bool(exp and today <= exp and (exp - today).days <= ALLOW_SOON_DAYS),
+                     "approved": item.get("approved") or "", "reason": item.get("reason") or ""}
+    return view
+
+
+def _slow_verdict(where, nid, sec, again, allow, case_sec, today):
+    """确认了的慢用例 → ("failed" | "warnings", 文本)；where 是部件版的「部件 <name>：」前缀（简写形态为空）。
+    三种失败都以 "G10 slow unit test" 开头（_time_verdicts 靠这个前缀降级）。"""
+    shown = "未取得" if again is None else "%.1fs" % again
+    if nid not in allow:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s（≥%gs）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
+                          % (where, nid, sec, shown, case_sec))
+    v = allow_view({nid: allow[nid]}, today)[nid]
+    if v["expired"]:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s（≥%gs）：放行已于 %s 到期，重新放行（test-tiers.py allow-slow）、提速或移入集成区域"
+                          % (where, nid, sec, shown, case_sec, v["expires"]))
+    took = sec if again is None else min(sec, again)
+    if v["limit"] is not None and took > v["limit"]:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s：超过放行上限 %gs，提速或重新放行（test-tiers.py allow-slow --limit-sec）"
+                          % (where, nid, sec, shown, v["limit"]))
+    text = "G10 slow unit test 已人工放行：%s%s %.1fs（%s）" % (where, nid, sec, v["approved"])
+    return "warnings", text + ("，放行将于 %s 到期" % v["expires"] if v["soon"] else "")
+
+
+def tier_verdicts(probe, probe_why, rerun, allow, case_sec=UNIT_MAX_SEC, today=None):
+    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选（≥ case_sec）须单独重跑仍超线（或重跑无记录）才确认；
+    确认了的用例在 allow 里时再看放行的上限与期限（tier-budgets D2）。"""
     if probe is None:
         return [], ["G10/G11 不可度量：%s" % probe_why]
     failed, warnings = [], []
-    for nid in slow_candidates(probe):
+    out = {"failed": failed, "warnings": warnings}
+    for nid in slow_candidates(probe, case_sec):
         again = rerun.get(nid)
-        if again is not None and again < UNIT_MAX_SEC:
+        if again is not None and again < case_sec:
             continue
-        sec = float(probe[nid].get("sec") or 0.0)
-        if nid in allow:
-            warnings.append("G10 slow unit test 已人工放行：%s %.1fs（%s）" % (nid, sec, allow[nid]["approved"]))
-        else:
-            failed.append("G10 slow unit test: %s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
-                          % (nid, sec, "未取得" if again is None else "%.1fs" % again))
+        kind, text = _slow_verdict("", nid, float(probe[nid].get("sec") or 0.0), again, allow, case_sec, today)
+        out[kind].append(text)
     for nid in sorted(probe):
         hits = probe[nid].get("hits") or {}
         if hits:
@@ -1343,23 +1393,21 @@ def run_part(top, name, part, probe=True):
     return res
 
 
-def part_tier_verdicts(name, res, rerun, allow):
+def part_tier_verdicts(name, res, rerun, allow, case_sec=UNIT_MAX_SEC, today=None):
     """部件单元层 G10 / G11 判定（纯函数）→ (failed, warnings)，文本都带「部件 <name>」。
-    G10 候选 = secs 中 ≥ UNIT_MAX_SEC 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认。"""
+    G10 候选 = secs 中 ≥ case_sec 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认；放行判法同 tier_verdicts。"""
     failed, warnings, gaps = [], [], {}
+    out = {"failed": failed, "warnings": warnings}
     secs, probe = res.get("secs"), res.get("probe")
     if secs is None:
         gaps["G10"] = res.get("secs_why")
     else:
-        for nid in sorted(n for n, s in secs.items() if float(s or 0.0) >= UNIT_MAX_SEC):
+        for nid in sorted(n for n, s in secs.items() if float(s or 0.0) >= case_sec):
             again = (rerun or {}).get(nid)
-            if again is not None and again < UNIT_MAX_SEC:
+            if again is not None and again < case_sec:
                 continue
-            if nid in allow:
-                warnings.append("G10 slow unit test 已人工放行：部件 %s：%s %.1fs（%s）" % (name, nid, secs[nid], allow[nid]["approved"]))
-            else:
-                failed.append("G10 slow unit test: 部件 %s：%s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
-                              % (name, nid, secs[nid], "未取得" if again is None else "%.1fs" % again))
+            kind, text = _slow_verdict("部件 %s：" % name, nid, float(secs[nid] or 0.0), again, allow, case_sec, today)
+            out[kind].append(text)
     if probe is None:
         gaps["G11"] = res.get("probe_why")
     else:
@@ -1525,12 +1573,13 @@ def _time_verdicts(failed, warnings, lock_info):
 def part_tier_verdict(top, name, part, res, allow):
     """有 G10 候选时整部件再 run_part 一次取 secs 作 rerun（拿不到 → None，按确认处理），再交给 part_tier_verdicts。
     → (failed, warnings, extra_sec)；extra_sec = 重跑墙钟（没重跑为 0）。"""
-    cands = [n for n, s in (res.get("secs") or {}).items() if float(s or 0.0) >= UNIT_MAX_SEC]
+    line = (part["unit"].get("budget") or {}).get("case_sec") or UNIT_MAX_SEC
+    cands = [n for n, s in (res.get("secs") or {}).items() if float(s or 0.0) >= line]
     rerun, extra = {}, 0.0
     if cands:
         again = run_part(top, name, part)
         rerun, extra = again["secs"], again["sec"]
-    failed, warnings = part_tier_verdicts(name, res, rerun, allow)
+    failed, warnings = part_tier_verdicts(name, res, rerun, allow, case_sec=line)
     return failed, warnings, extra
 
 
@@ -2135,6 +2184,22 @@ def _tier_shape(label, obj, fields, selector=False):
             errors.append("tiers: %s 的 covers 须是数组（可为空）、每项非空" % label)
     if not _nonblank(obj.get("cmd")):
         errors.append("tiers: %s 缺少 cmd（须是非空字符串）" % label)
+    if "budget" in fields and "budget" in obj:
+        errors.extend(_budget_shape(label, obj["budget"]))
+    return errors
+
+
+def _budget_shape(label, budget):
+    """unit / 区域的 budget（tier-budgets D1）：对象，只含 case_sec / total_sec，写了的须是大于 0 的数。"""
+    if not isinstance(budget, dict):
+        return ["tiers: %s 的 budget 须是对象（case_sec / total_sec）" % label]
+    errors = []
+    extra = sorted(str(k) for k in budget if k not in BUDGET_FIELDS)
+    if extra:
+        errors.append("tiers: %s 的 budget 有未知字段 %s" % (label, ", ".join(extra)))
+    for k in BUDGET_FIELDS:
+        if k in budget and not _pos_num(budget[k]):
+            errors.append("tiers: %s 的 budget.%s 须是大于 0 的数" % (label, k))
     return errors
 
 
@@ -2197,7 +2262,7 @@ def _parts_shape(tiers):
             errors.append("tiers: %s 的 test_files 须是非空数组、每项非空" % label)
         unit = part.get("unit")
         if isinstance(unit, dict):
-            errors.extend(_tier_shape("%s 的 unit" % label, unit, ("paths", "list", "cmd", "junit", "probe"), selector=True))
+            errors.extend(_tier_shape("%s 的 unit" % label, unit, ("paths", "list", "cmd", "junit", "probe", "budget"), selector=True))
             if "junit" in unit and not _nonblank(unit["junit"]):
                 errors.append("tiers: %s 的 unit.junit 须是非空字符串" % label)
             if "probe" in unit:
@@ -2213,7 +2278,7 @@ def _parts_shape(tiers):
             if not TIER_NAME_RE.fullmatch(r):
                 errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % r)
             if isinstance(regions[r], dict):
-                errors.extend(_tier_shape("%s 的区域 %s" % (label, r), regions[r], ("paths", "list", "covers", "cmd"), selector=True))
+                errors.extend(_tier_shape("%s 的区域 %s" % (label, r), regions[r], ("paths", "list", "covers", "cmd", "budget"), selector=True))
             else:
                 errors.append("tiers: %s 的区域 %s 须是对象（paths | list / covers / cmd）" % (label, r))
     for r in sorted(owners):
@@ -2242,7 +2307,7 @@ def _load_tiers_file(path):
             errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
         unit = tiers.get("unit")
         if isinstance(unit, dict):
-            errors.extend(_tier_shape("unit", unit, ("paths", "cmd")))
+            errors.extend(_tier_shape("unit", unit, ("paths", "cmd", "budget")))
         else:
             errors.append("tiers: 分层文件缺少 unit（须是含 paths 与 cmd 的对象）")
         regions = tiers.get("regions", {})
@@ -2253,7 +2318,7 @@ def _load_tiers_file(path):
             if not TIER_NAME_RE.fullmatch(name):
                 errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
             if isinstance(regions[name], dict):
-                errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd")))
+                errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd", "budget")))
             else:
                 errors.append("tiers: 区域 %s 须是对象（paths / covers / cmd）" % name)
     slow = tiers.get("slow_allow", {})
@@ -2265,12 +2330,16 @@ def _load_tiers_file(path):
         if not isinstance(item, dict):
             errors.append("tiers: slow_allow 的 %s 须是对象（reason / approved）" % nid)
             continue
-        extra = sorted(str(k) for k in item if k not in ("reason", "approved"))
+        extra = sorted(str(k) for k in item if k not in ("reason", "approved", "limit_sec", "expires"))
         if extra:
             errors.append("tiers: slow_allow 的 %s 有未知字段 %s" % (nid, ", ".join(extra)))
         for k in ("reason", "approved"):
             if not _nonblank(item.get(k)):
                 errors.append("tiers: slow_allow 的 %s 缺少 %s（须是非空字符串）" % (nid, k))
+        if "limit_sec" in item and not _pos_num(item["limit_sec"]):
+            errors.append("tiers: slow_allow 的 %s 的 limit_sec 须是大于 0 的数" % nid)
+        if "expires" in item and _iso_day(item["expires"]) is None:
+            errors.append("tiers: slow_allow 的 %s 的 expires 须是 YYYY-MM-DD 的真实日期" % nid)
     return (None if errors else tiers), errors
 
 
@@ -2302,6 +2371,47 @@ def tier_parts(tiers):
     if tiers_is_parts(tiers):
         return tiers["parts"]
     return {"main": {"root": ".", "unit": tiers["unit"], "regions": tiers.get("regions") or {}}}
+
+
+def tier_budgets(tiers):
+    """预算范围摊平（tier-budgets D1）→ {范围: {kind, case_sec, total_sec, part}}；tiers 为 None → {}。
+    范围：简写形态 "unit" 与各区域名；部件形态 "<部件>/unit" 与各区域名。单元层 case_sec 缺省 UNIT_MAX_SEC。"""
+    if tiers is None:
+        return {}
+    parts = tiers_is_parts(tiers)
+    out = {}
+    for pname, part in tier_parts(tiers).items():
+        owner = pname if parts else None
+        ub = part["unit"].get("budget") or {}
+        out["%s/unit" % pname if parts else "unit"] = {"kind": "unit", "case_sec": ub.get("case_sec", UNIT_MAX_SEC),
+                                                       "total_sec": ub.get("total_sec"), "part": owner}
+        for r, reg in (part.get("regions") or {}).items():
+            rb = reg.get("budget") or {}
+            out[r] = {"kind": "region", "case_sec": rb.get("case_sec"), "total_sec": rb.get("total_sec"), "part": owner}
+    return out
+
+
+def budget_scope_of(tiers):
+    """→ 函数 (用例 id, 层) -> 范围 | None。层不是 unit 时原样返回；部件形态按 id 首段定部件：
+    恰是部件名 → 该部件；否则当顶层路径，取 root 前缀最长的部件，root 为 . 的兜底。"""
+    parts = tiers["parts"] if tiers_is_parts(tiers) else None
+
+    def scope(nid, layer):
+        if layer is None:
+            return None
+        if layer != "unit":
+            return layer
+        if parts is None:
+            return "unit"
+        head = str(nid).split("::", 1)[0]
+        if head in parts:
+            name = head
+        else:
+            hits = [(len(p["root"]), n) for n, p in parts.items() if p["root"] != "." and head.startswith(p["root"] + "/")]
+            name = max(hits)[1] if hits else next((n for n, p in sorted(parts.items()) if p["root"] == "."), None)
+        return None if name is None else "%s/unit" % name
+
+    return scope
 
 
 def _tier_regions(tiers):
@@ -3411,11 +3521,11 @@ def _tier_rerun(root, gate, nodeids):
     return {n: r["sec"] for n, r in probe.items()}
 
 
-def _unit_tier_verdict(root, gate, tg, allow):
-    """单元层 G10 / G11：有慢候选才重跑，再交给 tier_verdicts。"""
-    cands = slow_candidates(tg["probe"])
+def _unit_tier_verdict(root, gate, tg, allow, case_sec=UNIT_MAX_SEC):
+    """单元层 G10 / G11：有慢候选（≥ case_sec）才重跑，再交给 tier_verdicts。"""
+    cands = slow_candidates(tg["probe"], case_sec)
     rerun = (_tier_rerun(root, gate, cands) or {}) if cands else {}
-    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow)
+    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow, case_sec=case_sec)
 
 
 def _g7_diag(text):
@@ -4324,7 +4434,7 @@ def cmd_final(args):
                     if probe is not None:
                         probe = {n: r for n, r in probe.items() if n.split("::", 1)[0] in unit_files}
                     f10, w10 = _unit_tier_verdict(root, gate, {"probe": probe, "probe_why": pr.get("probe_why")},
-                                                  tiers.get("slow_allow") or {})
+                                                  tiers.get("slow_allow") or {}, tier_budgets(tiers)["unit"]["case_sec"])
                     f10, w10 = _time_verdicts(f10, w10, hold.info)
                     failed.extend(f10)
                     warnings.extend(w10)
@@ -4358,7 +4468,8 @@ def cmd_final(args):
                 failed.extend([f2] if f2 else [])
                 warnings.extend([w2] if w2 else [])
                 if tiers is not None:
-                    f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+                    f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {},
+                                                  tier_budgets(tiers)["unit"]["case_sec"])
                     f10, w10 = _time_verdicts(f10, w10, hold.info)
                     unit_wall = time.time() - t0
                     failed.extend(f10)
@@ -4652,7 +4763,8 @@ def cmd_baseline(args):
         elif rc != 0:
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
         if tiers is not None:
-            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {},
+                                          tier_budgets(tiers)["unit"]["case_sec"])
             f10, w10 = _time_verdicts(f10, w10, hold.info)
             reasons.extend(f10)
             warnings.extend(w10)

@@ -5,12 +5,8 @@ import copy
 import datetime
 import json
 
-import pytest
-
 from conftest import commit_all, load_hook, run_hook
 from test_tiers_gate import HOOKS_OK, setup_tiers
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S2 未实现")
 
 BIG = "tests/unit/test_a.py::test_big"
 SIMPLE = {
@@ -46,7 +42,6 @@ def g10(failed):
     return [f for f in failed if f.startswith("G10")]
 
 
-@PENDING
 def test_budget_shape_validated(tmp_path):
     # Given: 单元层与区域 hooks 都写了合法的 budget
     bad_case, bad_total, bad_key = copy.deepcopy(SIMPLE), copy.deepcopy(SIMPLE), copy.deepcopy(SIMPLE)
@@ -65,7 +60,6 @@ def test_budget_shape_validated(tmp_path):
     assert any(e.startswith("tiers:") and "区域 hooks" in e and "max" in e for e in e_key), e_key
 
 
-@PENDING
 def test_allow_entry_limit_and_expires_validated(tmp_path):
     # Given: 一条放行带 limit_sec 与 expires，另一条只有 reason 与 approved
     old = "tests/unit/test_a.py::test_old"
@@ -89,7 +83,6 @@ def test_allow_entry_limit_and_expires_validated(tmp_path):
         assert any(BIG in e and field in e for e in errs), (field, errs)
 
 
-@PENDING
 def test_parts_budget_shape_validated(tmp_path):
     # Given: 部件形态：部件 py 的单元层与它的区域 api 都写了 budget
     bad = copy.deepcopy(PARTS)
@@ -104,7 +97,6 @@ def test_parts_budget_shape_validated(tmp_path):
     assert any("部件 py" in e and "区域 api" in e and "case_sec" in e for e in errs), errs
 
 
-@PENDING
 def test_budget_scopes_resolved():
     # Given: 简写形态（单元层没写 budget，区域 hooks 单条上限 30）与部件形态（部件 py 的单元层总量预算 100）
     sg = load_hook("slice-gate")
@@ -125,7 +117,6 @@ def test_budget_scopes_resolved():
     assert p_of("py::tests.api.test_x::test_y", "api") == "api" and s_of("x::y", "hooks") == "hooks"
 
 
-@PENDING
 def test_unit_case_budget_replaces_default_line():
     # Given: 用例 test_mid 首跑 1.5 秒、单独重跑 1.4 秒
     sg = load_hook("slice-gate")
@@ -141,7 +132,6 @@ def test_unit_case_budget_replaces_default_line():
     assert g10(loose) == [], loose
 
 
-@PENDING
 def test_unit_case_budget_applies_in_baseline(git_repo):
     # Given: 被测仓库的单元层单条上限是 0.1 秒，单元层有一条睡 0.3 秒的纯函数用例
     d = setup_tiers(git_repo, {"tests/unit/test_u.py": "import time\n\n\ndef test_nap():\n    time.sleep(0.3)\n"},
@@ -162,7 +152,6 @@ def test_unit_case_budget_applies_in_baseline(git_repo):
     assert any(r.startswith("G10") and "test_nap" in r and "≥0.1s" in r for r in reasons or []), (reasons, p.stdout)
 
 
-@PENDING
 def test_allowed_slow_over_limit_is_red():
     # Given: test_big 在放行名单里，limit_sec 是 5
     sg = load_hook("slice-gate")
@@ -178,7 +167,6 @@ def test_allowed_slow_over_limit_is_red():
     assert any(BIG in w and "放行" in w for w in warns), warns
 
 
-@PENDING
 def test_expired_allow_is_red_and_soon_is_flagged():
     # Given: test_big 首跑 3.4 秒、重跑 3.3 秒，在放行名单里
     sg = load_hook("slice-gate")
@@ -199,7 +187,6 @@ def test_expired_allow_is_red_and_soon_is_flagged():
     assert g10(far_f) == [] and any(BIG in w for w in far_w) and not any("将于" in w for w in far_w), (far_f, far_w)
 
 
-@PENDING
 def test_part_unit_budget_applies_per_part():
     # Given: 部件 sh 的一个用例首跑 1.5 秒、重跑 1.5 秒
     sg = load_hook("slice-gate")
