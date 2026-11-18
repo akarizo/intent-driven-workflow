@@ -3741,6 +3741,7 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     inc = None
+    test_sec, check_secs = None, {}  # gate.test 三选一分支的秒数（不含区域）与各项检查的秒数（design D8）
     sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
     final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
     if v7:
@@ -3921,6 +3922,8 @@ def cmd_final(args):
                 elif not anchor_part["measured"]:
                     warnings.append("锚点不可用：全量 exit %d 不可度量（%s）" % (tg["rc"], tg["why"]))
                 inc = {"mode": "full", "full_why": why}
+            if not sfail:
+                test_sec = round(time.time() - t0, 1)
             if tiers is not None and not sfail:  # 区域：内建增量只跑选中的（design D9），其余全跑；运行都记依赖图并入锚点
                 bregions = (baseline or {}).get("regions")
                 for rname in _selected_regions(gate):  # 跳过的区域也先校验基线记录
@@ -3981,13 +3984,13 @@ def cmd_final(args):
     elif checks and sfail:
         warnings.append("G9 检查未跑：G2 scope 复核未过，表态并重新批准后重跑 final")
     elif checks:
-        failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx))
+        failed.extend(_final_checks(root, args.change_dir, checks, baseline, final_ctx, secs=check_secs))
     hold.release()
     result = {"slice": "final", "ok": not failed, "commit": head,
               "failed": failed, "warnings": warnings,
               "scenarios": {"total": total, "passed": passed if not failed else min(passed, total - len(v7))},
               "summary": "final %s：scenario %d/%d" % ("通过" if not failed else "阻断", passed, total),
-              "lock": hold.info}
+              "lock": hold.info, "sec": {"test": test_sec, "checks": check_secs}}
     if dirty:
         result["dirty"] = True
     if scope_info is not None:
@@ -4017,6 +4020,10 @@ def cmd_final(args):
         result["tier_sec"] = ts
         result["summary"] += "；" + _tier_note(ts)
         segs.append(_tier_note(ts))
+    if test_sec is not None:
+        segs.append("测试 %.1fs" % test_sec)
+    if check_secs:
+        segs.append("检查 " + " / ".join("%s %.1fs" % kv for kv in check_secs.items()))
     segs.append(_lock_note(hold.info))
     # 结论词恒在末尾（timeline.py 按末尾取结论）
     final_note = " ".join(x for x in (inc_note, " · ".join(s for s in segs if s), "ok" if result["ok"] else "red") if x)
@@ -5022,8 +5029,9 @@ def _check_msg(head, log, out):
     return msg + ("\n" + tail if tail else "")
 
 
-def _final_checks(root, change_dir, checks, baseline, final_ctx=None):
-    """成对检查的 final 半（G9，design D8）：按 gate.checks 顺序运行，先核对基线记录；返回 failed 项列表。"""
+def _final_checks(root, change_dir, checks, baseline, final_ctx=None, secs=None):
+    """成对检查的 final 半（G9，design D8）：按 gate.checks 顺序运行，先核对基线记录；返回 failed 项列表。
+    secs 是 dict 时写入实际运行了的检查的 {检查名: 秒}。"""
     change = os.path.basename(os.path.realpath(change_dir))
     base = (baseline or {}).get("commit")
     recs = (baseline or {}).get("checks") or {}
@@ -5042,7 +5050,9 @@ def _final_checks(root, change_dir, checks, baseline, final_ctx=None):
         except (RuntimeError, OSError) as e:
             failed.append("G9 check %s：共用目录不可用：%s" % (cname, e))
             continue
-        rc, out, _, timed_out = _run_check(c["final"], root, env, c.get("timeout_sec"))
+        rc, out, csec, timed_out = _run_check(c["final"], root, env, c.get("timeout_sec"))
+        if isinstance(secs, dict):
+            secs[cname] = csec
         log = _check_log(cdir, "final", out)
         if timed_out:
             failed.append(_check_msg("G9 check %s：超时 %s 秒" % (cname, c.get("timeout_sec")), log, out))
