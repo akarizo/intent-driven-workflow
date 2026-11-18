@@ -9,3 +9,5 @@
 2026-11-18T01:35:13Z	review	findings=12 blocking=0 deferred=12
 2026-11-18T01:35:42Z	final	red
 2026-11-18T02:23:03Z	approve	2026-11-18T02:22:40Z · 起飞
+2026-11-18T02:31:40Z	gate	S3 ok
+2026-11-18T02:31:52Z	integrate	wave 1

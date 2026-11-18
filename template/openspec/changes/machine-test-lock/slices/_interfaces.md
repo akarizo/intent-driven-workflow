@@ -32,3 +32,17 @@
 - `load_lock()` 按路径加载 flight-lock.py，失败返回 None
 - `doctor_checks(changes)` `[checks]` 节：点名耗时接近测试耗时的检查
 - `doctor_lock()` `[lock]` 节：当前持有者 / 空闲 / 已关闭
+
+## S3
+
+`template/.claude/hooks/flight-lock.py`
+- `_clear_stale_holders(hd)` 清理 pid 被复用的陈旧持有者文件
+
+`template/.claude/hooks/slice-gate.py`
+- `_load_flight_lock()` 按路径加载 flight-lock.py（只加载一次，失败记原因）
+- `class _NoLock` 加载失败时的占位持有对象
+- `flight_lock(mode, change="", label="", expect_sec=None)` 取锁，不抛异常
+- `_lock_note(info)` 锁片段写入时间线备注
+- `_lock_expect_sec(baseline, gate)` 估算预期耗时
+- `_time_verdicts(failed, warnings, lock_info)` 争抢时把 G10 降为警告
+- `_baseline_parts(..., lock_info=None)` / `_final_parts(..., lock_info=None)` 备注与输出带锁信息
