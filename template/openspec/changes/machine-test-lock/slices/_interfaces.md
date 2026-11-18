@@ -46,3 +46,15 @@
 - `_lock_expect_sec(baseline, gate)` 估算预期耗时
 - `_time_verdicts(failed, warnings, lock_info)` 争抢时把 G10 降为警告
 - `_baseline_parts(..., lock_info=None)` / `_final_parts(..., lock_info=None)` 备注与输出带锁信息
+
+## S5
+
+`template/.claude/hooks/slice-gate.py`
+- `_final_checks(root, change_dir, checks, baseline, final_ctx=None, secs=None)` final 检查；新增 `secs` 收集测试与检查秒数，备注带「测试 Xs」片段
+
+`template/.claude/hooks/test-tiers.py`
+- `_probe(args, top, root)` probe 子命令；run / probe 持独占锁
+
+## S6
+
+无代码接口（仅文档：flight-runner-contract.md 第 8 节「全机测试锁」、opsx-apply / opsx-propose 命令与 skill、test-tiers.md、README.md）。
