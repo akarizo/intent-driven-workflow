@@ -1,0 +1,126 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ],
+    "full_suite_sec": null
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "baseline 不再写 slices.json：全量耗时记进 gate-baseline.json（suite_sec 解析、运行标记带上次耗时、三处读取方）、gate.test 缺失即停、gitlink 进内容快照",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_plan_hygiene_baseline.py",
+        "tests/test_slice_gate.py",
+        "tests/test_baseline_pool.py",
+        "tests/test_baseline_incremental.py",
+        "tests/test_slice_gate_baseline_preflight.py",
+        "tests/test_final_incremental.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_plan_hygiene_baseline.py tests/test_slice_gate.py tests/test_baseline_pool.py tests/test_baseline_incremental.py tests/test_slice_gate_baseline_preflight.py tests/test_final_incremental.py tests/test_baseline_anchor_reuse.py tests/test_baseline_component_reuse.py tests/test_baseline_skip.py tests/test_gate_checks_baseline.py tests/test_submodule_gate.py tests/test_submodule_sync.py tests/test_flight_doctor.py tests/test_approval_gate.py",
+      "scenarios": [
+        "plan-hygiene#baseline-leaves-plan-file-untouched",
+        "plan-hygiene#approval-survives-baseline-rerun",
+        "plan-hygiene#baseline-stops-without-gate-test",
+        "plan-hygiene#incremental-baseline-keeps-suite-sec",
+        "plan-hygiene#running-marker-carries-last-suite-sec",
+        "plan-hygiene#running-baseline-hint-shows-last-suite-sec",
+        "plan-hygiene#suite-sec-resolver-prefers-baseline",
+        "plan-hygiene#staged-gitlink-commit-keeps-baseline-fresh"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "依赖图未测须表态：选测复核追加伪触发项 runner:deps-unmeasured（lint / preflight / final 开跑前复核，基线前为待定项并打印 runner: 提示），增量基线沿用来源的 deps_unmeasured",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_runner_statement.py",
+        "tests/test_slice_gate.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_runner_statement.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_scope_contract_v2.py tests/test_scope_runtime_guard.py tests/test_scope_decl_extras.py tests/test_builtin_scope_precision.py tests/test_runner_contract.py tests/test_baseline_pool.py tests/test_baseline_incremental.py tests/test_spec_html_scope.py tests/test_plan_hygiene_baseline.py",
+      "scenarios": [
+        "runner-statement#unmeasured-baseline-needs-statement",
+        "runner-statement#statement-lets-lint-and-preflight-pass",
+        "runner-statement#measured-baseline-rejects-leftover-statement",
+        "runner-statement#final-refuses-unstated-unmeasured",
+        "runner-statement#statement-may-be-prewritten-before-baseline",
+        "runner-statement#incremental-baseline-keeps-unmeasured-state"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "final 预告收进 slice-gate.py（final_forecast）：ship 的「final 过期」理由带补跑预告，flight-doctor.py forecast 改调同一函数、耗时经 suite_sec 取",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "template/.claude/hooks/flight-doctor.py",
+        "tests/test_ship_forecast.py",
+        "tests/test_flight_doctor.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_ship_forecast.py tests/test_ship_verdict.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py tests/test_final_reuse.py tests/test_spec_html.py",
+      "scenarios": [
+        "ship-rerun-forecast#stale-final-reason-says-incremental-rerun",
+        "ship-rerun-forecast#stale-final-reason-says-full-rerun-with-why",
+        "ship-rerun-forecast#forecast-reads-suite-sec-from-baseline"
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "文档：propose 命令与同名 skill 写明 baseline 不改计划文件、gitlink 与工件同一次提交、baseline 报告后重跑 lint；运行器契约 / README / schema 写明 runner:deps-unmeasured",
+      "packet": "slices/S4.md",
+      "owns": [
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/.claude/flight-runner-contract.md",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "README.md",
+        "tests/test_plan_hygiene_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_plan_hygiene_docs.py tests/test_runner_contract_docs.py tests/test_baseline_incremental_docs.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_gate_checks_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_install.py tests/test_glossary_docs.py tests/test_incremental_final_docs.py tests/test_docs_iron_rules.py tests/test_clean_after_merged_docs.py tests/test_submodule_docs.py tests/test_ship_memory_docs.py",
+      "scenarios": [
+        "plan-hygiene#propose-docs-say-baseline-leaves-plan-alone",
+        "runner-statement#docs-describe-runner-statement"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "plan-hygiene#baseline-leaves-plan-file-untouched": "tests/test_plan_hygiene_baseline.py::test_baseline_leaves_plan_file_untouched",
+    "plan-hygiene#approval-survives-baseline-rerun": "tests/test_plan_hygiene_baseline.py::test_approval_survives_baseline_rerun",
+    "plan-hygiene#baseline-stops-without-gate-test": "tests/test_plan_hygiene_baseline.py::test_baseline_stops_without_gate_test",
+    "plan-hygiene#incremental-baseline-keeps-suite-sec": "tests/test_plan_hygiene_baseline.py::test_incremental_baseline_keeps_suite_sec",
+    "plan-hygiene#running-marker-carries-last-suite-sec": "tests/test_plan_hygiene_baseline.py::test_running_marker_carries_last_suite_sec",
+    "plan-hygiene#running-baseline-hint-shows-last-suite-sec": "tests/test_plan_hygiene_baseline.py::test_running_baseline_hint_shows_last_suite_sec",
+    "plan-hygiene#suite-sec-resolver-prefers-baseline": "tests/test_plan_hygiene_baseline.py::test_suite_sec_resolver_prefers_baseline",
+    "plan-hygiene#staged-gitlink-commit-keeps-baseline-fresh": "tests/test_plan_hygiene_baseline.py::test_staged_gitlink_commit_keeps_baseline_fresh",
+    "plan-hygiene#propose-docs-say-baseline-leaves-plan-alone": "tests/test_plan_hygiene_docs.py::test_propose_docs_say_baseline_leaves_plan_alone",
+    "runner-statement#unmeasured-baseline-needs-statement": "tests/test_runner_statement.py::test_unmeasured_baseline_needs_statement",
+    "runner-statement#statement-lets-lint-and-preflight-pass": "tests/test_runner_statement.py::test_statement_lets_lint_and_preflight_pass",
+    "runner-statement#measured-baseline-rejects-leftover-statement": "tests/test_runner_statement.py::test_measured_baseline_rejects_leftover_statement",
+    "runner-statement#final-refuses-unstated-unmeasured": "tests/test_runner_statement.py::test_final_refuses_unstated_unmeasured",
+    "runner-statement#statement-may-be-prewritten-before-baseline": "tests/test_runner_statement.py::test_statement_may_be_prewritten_before_baseline",
+    "runner-statement#incremental-baseline-keeps-unmeasured-state": "tests/test_runner_statement.py::test_incremental_baseline_keeps_unmeasured_state",
+    "runner-statement#docs-describe-runner-statement": "tests/test_plan_hygiene_docs.py::test_docs_describe_runner_statement",
+    "ship-rerun-forecast#stale-final-reason-says-incremental-rerun": "tests/test_ship_forecast.py::test_stale_final_reason_says_incremental_rerun",
+    "ship-rerun-forecast#stale-final-reason-says-full-rerun-with-why": "tests/test_ship_forecast.py::test_stale_final_reason_says_full_rerun_with_why",
+    "ship-rerun-forecast#forecast-reads-suite-sec-from-baseline": "tests/test_ship_forecast.py::test_forecast_reads_suite_sec_from_baseline"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "commit": "b7be9ed63e72a782b7dc29818d366e12f156a341",
+  "at": "2026-11-18T00:40:57Z",
+  "plan_sha": "18b49e8bd86297201154ed21ff9a87f23cfe2caf",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "failed": null,
+    "failed_nodes": [],
+    "failed_form": "nodes",
+    "sec": 33.4
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_plan_hygiene_baseline.py tests/test_slice_gate.py tests/test_baseline_pool.py tests/test_baseline_incremental.py tests/test_slice_gate_baseline_preflight.py tests/test_final_incremental.py tests/test_baseline_anchor_reuse.py tests/test_baseline_component_reuse.py tests/test_baseline_skip.py tests/test_gate_checks_baseline.py tests/test_submodule_gate.py tests/test_submodule_sync.py tests/test_flight_doctor.py tests/test_approval_gate.py"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_runner_statement.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_scope_contract_v2.py tests/test_scope_runtime_guard.py tests/test_scope_decl_extras.py tests/test_builtin_scope_precision.py tests/test_runner_contract.py tests/test_baseline_pool.py tests/test_baseline_incremental.py tests/test_spec_html_scope.py tests/test_plan_hygiene_baseline.py"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_ship_forecast.py tests/test_ship_verdict.py tests/test_flight_doctor.py tests/test_flight_doctor_surfaces.py tests/test_final_reuse.py tests/test_spec_html.py"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_plan_hygiene_docs.py tests/test_runner_contract_docs.py tests/test_baseline_incremental_docs.py tests/test_scope_docs.py tests/test_template_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_gate_checks_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_install.py tests/test_glossary_docs.py tests/test_incremental_final_docs.py tests/test_docs_iron_rules.py tests/test_clean_after_merged_docs.py tests/test_submodule_docs.py tests/test_ship_memory_docs.py"
+    }
+  },
+  "checks": {
+    "schema-validate": {
+      "exit": 0,
+      "sec": 1.4,
+      "cmd": "cd template && openspec schema validate intent-driven",
+      "key": "651acf9f2926d57f3b4c560b571724707ee3d73c"
+    }
+  },
+  "test_ok": true,
+  "change": "plan-hygiene",
+  "mode": "incremental",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-measurements-stay-out-of-plan-files.md": "0deed996b4f68e6b88054d6bd91357760a9b617a",
+    "template/openspec/adr/DRAFT-unmeasured-deps-need-plan-statement.md": "5883e8eb91c21ac8ca353ca68d8df02d1abbc281",
+    "tests/test_plan_hygiene_baseline.py": "08091396c9f321db649030697865f26dd5f224a8",
+    "tests/test_plan_hygiene_docs.py": "d5ccb035cf28c0ea2b07002e2e90efce2903645f",
+    "tests/test_runner_statement.py": "71ebac02ff5d87d583af9a3bd6a9e98ed61ab414",
+    "tests/test_ship_forecast.py": "88de370053d4b41bf4782bc989a784fe3fdd8679"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "incremental": {
+    "source": "anchor",
+    "from": {
+      "change": "grill-glossary",
+      "commit": "c209e095e73b69ad7ef07f42ca9f35f2fe3ed4e8",
+      "at": "2026-11-13T06:45:49Z"
+    },
+    "rerun_files": [
+      "tests/test_plan_hygiene_baseline.py",
+      "tests/test_plan_hygiene_docs.py",
+      "tests/test_runner_statement.py",
+      "tests/test_ship_forecast.py"
+    ],
+    "hops": 5,
+    "files": [
+      "docs/superpowers/backlog/2026-11-13-config-yaml-spec-rule-key.md",
+      "template/openspec/adr/DRAFT-measurements-stay-out-of-plan-files.md",
+      "template/openspec/adr/DRAFT-unmeasured-deps-need-plan-statement.md",
+      "tests/test_plan_hygiene_baseline.py",
+      "tests/test_plan_hygiene_docs.py",
+      "tests/test_runner_statement.py",
+      "tests/test_ship_forecast.py"
+    ],
+    "sec": 33.4
+  }
+}

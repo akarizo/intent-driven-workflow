@@ -245,9 +245,9 @@ def test_final_incremental_when_gate_pytest_covers_gate_test_options(git_repo):
 
 
 def test_final_incremental_when_gate_test_detected(git_repo):
-    # Given: gate.test 与 gate.pytest 都没配（final 靠 detect_test_cmd 探测出 python3 -m pytest -q）；
-    #        baseline 绿后把它回填的 gate.test 再清掉，之后只改了 src/a.py
-    d = make_repo(git_repo, gate_extra={"test": None, "pytest": None})
+    # Given: baseline 时显式写 gate.test = python3 -m pytest -q（与 detect_test_cmd 的探测结果同文）、gate.pytest 没配；
+    #        baseline 绿后把 gate.test 清掉（final 靠 detect_test_cmd 探测出同一条命令），之后只改了 src/a.py
+    d = make_repo(git_repo, gate_extra={"test": "python3 -m pytest -q", "pytest": None})
     baseline(git_repo, d)
     data = json.loads((d / "slices.json").read_text(encoding="utf-8"))
     data["gate"]["test"] = None

@@ -1,0 +1,91 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3494,
+      "summary": "cmd_gate / cmd_final（3494、3628）用 `gate = data.get(\"gate\") or {}` 取 gate，再把 suite_sec 写进 `gate[\"full_suite_sec\"]`。计划里 gate 缺失或为空对象时，这个 dict 和 data 脱钩，而 scenario_status（3068）会重新 `data.get(\"gate\") or {}`，拿不到这个值，G7 超时就退回缺省 600，不按基线里的 full_suite_sec 估。baseline 现在要求 gate.test 必填，所以实际很难走到这条路径，属于边界情况。",
+      "fix": "两处改为 `gate = data.setdefault(\"gate\", {})`，和 cmd_baseline 保持一致，这样内存里的估时一定能传到 scenario_status / _pytest_outcomes。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4635,
+      "summary": "_snapshot 每次都无条件跑一次 `git ls-files -s -z`（_gitlinks），即使这次没有任何改动路径是目录。大仓库索引大时，baseline、final、preflight 每次取快照都要多付一次全索引列举的开销。",
+      "fix": "改成懒计算：遍历时第一次遇到 `os.path.isdir(full)` 才调 `_gitlinks(root)` 并缓存结果，其余路径不触发。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 90,
+      "summary": "baseline 报告后重跑 lint 那一步（SKILL.md:98 同文）只写了一种情况：依赖图未测又没写理由。它漏了两点：(1) 消除办法里没有「配 `gate.impacted`」，而 runner-statement spec「文档写明未测须表态」要求 propose 文档写明怎么消除（修包装脚本后重跑 baseline，或配 `gate.impacted`）；(2) 理由是预写的、基线跑完却测到了依赖图时，lint 同样会因 `runner:deps-unmeasured` 判红（scenario measured-baseline-rejects-leftover-statement，要求删除那条理由），但文档的括号写死了原因是「基线的依赖图未测」，给的修法也只有修脚本或写理由，模型照着做会走错方向。",
+      "fix": "两份文档同改这一行，逐字相同，测试要求的 `slice-gate.py lint` 与 `runner:deps-unmeasured` 仍须在同一行。建议改成：「…因 `runner:deps-unmeasured` 判红时：基线依赖图未测 → 修包装脚本后重跑 baseline、配 `gate.impacted`，或在 `gate.scope_full_reason` 为它写理由并重渲 spec.html（step 4）；基线已测到 → 删掉预写的那条理由。」"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/schemas/intent-driven/schema.yaml",
+      "line": 340,
+      "summary": "tasks instruction 新加的那句只说「同样须写理由（或修运行器、配 `gate.impacted`），baseline 之前可预写」，没交代两件事：设计边界（内建声明下的非 pytest 运行器、部件形态）不会追加这个触发项；基线测到依赖图后，预写的理由要删掉，否则判红。写计划的模型照 schema 预写理由，基线测通后会被 lint 拦下，却不知道原因。",
+      "fix": "补半句：「基线测到依赖图后须删掉预写的理由；内建声明下的非 pytest 运行器与部件形态不追加」，保持 YAML 缩进与折行风格。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 75,
+      "summary": "「基线跑出来之前可以预写」后面没说：基线一旦测到依赖图，留着的这条理由会按「不是本次触发项」判红、须删除（runner-statement 第一条 Requirement 的规定）。契约文档是项目侧的唯一依据，少了这条，接入方修好包装脚本后会被 lint 拦下，却不明原因。",
+      "fix": "把这一行改为「基线跑出来之前可以预写；基线测到依赖图后须删掉这条理由，否则 lint 判红；内建声明下的非 pytest 运行器与部件形态不要求」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 116,
+      "summary": "硬交接第 4 条仍叫「artifacts-only commit」，紧接着新加的一句却要求子仓 gitlink 的改动与计划工件同一次提交。gitlink 不属于计划工件，两句放在一起字面上互相矛盾，读者可能以为 gitlink 要另开一次提交（SKILL.md:124 同文）。",
+      "fix": "把括号里的「artifacts-only commit」改为「工件提交（可含本 change 的子仓 gitlink）」，或在新增那句里点明「gitlink 也算进这次工件提交」，两份文档逐字同改。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4131,
+      "summary": "增量复用沿用状态时，把来源里缺 deps_unmeasured 键一律当成『已测到』。S2 之前写入的基线池条目（旧键清单里没有这个字段）和 S2 之前生成的本 change 增量基线都没有这个键。复用它们得到的增量基线因此不带 deps_unmeasured，lint / preflight / final 都不会追加 runner:deps-unmeasured。这条路径也不写锚点，结果是 final 照样全量，但计划里没人表态，正是本 Requirement 要堵的口子。它只在过渡期出现（池保留 30 条，会轮换），需进一步确认是否接受。",
+      "fix": "在 _try_reuse 或这个分支里区分『来源明确记了已测』和『来源没有这个字段』：池条目一律写这个键（已测写 null，已经是这样），对键不存在的旧条目或旧增量基线，拒绝复用（写进 skipped，原因注明『来源未记录依赖图测量状态』）或标成待定。至少给『旧池条目没有该键』补一条测试。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1784,
+      "summary": "_runner_state 调用 _builtin_by_design 做豁免时不看选测提供方。spec 把豁免限定在『内建声明下的非 pytest 运行器、部件形态』，而 cmd 声明配 gate.test = npm test / go test ./... / cargo test 时同样会被豁免。这类基线会带 deps_unmeasured（例如 not-pytest），按 spec 应当追加触发项。_final_scope_guard 里既有的 builtin 分支只在 kind == builtin 时调用 _builtin_by_design，两处口径也不一致。切片包写的就是不带提供方条件的调用，是切片包与 spec 措辞不一致，需进一步确认按哪个为准。",
+      "fix": "让 _runner_state 接收 provider kind（_lint_scope 和 _final_scope_guard 都已经算出 provider）：只在 kind == 'builtin' 时套用 _builtin_by_design 的豁免；部件形态本来就不写 deps_unmeasured，不受影响。补一条 cmd 声明加 npm test 的用例；如果确定沿用切片包口径，就在 design D3 / spec 里改写豁免措辞。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5471,
+      "summary": "`unapproved =[t for t ...]` 的 = 后少一个空格，这是本 commit 改动的行，与文件既有风格不一致。",
+      "fix": "改为 `unapproved = [t for t in trig if t not in approved]`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1868,
+      "summary": "_runner_hint 在 _lint_scope_provider 之前就计算，即使提供方核对随后判红、提示根本不会打印，也照样做一遍 shlex 切词、shell 静态闭包和读文件，属于无用开销。",
+      "fix": "先调用 _lint_scope_provider，只在 note 非空（核对通过）且 phase != 'baseline' 时再计算 hint。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5804,
+      "summary": "final_forecast 调 _full_why 时没传 declared_global / hops_cap，真实 final（约 3784 行）传了。所以当 Δ 命中 gate-scope.json 声明的 global glob 时，ship 会写「补跑将是增量」，实际补跑却是全量；锚点因链长被滤掉时，预告的原因文字也和真实 final 不一致。切片包明确要求本片保持原判定范围（与 flight-doctor 原 _final_part 一致），这是有意保留的旧偏差，现在随 ship 的理由一起露给用户，不阻断。",
+      "fix": "本片不动。另开 backlog：final_forecast 补传 declared_global=_scope_extras(change_dir)[\"global\"]，hops_cap=_hops_cap(root, akey, tkey, pick, hops)，与真实 final 对齐；同步调整 test_flight_doctor 里钉住预告文字的断言。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5814,
+      "summary": "_rerun_forecast 的 impacted 分支、unknown 分支和异常吞掉分支（含 SystemExit）都没有测试覆盖。spec 要求「预告出错 MUST NOT 影响裁决与退出码」，这一条只靠代码审读保证，没有测试钉住。",
+      "fix": "在 tests/test_ship_forecast.py 补两条用例：(1) 计划配 gate.impacted、final 过期，断言理由含「补跑由 gate.impacted 选测」；(2) 让 final_forecast 抛异常（如 gate.test 缺失走 unknown，或 test-tiers.json 写坏），断言理由正好是「final 过期：记录 X，HEAD Y」、退出码为 1。"
+    }
+  ],
+  "fix": null
+}
