@@ -15,7 +15,9 @@
 //   models        必填：{ executor, reviewer, integrator }，按角色显式路由（铁律：不得留空让 env 默认兜底）
 //                 executor / reviewer = 会话主模型别名（如 "opus" / "fable"）；integrator = 低档模型（"sonnet"）
 //   efforts       可选：{ executor: "high", reviewer: "high", integrator: "low" }
-// 结构：wave 内 parallel 派发切片（一律 isolation: worktree）→ 门禁红或执行体未返回 / 抛错重试一次 → 每个 wave 由 integrator 合回 →
+//   landed        可选，{ S1: "<commit>", ... }（slice-gate.py landed 的输出）；上次飞行已合回的切片不再派执行体，评审照派，返回值标 landed
+// 结构：wave 内 parallel 派发切片（一律 isolation: worktree）→ 门禁红或执行体未返回 / 抛错重试一次 → 每个 wave 由 integrator 合回，
+//       合回后做集成检查（wave-check），红了当场派一个跨片修复执行体，绿了合回，仍红按红的种类定停飞范围 →
 //       评审只 push 不 await（离关键路径）→ Fix 阶段汇总 CRITICAL/HIGH 一次批量修复 → Finalize 全量门禁。
 // 不用时间戳与随机数（运行时为可续跑而禁止它们），脚本本身不碰文件系统，全部由 agent 执行。
 export const meta = {
@@ -34,6 +36,7 @@ const { change, changeDir, hooksDir, waves, useAgentTypes } = args
 const agentsDir = args.agentsDir || '.claude/agents'
 const branch = args.branch || null
 const deps = args.deps || {}   // 可选：{ S3: ["S1","S2"], ... }；依赖已 blocked 的切片不再派发，直接记 blocked
+const landed = args.landed || {}   // 可选：{ S1: "<commit>", ... }；上次飞行已合回的切片
 const changeName = changeDir.split('/').filter(Boolean).pop()
 
 // ---- 轮次档：按 args.turns 给每片选执行体定义；CAPS 必须等于两份定义文件 frontmatter 的 maxTurns
@@ -109,6 +112,8 @@ const MERGE = {
     merged: { type: 'array', items: { type: 'string' } },
     failed: { type: 'array', items: { type: 'string' } },
     warnings: { type: 'array', items: { type: 'string' } },
+    // wave 集成检查（slice-gate.py wave-check）的 JSON；子命令不存在（hooks 未升级）或本次未点名时为 null / 缺省
+    check: { type: ['object', 'null'] },
   },
 }
 
@@ -132,27 +137,68 @@ const executorPrompt = (s, retryOf) => [
   `收尾运行 \`${gateCmd(s)}\`，把它打印的 JSON 原样作为最终输出。`,
 ].join('\n')
 
-const reviewPrompt = (s, gate) => [
-  rules('code-reviewer') + `评审模式：full。审 OpenSpec change \`${change}\` 切片 ${s} 的实现 commit：\`git show --submodule=diff ${gate.commit}\`。`,
-  `切片包（scenario 与约束）：${changeDir}/slices/${s}.md。`,
+// fixOf：wave 集成检查红之后的跨片修复（{ wave, failed }）——「切片包」那一行换成修复的来由
+const reviewPrompt = (s, gate, fixOf) => [
+  rules('code-reviewer') + `评审模式：full。审 OpenSpec change \`${change}\` ${fixOf ? '' : '切片 '}${s} 的实现 commit：\`git show --submodule=diff ${gate.commit}\`。`,
+  fixOf
+    ? `这是 wave ${fixOf.wave} 集成检查红之后的跨片修复，失败项：${JSON.stringify(fixOf.failed)}。`
+    : `切片包（scenario 与约束）：${changeDir}/slices/${s}.md。`,
   `门禁 JSON（已机械判定 verify / 配对 / GWT / 所有权 / scenario 状态，不要重报）：${JSON.stringify(gate)}。`,
   `evidence：${changeDir}/evidence.log（本切片的测试运行留痕，可 grep）。`,
   '不重跑测试套件、不轮询；至多 1 次定向抽查。',
   '输出结构化 findings（severity / file / line / summary / fix）。',
 ].join('\n')
 
+// 临时 worktree 里的修复执行体（Fix 阶段与 wave 跨片修复共用）开工前的两道校验：基点祖先校验 + submodule 填充；tag 是失败时返回 JSON 的 slice 字段
+const baseCheckLines = (tag) => [
+  // 与切片执行体同一道防线：临时 worktree 可能不是从 change 分支最新 commit 分叉；start 可能因无 fix 条目被拒，所以先单独校验
+  branch
+    ? `第一步做基点校验：运行 \`git merge-base --is-ancestor $(git rev-parse ${branch}) HEAD\`；非 0 退出（HEAD 不是分支 ${branch} 最新 commit 的后代）→ 不做任何改动，直接返回 {"slice":"${tag}","ok":false,"commit":"<实际 HEAD>","failed":["G0 base: HEAD 不是分支 ${branch} 的后代"]}。`
+    : '',
+  `${branch ? '再' : '先'}运行 \`python3 ${hooksDir}/slice-gate.py sub-sync --change-dir ${changeDir}` + (branch ? ` --expect-branch ${branch}` : '') + '`' +
+    `（按 gitlink 填充隔离 worktree 的 submodule；无 submodule 时是空操作）；非 0 退出 → 不做任何改动，直接返回 {"slice":"${tag}","ok":false,"commit":"<实际 HEAD>","failed":<它 JSON 的 failed>}。`,
+]
+// G0 基点拒绝的 commit 是旧基点上的 HEAD，不能合回：与未返回同样重派一次（新开的临时 worktree 可能基点正确）
+const baseRejected = (r) => !!r && (r.failed || []).some((f) => f.startsWith('G0'))
+const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
+
 const reviews = []
 const results = []
 const blocked = []
+const wavesOut = []
+// 集成检查仍红（非守护）的 wave 里已合回的切片 → 所在 wave 号；只用于依赖判断，不进 blocked
+const waveBlocked = new Map()
+// 守护（G15）在跨片修复后仍红的 wave 号：后续 wave 一律不再派发
+let stopAll = 0
+
+// 评审员抛错不重派、不拖垮工作流：记 blocked（infra），切片级评审缺失由 /pr-ship 的整 PR 评审兜住
+const pushReview = (s, prompt) => reviews.push(agent(prompt, { label: `review:${s}`, phase: 'Review', schema: FINDINGS, model: models.reviewer, effort: efforts.reviewer, ...typed('code-reviewer') })
+    .catch(() => { blocked.push({ slice: `review:${s}`, kind: 'infra', reason: '切片 ' + s + ' 评审未返回（不重派，PR 评审兜底）' }); return null }))
 
 for (const [i, allWave] of waves.entries()) {
   phase('Implement')
-  const blockedIds = new Set(blocked.map((b) => b.slice))
+  if (stopAll) {
+    for (const s of allWave) blocked.push({ slice: s, kind: 'infra', reason: `wave ${stopAll} 集成检查红（守护），后续切片不再派发` })
+    log(`wave ${i + 1}/${waves.length}: 跳过（wave ${stopAll} 集成检查红（守护））`)
+    continue
+  }
+  const blockedIds = new Set([...blocked.map((b) => b.slice), ...waveBlocked.keys()])
   const skipped = allWave.filter((s) => (deps[s] || []).some((d) => blockedIds.has(d)))
-  for (const s of skipped) blocked.push({ slice: s, kind: 'infra', reason: `依赖已 blocked：${(deps[s] || []).filter((d) => blockedIds.has(d)).join(', ')}` })
-  const wave = allWave.filter((s) => !skipped.includes(s))
-  log(`wave ${i + 1}/${waves.length}: ${wave.join(', ') || '(全部因依赖 blocked 跳过)'}`)
-  if (!wave.length) continue
+  for (const s of skipped) {
+    const hit = (deps[s] || []).filter((d) => blockedIds.has(d))
+    const direct = hit.filter((d) => !waveBlocked.has(d))
+    const viaWave = hit.filter((d) => waveBlocked.has(d))
+    const reason = [direct.length ? `依赖已 blocked：${direct.join(', ')}` : '']
+      .concat(viaWave.map((d) => `依赖的切片所在的 wave ${waveBlocked.get(d)} 集成检查红：${d}`)).filter(Boolean).join('；')
+    blocked.push({ slice: s, kind: 'infra', reason })
+  }
+  // 上次飞行已合回的切片：不派执行体，结论直接记 ok
+  const landedHere = allWave.filter((s) => landed[s] && !skipped.includes(s))
+  for (const s of landedHere) results.push({ slice: s, ok: true, commit: landed[s], failed: [], landed: true })
+  const wave = allWave.filter((s) => !skipped.includes(s) && !landedHere.includes(s))
+  log(`wave ${i + 1}/${waves.length}: ${wave.join(', ') || (landedHere.length ? '(无待派切片)' : '(全部因依赖 blocked 跳过)')}` +
+    (landedHere.length ? `；已落地跳过：${landedHere.join(', ')}` : ''))
+  if (!wave.length && !landedHere.length) continue
   // 每个执行体（含单片 wave）都在临时 worktree 里跑，由 integrator 合回：主 worktree 不留执行体的 .openspec-slice 标记
   const iso = 'worktree'
   // 执行体没交回结构化结果时 agent 调用会抛错（运行时实测），与返回空值同样按未返回处理
@@ -172,34 +218,94 @@ for (const [i, allWave] of waves.entries()) {
     if (!r.ok) { blocked.push({ slice: s, kind: 'gate', reason: r.failed.join('; ') }); continue }
   }
   const merged = wave.filter((s, k) => done[k] && done[k].ok)
-  if (merged.length) {
+  // wave 集成检查：守护 + 受影响的测试；extra 给跨片修复收尾的 --fix-base
+  const waveCmd = (extra) => `python3 ${hooksDir}/slice-gate.py wave-check --change-dir ${changeDir} --wave ${i + 1} --of ${waves.length}` + (extra || '')
+  const checkStep = `把它打印的 JSON 原样放进返回 JSON 的 check 字段（退出 1 = 红，是正常结论，照样带回，不要自己修、不要重跑）；它报 invalid choice（hooks 未升级，子命令不存在）→ check 写 null，warnings 记一句`
+  if (merged.length || landedHere.length) {
     const pairs = merged.map((s) => `${s}=${done[wave.indexOf(s)].commit}`)
     // 临时 worktree 里跑出的门禁结论（含天花板行）不会随 commit 进分支，由 integrator 用 record --json 幂等写回
-    const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
     const recordCmds = merged.map((s) => {
       const g = done[wave.indexOf(s)]
       const payload = { slice: s, ok: !!g.ok, commit: g.commit, failed: g.failed || [], warnings: g.warnings || [], ceilings: g.ceilings || [] }
       return `python3 ${hooksDir}/slice-gate.py record --change-dir ${changeDir} --json ${shq(JSON.stringify(payload))}`
     })
+    const integPrompt = merged.length
+      ? rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件（timeline.md / gate-report.md / evidence.log）提交掉；` +
+        `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge ${pairs.join(' ')}\` 合回切片 ${merged.join(', ')}（它逐片 git merge --no-ff 并处理 submodule gitlink；报 invalid choice（子命令不存在）→ 按第 1 项的回退逐片 git merge --no-ff；退出 1 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
+        `合回后逐条运行（把临时 worktree 里的门禁结论写回分支）：\n${recordCmds.join('\n')}\n` +
+        `然后按第 2 项刷新 ${changeDir}/slices/_interfaces.md，并 \`python3 ${hooksDir}/timeline.py record integrate --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后再按第 0 项把飞行记录提交。` +
+        `之后按第 5 项运行 \`${waveCmd()}\`（wave 集成检查；merge 退出 1 时不运行它），${checkStep}；再按第 0 项提交一次飞行记录。` +
+        '本次只合回，不要运行第 3 项（全量门禁 final）——后续 wave 的 scenario 还没解锁，现在跑必然红。返回 JSON {ok, merged, failed, warnings, check}。'
+      : rules('integrator') + `本 wave 的切片 ${landedHere.join(', ')} 上次飞行已合回分支，不要运行第 1 项的 merge 与 record。` +
+        `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件提交掉；再按第 5 项运行 \`${waveCmd()}\`（wave 集成检查），${checkStep}；再按第 0 项提交一次飞行记录。` +
+        '不要运行第 3 项（全量门禁 final）。返回 JSON {ok: true, merged: [], failed: [], warnings: [], check}。'
     // integrator 抛错与未返回同样重派一次；返回 ok:false（合回冲突）是确定性的，不重派
-    const callInteg = (retry) => agent(
-      rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件（timeline.md / gate-report.md / evidence.log）提交掉；` +
-      `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge ${pairs.join(' ')}\` 合回切片 ${merged.join(', ')}（它逐片 git merge --no-ff 并处理 submodule gitlink；报 invalid choice（子命令不存在）→ 按第 1 项的回退逐片 git merge --no-ff；退出 1 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
-      `合回后逐条运行（把临时 worktree 里的门禁结论写回分支）：\n${recordCmds.join('\n')}\n` +
-      `然后按第 2 项刷新 ${changeDir}/slices/_interfaces.md，并 \`python3 ${hooksDir}/timeline.py record integrate --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后再按第 0 项把飞行记录提交。` +
-      '本次只合回，不要运行第 3 项（全量门禁 final）——后续 wave 的 scenario 还没解锁，现在跑必然红。返回 JSON {ok, merged, failed, warnings}。',
+    const callInteg = (retry) => agent(integPrompt,
       { label: `integrate:w${i + 1}` + (retry ? ':retry' : ''), schema: MERGE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
       .catch(() => null)
     let integ = await callInteg(false)
     if (!integ) integ = await callInteg(true)
     if (!integ || !integ.ok) blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: integ ? integ.failed.join('; ') : 'integrator 未返回（已重派一次）' })
+    else if (!integ.check) wavesOut.push({ wave: i + 1, skipped: 'integrator 未带回集成检查结果' })
+    else if (integ.check.ok) wavesOut.push({ wave: i + 1, ok: true, failed: [], tests: integ.check.tests || null, fix: null })
+    else {
+      // 集成检查红：当场派一个跨片修复执行体（隔离 worktree，不受切片 owns 限制），红的检查就是先失败的测试
+      const chk = integ.check
+      const runWaveFix = (retry) => agent([
+        rules('slice-executor') + `你在仓库根。这是 OpenSpec change \`${change}\` 的**跨片修复**，不是切片：wave ${i + 1} 合回后的集成检查红了。` +
+          '不运行 `slice-gate.py start` 与 `slice-gate.py gate`；不受任何切片的 owns 限制，但只改让下列失败项变绿所必需的文件。',
+        retry ? '上一轮修复执行体未返回或被 G0 基点校验拒绝，从头修。' : '',
+        ...baseCheckLines('wave'),
+        '记下此刻的 `git rev-parse HEAD`，后面叫 <base>。',
+        `失败项：${JSON.stringify(chk.failed)}。红的集成检查就是先失败的测试；缺陷需要新测试才能钉住时照 TDD 补。`,
+        `逐条 commit（fix: 前缀），不 push，不提交 ${changeDir} 下的飞行记录文件。`,
+        `收尾运行 \`${waveCmd(' --fix-base <base>')}\`，把它打印的 JSON 原样作为最终输出。`,
+      ].filter(Boolean).join('\n'), { label: `fix:w${i + 1}` + (retry ? ':retry' : ''), phase: 'Fix', isolation: 'worktree', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+        .catch(() => null)
+      let wf = await runWaveFix(false)
+      if (!wf || baseRejected(wf)) wf = (await runWaveFix(true)) || wf
+      const fixInfo = (ok) => (wf ? { commit: wf.commit, ok, files: (wf.fix || {}).files || [], outside_owns: (wf.fix || {}).outside_owns || [] } : null)
+      let red = false
+      if (wf && wf.ok && wf.commit && !baseRejected(wf)) {
+        const callWaveMerge = (retry) => agent(
+          rules('integrator') + `按 agent 定义第 0 项先把 ${changeDir} 内未提交的飞行记录文件提交掉；` +
+          `再按第 1 项运行 \`python3 ${hooksDir}/slice-gate.py merge wavefix${i + 1}=${wf.commit}\` 合回 wave ${i + 1} 的跨片修复（报 invalid choice（子命令不存在）→ 按第 1 项的回退 git merge --no-ff；退出 1 → 把它 JSON 的 failed 原样作为返回的 failed、ok:false，不再往下）。` +
+          `合回后运行（把临时 worktree 里的集成检查结论写回分支）：\`python3 ${hooksDir}/slice-gate.py record --change-dir ${changeDir} --json ${shq(JSON.stringify(wf))}\`；` +
+          `再 \`python3 ${hooksDir}/timeline.py record wave-fix --change-dir ${changeDir} --note "wave ${i + 1}"\`，最后按第 0 项再提交一次飞行记录。` +
+          '不要运行第 3 项（全量门禁 final）。返回 JSON {ok, merged, failed, warnings}。',
+          { label: `integrate:w${i + 1}:fix` + (retry ? ':retry' : ''), schema: MERGE, model: models.integrator, effort: efforts.integrator, ...typed('integrator') })
+          .catch(() => null)
+        let back = await callWaveMerge(false)
+        if (!back) back = await callWaveMerge(true)
+        if (back && back.ok) {
+          pushReview(`wavefix${i + 1}`, reviewPrompt(`wavefix${i + 1}`, wf, { wave: i + 1, failed: chk.failed }))
+          wavesOut.push({ wave: i + 1, ok: true, failed: chk.failed, fix: fixInfo(true) })
+        } else {
+          red = true
+          if (back) blocked.push({ slice: `wave${i + 1}`, kind: 'gate', reason: `wave ${i + 1} 集成检查红，跨片修复合回失败：${back.failed.join('; ')}（修复提交 ${wf.commit}）` })
+          else blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: `wave ${i + 1} 集成检查红，跨片修复的合回 integrator 未返回（已重派一次）（修复提交 ${wf.commit}）` })
+        }
+      } else if (!wf) {
+        red = true
+        blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: `wave ${i + 1} 集成检查红，跨片修复执行体未返回（已重派一次）：${chk.failed.join('; ')}` })
+      } else if (baseRejected(wf)) {
+        red = true
+        blocked.push({ slice: `wave${i + 1}`, kind: 'infra', reason: wf.failed.join('; ') })
+      } else {
+        red = true
+        blocked.push({ slice: `wave${i + 1}`, kind: 'gate', reason: `wave ${i + 1} 集成检查红，跨片修复后仍红：${(wf.failed || []).join('; ')}（修复提交 ${wf.commit}，未合回）` })
+      }
+      if (red) {
+        const last = (wf && !baseRejected(wf) && wf.failed && wf.failed.length) ? wf.failed : chk.failed
+        // 守护仍红 → 后续 wave 全部停；只有测试红 → 只停依赖本 wave 已合回切片的后续切片
+        if (last.some((f) => f.startsWith('G15'))) stopAll = i + 1
+        else for (const s of [...merged, ...landedHere]) waveBlocked.set(s, i + 1)
+        wavesOut.push({ wave: i + 1, ok: false, failed: last, fix: fixInfo(false) })
+      }
+    }
   }
-  for (const s of merged) {
-    const gate = done[wave.indexOf(s)]
-    // 评审员抛错不重派、不拖垮工作流：记 blocked（infra），切片级评审缺失由 /pr-ship 的整 PR 评审兜住
-    reviews.push(agent(reviewPrompt(s, gate), { label: `review:${s}`, phase: 'Review', schema: FINDINGS, model: models.reviewer, effort: efforts.reviewer, ...typed('code-reviewer') })
-      .catch(() => { blocked.push({ slice: `review:${s}`, kind: 'infra', reason: '切片 ' + s + ' 评审未返回（不重派，PR 评审兜底）' }); return null }))
-  }
+  for (const s of merged) pushReview(s, reviewPrompt(s, done[wave.indexOf(s)]))
+  for (const s of landedHere) pushReview(s, reviewPrompt(s, { slice: s, ok: true, commit: landed[s], failed: [] }))
 }
 
 phase('Fix')
@@ -213,20 +319,13 @@ if (blocking.length) {
   const runFix = (retry) => agent([
     rules('slice-executor') + `你在仓库根。一次性修复 OpenSpec change \`${change}\` 评审挡下的 ${blocking.length} 条 CRITICAL/HIGH，逐条 commit（fix: 前缀），不 push。`,
     retry ? '上一轮 fix 执行体未返回（多为撞 maxTurns）或被 G0 基点校验拒绝，没有可合回的修复：从头按 finding 清单修复。' : '',
-    // 与切片执行体同一道防线：临时 worktree 可能不是从 change 分支最新 commit 分叉；start 可能因无 fix 条目被拒，所以先单独校验
-    branch
-      ? `第一步做基点校验：运行 \`git merge-base --is-ancestor $(git rev-parse ${branch}) HEAD\`；非 0 退出（HEAD 不是分支 ${branch} 最新 commit 的后代）→ 不做任何改动，直接返回 {"slice":"fix","ok":false,"commit":"<实际 HEAD>","failed":["G0 base: HEAD 不是分支 ${branch} 的后代"]}。`
-      : '',
-    `${branch ? '再' : '先'}运行 \`python3 ${hooksDir}/slice-gate.py sub-sync --change-dir ${changeDir}` + (branch ? ` --expect-branch ${branch}` : '') + '`' +
-      '（按 gitlink 填充隔离 worktree 的 submodule；无 submodule 时是空操作）；非 0 退出 → 不做任何改动，直接返回 {"slice":"fix","ok":false,"commit":"<实际 HEAD>","failed":<它 JSON 的 failed>}。',
+    ...baseCheckLines('fix'),
     `然后运行 \`${startCmd('fix')}\` 记录起点（fix 不受单切片所有权限制：slices.json 若无 fix 条目，start 会拒绝，此时跳过 start${branch ? '；基点已由第一步校验' : ''}）。`,
     `finding 清单：${JSON.stringify(blocking)}`,
     // fix 在临时 worktree 里跑，timeline 记录进不了分支：record fix 由 finalize 合回后写
     `每条修复都要有先失败的测试；修完运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，把 JSON 原样返回。`,
   ].filter(Boolean).join('\n'), { label: retry ? 'fix:retry' : 'fix', isolation: 'worktree', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
     .catch(() => null)
-  // G0 基点拒绝的 commit 是旧基点上的 HEAD，不能合回：与未返回同样重派一次（新开的临时 worktree 可能基点正确）
-  const baseRejected = (r) => !!r && (r.failed || []).some((f) => f.startsWith('G0'))
   fix = await runFix(false)
   if (!fix || baseRejected(fix)) fix = (await runFix(true)) || fix
   if (!fix) blocked.push({ slice: 'fix', kind: 'infra', reason: 'fix agent 未返回（已重派一次）' })
@@ -251,4 +350,4 @@ let final = await callFinal(false)
 if (!final) final = await callFinal(true)
 if (!final) blocked.push({ slice: 'final', kind: 'infra', reason: 'final-gate 未返回（已重派一次）' })
 
-return { change, models, efforts, slices: results, blocked, blocking, deferred, fix, final }
+return { change, models, efforts, slices: results, blocked, blocking, deferred, fix, final, waves: wavesOut }
