@@ -24,6 +24,8 @@
 - `final_forecast(change_dir, data, baseline) -> (mode, why)`（`slice-gate.py`）：`mode` ∈ `impacted` / `full` / `incremental` / `unknown`，文字与原 `flight-doctor.py` 的 `_final_part` 相同。
 - `ship` 的过期理由形如 `final 过期：记录 <10 位>，HEAD <10 位>；补跑将是增量（…）` / `…；补跑将是全量（…）` / `…；补跑由 gate.impacted 选测`。
 
+- 实际签名核对（wave 3 合回）：`def final_forecast(change_dir, data, baseline)`（slice-gate.py:5777）、`def suite_sec(change_dir, data=None)` 存在，与上列一致。
+
 ## S4 提供
 
 - 无公开代码接口：只改文档（opsx-propose 命令与同名 skill、flight-runner-contract、schema.yaml、README）与 `tests/test_plan_hygiene_docs.py`。
