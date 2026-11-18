@@ -488,14 +488,16 @@ def test_baseline_writes_gate_baseline(git_repo):
     # When: 运行 slice-gate.py baseline
     p = run_hook("slice-gate", "baseline", "--change-dir", str(change), cwd=git_repo)
 
-    # Then: 退出 0；gate-baseline.json 的 ok 为 true、commit 为 HEAD、plan_sha 40 位；verify 每片 exit 0；lint.exit 1 且 lines 含规范化行；full_suite_sec 仍写回
+    # Then: 退出 0；gate-baseline.json 的 ok 为 true、commit 为 HEAD、plan_sha 40 位；verify 每片 exit 0；lint.exit 1 且 lines 含规范化行；
+    #       gate-baseline.json 的 full_suite_sec 是数值，slices.json 里没有被写入该值
     assert p.returncode == 0, p.stderr
     bl = json.loads((change / "gate-baseline.json").read_text(encoding="utf-8"))
     assert bl["ok"] is True and bl["commit"] == git(git_repo, "rev-parse", "HEAD")
     assert len(bl["plan_sha"]) == 40
     assert {k: v["exit"] for k, v in bl["verify"].items()} == {"S1": 0, "S2": 0}
     assert bl["lint"]["exit"] == 1 and any("a.ts(#,#): error TS# x" == l for l in bl["lint"]["lines"])
-    assert json.loads((change / "slices.json").read_text(encoding="utf-8"))["gate"]["full_suite_sec"] is not None
+    assert isinstance(bl["full_suite_sec"], (int, float)) and not isinstance(bl["full_suite_sec"], bool), bl
+    assert json.loads((change / "slices.json").read_text(encoding="utf-8"))["gate"]["full_suite_sec"] is None
 
 
 def test_baseline_flags_red_verify(git_repo):
