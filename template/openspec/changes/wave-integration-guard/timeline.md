@@ -21,3 +21,7 @@
 2026-11-18T12:59:20Z	ship	draft: 切片 S3 无门禁记录; 切片 S5 无门禁记录; 切片 S7 无门禁记录
 2026-11-18T13:03:37Z	final	增量（锚点 2cc616742f，重跑 92 个文件 / 沿用 141 个用例） 测试 566.1s · 检查 schema-validate 2.2s · 用例 +0/-0（新增 0.0s） · 排队 264.8s 后放弃（wave-integration-guard · final 已持有 301.0 秒，超过上限 300.0 秒） · 负载 2.1→3.5/18 ok
 2026-11-18T13:03:46Z	apply-done	blocked=1 blocking=0
+2026-11-18T13:06:31Z	gate	S3 ok
+2026-11-18T13:06:31Z	gate	S5 ok
+2026-11-18T13:06:31Z	gate	S7 ok
+2026-11-18T13:06:31Z	ship	ready
