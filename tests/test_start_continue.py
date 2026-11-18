@@ -4,13 +4,10 @@
 骨架：strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, run_hook, write
 from submodule_helpers import BRANCH, SUB, g, iso as sub_iso, make_super, run_executor, start as sub_start
 from test_slice_gate import plan, slice_, write_plan
 
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S1 未实现")
 CHANGE = "openspec/changes/c"
 
 
@@ -61,7 +58,6 @@ def record_on_branch(git_repo, note):
     return git(git_repo, "rev-parse", "HEAD")
 
 
-@PENDING
 def test_continue_replays_all_previous_commits(git_repo):
     # Given: 上一轮在基点 T 上提交了两次；change 分支随后多了一个飞行记录提交 R；重派开了从 R 分叉的新 worktree B
     home_repo(git_repo)
@@ -82,7 +78,6 @@ def test_continue_replays_all_previous_commits(git_repo):
     assert s1 != git(b, "rev-parse", "HEAD~1")  # 是重放出来的新提交，不是把旧基点整条搬过来
 
 
-@PENDING
 def test_continue_fast_forwards_descendant(git_repo):
     # Given: 上一轮在基点 T 上提交了两次；change 分支没有前进；新 worktree B 从 T 分叉
     tip = home_repo(git_repo)
@@ -99,7 +94,6 @@ def test_continue_fast_forwards_descendant(git_repo):
     assert out["base"] == tip
 
 
-@PENDING
 def test_continue_conflict_rolls_back_with_g0(git_repo):
     # Given: 上一轮改了 src/a.py；change 分支随后合回了另一处对 src/a.py 的不同改动；新 worktree B 从分支最新 commit 分叉
     home_repo(git_repo)
@@ -119,7 +113,6 @@ def test_continue_conflict_rolls_back_with_g0(git_repo):
     assert not (b / ".openspec-slice").exists()
 
 
-@PENDING
 def test_continue_noop_when_already_applied(git_repo):
     # Given: 上一轮的 worktree A 里标记还在（门禁红），HEAD 已经含上一轮的全部提交
     tip = home_repo(git_repo)
@@ -136,7 +129,6 @@ def test_continue_noop_when_already_applied(git_repo):
     assert git(a, "rev-parse", "HEAD") == s2
 
 
-@PENDING
 def test_base_is_branch_merge_base(git_repo):
     # Given: 上一轮在旧基点 T 上提交了一次；change 分支此后多了两个飞行记录提交；新 worktree B 从分支最新 commit 分叉，
     #        并已按旧工作流的第零步把上一轮的提交 cherry-pick 上来
@@ -160,7 +152,6 @@ def test_base_is_branch_merge_base(git_repo):
     assert not [f for f in gate["failed"] if f.startswith("G6")], gate["failed"]
 
 
-@PENDING
 def test_continue_populates_submodule_at_new_gitlink(tmp_path):
     # Given: 上一轮执行体在隔离 worktree A 里提交了子仓 s1 与父仓 C1（gitlink → s1）；重派开了新的隔离 worktree B
     env = make_super(tmp_path)
