@@ -22,3 +22,11 @@ S2 记 blocked，final 停在 scenario 17/22。补救做法：修正计划（`af
 ## 落地后
 
 把根 `CLAUDE.md`「本仓库开发纪律」里这条过渡条目改成防线索引，一行指向这条 lint 规则（B 类）。
+
+## 再犯（2026-11-18 · machine-test-lock，第 3 次）
+
+S3 给 final 输出加 `lock` 键，但 `tests/test_gate_checks_baseline.py:280` 用 `set(out) <= {…}` 钉死了 final 输出键集合；该文件只在 S3 verify、不在 owns → 首轮 G1 红、重派 G1 + G6 红，S3 blocked，S5 / S6 随之跳过。补救同上：补 owns（`30a0c51`）→ 重渲染 → 人类重批 → 单独补飞 S3 / S5 / S6。
+
+证据：`template/openspec/changes/machine-test-lock/timeline.md` 的首飞 `final red` 与第二次 `approve`；首飞工作流 `wf_c4c88960-c82` 的 `blocked[S3]`。
+
+对防线的补充：上面「字面量引用 owns 路径」的规则拦不住这一例——测试经 `run_hook("slice-gate", …)` 按 hook 名调用，且钉的是输出 JSON 键而非文档措辞。lint 规则还应匹配：① `run_hook("<owns 里 hook 的文件名去后缀>")`；② 本片 spec / 切片包声明新增输出键时，verify 里含 `set(out) <=` / `set(out) ==` 的测试。
