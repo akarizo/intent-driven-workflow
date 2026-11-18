@@ -3,14 +3,10 @@
 骨架：strict xfail，断言是真实的；切片 S7 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, git, load_hook, run_hook, write
 from final_helpers import change_and_commit, final
 from test_ledger_baseline import read_ledger
 from test_tiers_parts_gate import PY, setup_parts
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S7 未实现")
 
 API_CMD = "%s -m pytest -q -p no:cacheprovider tests/api" % PY
 SLOW = "import time\n\n\ndef test_slow():\n    time.sleep(1.0)\n"
@@ -45,7 +41,6 @@ def api_cases(led):
     return {cid: c for cid, c in ((led or {}).get("cases") or {}).items() if c.get("t") == "api"}
 
 
-@PENDING
 def test_parts_region_run_is_observed(git_repo):
     # Given: 部件形态：部件 py 有区域 api（pytest，在部件 root 下运行），本 change 选了它
     d = parts_with_api(git_repo)
@@ -62,7 +57,6 @@ def test_parts_region_run_is_observed(git_repo):
         assert all(c["s"] is not None and c["m"] == 1 for c in cases.values()), (phase, cases)
 
 
-@PENDING
 def test_parts_region_new_slow_case_is_red(git_repo):
     # Given: 同样的仓库，区域 api 单条上限 0.4 秒，基线已跑且通过；之后提交了一条睡 1 秒的新区域用例
     d = parts_with_api(git_repo, budget={"case_sec": 0.4})
@@ -79,7 +73,6 @@ def test_parts_region_new_slow_case_is_red(git_repo):
                for f in out["failed"]), out["failed"]
 
 
-@PENDING
 def test_lock_cap_uses_full_suite_seconds():
     # Given: 三份基线记录：增量且记着全量 400 秒；增量且没有全量耗时；全量 300 秒
     sg = load_hook("slice-gate")

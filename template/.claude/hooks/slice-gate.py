@@ -1395,6 +1395,17 @@ def run_part(top, name, part, probe=True):
     return res
 
 
+def _observe_part_region(tiers, rname, rpart, junit):
+    """部件形态的区域运行进账本（tier-budgets D10）：junit 在且解析出用例 → 以 nodeid 形式、区域名为层上报耗时
+    （同部件单元层，没有结局）；拿不到 junit → 什么都不做。"""
+    if not os.path.isfile(junit):
+        return
+    pname = next((n for n, p in tiers["parts"].items() if p is rpart), None)
+    secs = _junit_secs([junit], rpart["root"], pname)
+    if secs:
+        _ledger_observe("nodeid", {}, secs, tier=rname)
+
+
 def part_tier_verdicts(name, res, rerun, allow, case_sec=UNIT_MAX_SEC, today=None):
     """部件单元层 G10 / G11 判定（纯函数）→ (failed, warnings)，文本都带「部件 <name>」。
     G10 候选 = secs 中 ≥ case_sec 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认；放行判法同 tier_verdicts。"""
@@ -1554,12 +1565,14 @@ def _lock_note(info):
 
 
 def _lock_expect_sec(baseline, gate):
-    """持有上限的依据（design D5）：基线的 test.sec，读不到退 gate.full_suite_sec，都没有 → None。"""
-    for v in ((((baseline or {}).get("test") or {}) if isinstance(baseline, dict) else {}).get("sec"),
-              (gate or {}).get("full_suite_sec")):
-        if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return v
-    return None
+    """持有上限的依据（tier-budgets D12）：取全量秒数——基线的 full_suite_sec、gate.full_suite_sec、
+    非增量基线的 test.sec 三者中的最大值；增量基线的 test.sec 只是补跑秒数，不算。都没有 → None。"""
+    bl = baseline if isinstance(baseline, dict) else {}
+    cands = [bl.get("full_suite_sec"), (gate or {}).get("full_suite_sec")]
+    if bl.get("mode") != "incremental":
+        cands.append((bl.get("test") or {}).get("sec"))
+    nums = [v for v in cands if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return max(nums) if nums else None
 
 
 TIME_VERDICT_PREFIXES = ("G10 slow unit test", "G13 slow integration test", "G14 tier budget")
@@ -1703,8 +1716,11 @@ def _final_parts(top, tiers, gate, baseline, failed, warnings, lock_info=None):
             failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
             continue
         t0 = time.time()
-        rg = run_test_gate(rdef["cmd"], top, cwd=os.path.join(top, rpart["root"]))
-        region_wall[rname] = time.time() - t0
+        with tempfile.TemporaryDirectory(prefix="flight-region-") as tmp:
+            junit = os.path.join(tmp, "junit-region.xml")
+            rg = run_test_gate(rdef["cmd"], top, cwd=os.path.join(top, rpart["root"]), keep_junit=junit)
+            region_wall[rname] = time.time() - t0
+            _observe_part_region(tiers, rname, rpart, junit)
         f2, w2 = _diff_verdict("region " + rname, rg, rrec.get("failed"))
         failed.extend([f2] if f2 else [])
         warnings.extend([w2] if w2 else [])
@@ -4891,9 +4907,14 @@ def cmd_baseline(args):
         rpart, rdef = _tier_regions(tiers)[rname]
         rcmd = rdef["cmd"]
         t0 = time.time()
-        # 部件形态：在所属部件 root 下运行；不写锚点，依赖图不测（design D8）
-        rg = run_test_gate(rcmd, root, deps=not parts, cwd=os.path.join(root, rpart["root"]) if parts else None)
-        rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+        # 部件形态：在所属部件 root 下运行；不写锚点，依赖图不测（design D8）；逐用例耗时经 junit 进账本（tier-budgets D10）
+        with tempfile.TemporaryDirectory(prefix="flight-region-") as tmp:
+            junit = os.path.join(tmp, "junit-region.xml") if parts else None
+            rg = run_test_gate(rcmd, root, deps=not parts, cwd=os.path.join(root, rpart["root"]) if parts else None,
+                               keep_junit=junit)
+            rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+            if parts:
+                _observe_part_region(tiers, rname, rpart, junit)
         if rg["deps"] is None:
             deps_un.append((rg["deps_kind"], "区域 %s：%s" % (rname, rg["deps_why"])))
         elif adeps is not None:
