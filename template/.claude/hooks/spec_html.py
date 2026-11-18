@@ -580,7 +580,8 @@ def scope_provider(gate, change_dir):
         decl = json.loads(read_text(os.path.join(openspec_root, "gate-scope.json")) or "null")
     except ValueError:
         decl = None
-    if not isinstance(decl, dict) or len(decl) != 1:
+    # 恰含 cmd 或 builtin 之一；可选字段（global / blind / anchor_max_hops 等）不影响声明的识别
+    if not isinstance(decl, dict) or ("cmd" in decl) == ("builtin" in decl):
         return None, None, None
     if decl.get("builtin") is True:
         return "builtin", None, "仓库声明 gate-scope.json"
