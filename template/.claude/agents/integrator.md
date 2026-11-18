@@ -35,6 +35,14 @@ color: cyan
 
 `python3 .claude/hooks/timeline.py record <event> --change-dir openspec/changes/<change> --note "<备注>"`，事件名由 prompt 给。
 
+## 5. wave 集成检查
+
+仅当 prompt 点名时运行（不点名就不做，不要每次合回都自己加）：`python3 .claude/hooks/slice-gate.py wave-check --change-dir openspec/changes/<change> --wave <i> --of <n>`，把它打印的 JSON 原样放进返回 JSON 的 `check` 字段。
+
+- 它退出 1（红）是正常结论，照样带回：不要自己修、不要重跑，修复由工作流另派执行体。
+- 第 1 项的 `merge` 退出 1 时不运行它。
+- 它报 `invalid choice`（hooks 未升级、子命令不存在）→ `check` 写 `null`，`warnings` 记一句「slice-gate.py wave-check 不可用，跳过集成检查」。
+
 ## 纪律
 
-不改源码、不改测试、不 push、不 merge 到 main、不删 worktree、不 `git reset`。合回后 `git log --oneline -n` 核对一次即可，不重跑切片的 verify（切片门禁已跑过；全量由第 3 项负责）。
+不改源码、不改测试、不 push、不 merge 到 main、不删 worktree、不 `git reset`。集成检查红了不自己修，原样带回。合回后 `git log --oneline -n` 核对一次即可，不重跑切片的 verify（切片门禁已跑过；全量由第 3 项负责）。

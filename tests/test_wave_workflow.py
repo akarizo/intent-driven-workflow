@@ -4,12 +4,8 @@
 #executor-contract-describes-cross-slice-fix、#workflow-stops-all-when-guard-still-red、
 #workflow-stops-only-dependents-when-tests-red、#workflow-retries-fix-noreturn-then-blocks；
 retakeoff-landed#workflow-skips-landed-slices，共 9 条）。
-骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
-import pytest
-
+切片 S4 已解锁（骨架标记已去）。"""
 from test_agents_workflow import AGENTS, THROW, flight_args, frontmatter, gate_json, run_workflow
-
-PENDING = pytest.mark.xfail(strict=True, reason="change wave-integration-guard S4 未实现")
 
 GREEN = [["^S1$", gate_json("S1")], ["^S2$", gate_json("S2")], ["^S3$", gate_json("S3")], ["^S4$", gate_json("S4")]]
 TAIL = [["^review:", {"findings": []}], ["^final-gate$", {"slice": "final", "ok": True, "commit": "d" * 40, "failed": []}]]
@@ -38,7 +34,6 @@ def blocked_of(out, sid):
     return [b for b in out["result"]["blocked"] if b["slice"] == sid]
 
 
-@PENDING
 def test_workflow_asks_integrator_for_wave_check(tmp_path):
     # Given: 两个 wave 的飞行，全部切片门禁绿，integrator 带回的 check 是绿的
     replies = GREEN + [["^integrate:", merged(check())]] + TAIL
@@ -56,7 +51,6 @@ def test_workflow_asks_integrator_for_wave_check(tmp_path):
     assert first["wave"] == 1 and first["ok"] is True, out["result"]["waves"]
 
 
-@PENDING
 def test_workflow_skips_when_integrator_has_no_check(tmp_path):
     # Given: integrator 的返回值没有 check（hooks 未升级）
     replies = GREEN + [["^integrate:", merged()]] + TAIL
@@ -70,7 +64,6 @@ def test_workflow_skips_when_integrator_has_no_check(tmp_path):
     assert out["result"]["waves"] and all(w.get("skipped") for w in out["result"]["waves"]), out["result"]
 
 
-@PENDING
 def test_integrator_contract_describes_wave_check():
     # Given: template/.claude/agents/integrator.md
     _, body = frontmatter(AGENTS / "integrator.md")
@@ -82,7 +75,6 @@ def test_integrator_contract_describes_wave_check():
     assert "git merge" in body and "_interfaces.md" in body and "slice-gate.py final" in body
 
 
-@PENDING
 def test_workflow_dispatches_cross_slice_fix_on_red(tmp_path):
     # Given: 第一个 wave 的 check 是红的（G15）；修复执行体返回绿的 JSON，commit 为 9…9，owns 外有一个文件
     fixed = dict(check(), commit=FIX_SHA, fix={"base": "b" * 40, "files": ["pyproject.toml"],
@@ -111,7 +103,6 @@ def test_workflow_dispatches_cross_slice_fix_on_red(tmp_path):
     assert first["fix"]["commit"] == FIX_SHA and first["fix"]["outside_owns"] == ["pyproject.toml"], first
 
 
-@PENDING
 def test_executor_contract_describes_cross_slice_fix():
     # Given: template/.claude/agents/slice-executor.md
     fm, body = frontmatter(AGENTS / "slice-executor.md")
@@ -123,7 +114,6 @@ def test_executor_contract_describes_cross_slice_fix():
     assert fm.get("maxTurns") == "40"
 
 
-@PENDING
 def test_workflow_stops_all_when_guard_still_red(tmp_path):
     # Given: 第一个 wave 的 check 因 G15 红；修复执行体返回的 JSON 仍因 G15 红
     still = dict(check(False, [G15]), commit=FIX_SHA)
@@ -142,7 +132,6 @@ def test_workflow_stops_all_when_guard_still_red(tmp_path):
     assert "final-gate" in calls
 
 
-@PENDING
 def test_workflow_stops_only_dependents_when_tests_red(tmp_path):
     # Given: 第二个 wave 有依赖 S1 的 S3 与没有依赖的 S4；第一个 wave 的 check 只因 G16 红，修复后仍红
     still = dict(check(False, [G16]), commit=FIX_SHA)
@@ -160,7 +149,6 @@ def test_workflow_stops_only_dependents_when_tests_red(tmp_path):
     assert len(blocked_of(out, "wave1")) == 1
 
 
-@PENDING
 def test_workflow_retries_fix_noreturn_then_blocks(tmp_path):
     # Given: 第一个 wave 的 check 是红的；修复执行体两次都没有交回结构化结果
     replies = GREEN + [["^integrate:", merged(check(False, [G16]))], ["^fix:w1", THROW]] + TAIL
@@ -175,7 +163,6 @@ def test_workflow_retries_fix_noreturn_then_blocks(tmp_path):
     assert len(w) == 1 and w[0]["kind"] == "infra" and "未返回" in w[0]["reason"], out["result"]["blocked"]
 
 
-@PENDING
 def test_workflow_skips_landed_slices(tmp_path):
     # Given: args.landed 含 S1（commit 为 1…1）；另一次飞行的 args.landed 含第一个 wave 的全部切片
     replies = GREEN + [["^integrate:", merged(check())]] + TAIL
