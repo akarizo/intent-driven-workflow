@@ -4,12 +4,8 @@
 import datetime
 import json
 
-import pytest
-
 from conftest import write
 from test_flight_doctor_tests import BIG, add_change, doctor, section
-
-PENDING = pytest.mark.xfail(strict=True, reason="change tier-budgets S5 未实现")
 
 U = "tests/unit/test_u.py::test_u%02d"
 
@@ -38,7 +34,6 @@ def in_days(n):
     return (datetime.datetime.now(datetime.timezone.utc).date() + datetime.timedelta(days=n)).isoformat()
 
 
-@PENDING
 def test_doctor_tests_lists_budgets(git_repo):
     # Given: 单元层总量预算 2 秒、区域 hooks 单条上限 5 秒；收口账本里单元层共 3.0 秒，hooks 有一条 9.0 秒的用例
     write(git_repo / "openspec" / "test-tiers.json", json.dumps(tiers({"total_sec": 2}, {"case_sec": 5})))
@@ -54,7 +49,6 @@ def test_doctor_tests_lists_budgets(git_repo):
     assert any("hooks" in l and "超线 1 条" in l and BIG in l for l in sec), sec
 
 
-@PENDING
 def test_doctor_tests_names_allow_entries(git_repo):
     # Given: 放行名单三条：已过期的、3 天后到期的、既没有上限也没有期限的；另一个仓库状态是没有预算也没有放行
     gone, soon, bare = U % 1, U % 2, U % 3
