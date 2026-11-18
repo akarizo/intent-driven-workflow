@@ -18,3 +18,8 @@
 2026-11-18T06:41:35Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-18T06:43:03Z	ship	draft: final 过期：记录 8f87ef0733，HEAD a1e7d3f673；补跑将是增量（锚点 1dabeac9c2，Δ 14 个文件）; 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-18T06:52:26Z	final	增量（锚点 1dabeac9c2，重跑 70 个文件 / 沿用 164 个用例） 测试 518.6s · 检查 schema-validate 1.8s · 排队 0.0s · 负载 4.4→5.9/18 ok
+2026-11-18T06:52:53Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-18T06:53:27Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
+2026-11-18T06:53:37Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/19
+2026-11-18T06:58:16Z	ship	ready
+2026-11-18T06:58:25Z	pr-ready	https://github.com/akarizo/intent-driven-workflow/pull/19

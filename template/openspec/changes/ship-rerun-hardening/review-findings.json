@@ -1,14 +1,6 @@
 {
   "blocked": [],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/slice-gate.py",
-      "line": 5967,
-      "summary": "_final_fresh 用 `git diff --name-only final_commit HEAD` 取差集，没带 --no-renames。git diff 默认开改名检测，改名时只列出新路径。S1 之前任何非记账路径都会判过期，所以这个问题不暴露；加了 inert 之后就成了漏洞：把源码文件改名到 inert 目录（例如 `git mv src/legacy.py docs/legacy.py`，inert=[\"docs/**\"]），差集只剩 docs/legacy.py，命中 inert 后 ship 判为新鲜，但 src/legacy.py 实际已删除，final 结论失效却不会触发重跑。已在临时仓库抽查确认：默认只输出 `docs/legacy.py`，加 --no-renames 才同时输出 `src/legacy.py`。_delta 已用 --no-renames，三处里只有 ship 新鲜度这一处有这个问题。",
-      "fix": "改成 `git(root, \"diff\", \"--name-only\", \"--no-renames\", final_commit, \"HEAD\")`，与 _delta 同口径。路径含非 ASCII 字符时也可以考虑改用 _git_raw 加 -z 拆分。另补一条用例：源码文件改名进 inert 目录后，ship 的 reasons 里要有「final 过期」。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "LOW",
