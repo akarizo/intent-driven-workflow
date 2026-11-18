@@ -1,0 +1,3 @@
+<!-- timeline: ISO时间\t事件\t备注（由 hooks 自动追加） -->
+2026-11-18T07:03:35Z	baseline	增量（经锚点 machine-test-lock@8c6191cf5e，补跑 14 个测试文件 114.3s） ok；排队 0.0s · 负载 16.9→20.8/18
+2026-11-18T08:36:41Z	baseline	增量（经锚点 slice-resume-deterministic@1dabeac9c2，补跑 76 个测试文件 526.1s） ok；排队 0.0s 后放弃（test-ledger · baseline 已持有 600.6 秒，超过上限 300.0 秒） · 负载 5.2→3.0/18

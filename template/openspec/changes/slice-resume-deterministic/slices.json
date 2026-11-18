@@ -1,0 +1,198 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ]
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "slice-gate.py：start --continue 接上一轮的全部提交（快进 / 逐个重放 / 冲突回滚给 G0）；带 --expect-branch 时区间起点恒为与 change 分支的合并基点",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_start_continue.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_start_continue.py tests/test_slice_gate.py tests/test_submodule_sync.py tests/test_submodule_gate.py tests/test_submodule_merge.py",
+      "scenarios": [
+        "slice-continue#continue-replays-all-previous-commits",
+        "slice-continue#continue-fast-forwards-descendant",
+        "slice-continue#continue-conflict-rolls-back-with-g0",
+        "slice-continue#continue-noop-when-already-applied",
+        "slice-continue#continue-populates-submodule-at-new-gitlink",
+        "slice-continue#base-is-branch-merge-base"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "test-evidence.py：有切片标记时留痕写 git 共用目录（一片一个文件）、任何 Bash 留心跳、认 verify / gate.test 里的脚本路径",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/hooks/test-evidence.py",
+        "tests/test_evidence_shared_hook.py",
+        "tests/test_evidence_timeline.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_evidence_shared_hook.py tests/test_evidence_timeline.py",
+      "scenarios": [
+        "slice-evidence-shared#hook-writes-slice-rows-to-common-dir",
+        "slice-evidence-shared#hook-leaves-heartbeat-on-any-bash",
+        "slice-evidence-shared#hook-recognizes-verify-script-runs"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "slice-gate.py：轮次分档——turns 子命令按基线 commit 上的现存文件数算档位，lint 校验计划里的 turns（可升不可降）",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_turn_tiers.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_gate_scope_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_start_continue.py",
+      "scenarios": [
+        "turn-tiers#turns-computed-from-owned-files",
+        "turn-tiers#turns-measured-at-baseline-commit",
+        "turn-tiers#turns-upgrade-declared-in-plan"
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "工作流与 agent 定义：重派经 start --continue、按档位选定义文件、未交回的 blocked 理由带档位与快照；新增薄定义 slice-executor-large；起飞门禁与模型对账认新类型",
+      "packet": "slices/S4.md",
+      "owns": [
+        "template/.claude/workflows/opsx-apply.js",
+        "template/.claude/agents/slice-executor.md",
+        "template/.claude/agents/slice-executor-large.md",
+        "template/.claude/agents/integrator.md",
+        "template/.claude/hooks/takeoff-gate.py",
+        "template/.claude/hooks/session-decompose.py",
+        "tests/test_agents_workflow.py",
+        "tests/test_workflow_resume.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_workflow_resume.py tests/test_agents_workflow.py tests/test_approval_gate.py tests/test_evidence_timeline.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_template_docs.py tests/test_ship_verdict.py tests/test_goal_takeoff_docs.py",
+      "scenarios": [
+        "slice-continue#workflow-retry-continues-via-start",
+        "slice-continue#executor-contract-describes-continue",
+        "turn-tiers#workflow-picks-definition-by-tier",
+        "turn-tiers#large-definition-is-thin",
+        "turn-tiers#large-executor-is-gated-and-audited",
+        "turn-tiers#noreturn-blocked-reason-names-tier-and-snapshot"
+      ]
+    },
+    {
+      "id": "S5",
+      "title": "slice-gate.py：门禁读共用目录的留痕、record 并回分支、首轮 start 清残留；merge 合回后回收切片临时 worktree；铁律 6 措辞",
+      "packet": "slices/S5.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "CLAUDE.md",
+        "template/CLAUDE.md.snippet",
+        "tests/test_evidence_shared_gate.py",
+        "tests/test_merge_reap.py"
+      ],
+      "deps": [
+        "S2",
+        "S3"
+      ],
+      "verify": "python3 -m pytest -q tests/test_evidence_shared_gate.py tests/test_merge_reap.py tests/test_slice_gate.py tests/test_submodule_merge.py tests/test_submodule_gate.py tests/test_submodule_sync.py tests/test_evidence_shared_hook.py tests/test_start_continue.py tests/test_turn_tiers.py tests/test_clean_after_merged_docs.py tests/test_docs_iron_rules.py",
+      "scenarios": [
+        "slice-evidence-shared#gate-reads-rows-written-from-another-worktree",
+        "slice-evidence-shared#gate-fails-when-hook-alive-but-no-test-run",
+        "slice-evidence-shared#record-merges-slice-rows-into-branch-log",
+        "slice-evidence-shared#first-round-start-clears-stale-evidence",
+        "slice-worktree-reap#merge-reaps-merged-slice-worktrees",
+        "slice-worktree-reap#merge-keeps-worktree-with-unmerged-work",
+        "slice-worktree-reap#merge-never-touches-unrelated-worktrees",
+        "slice-worktree-reap#merge-reap-returns-borrowed-submodule",
+        "slice-worktree-reap#reap-failure-does-not-fail-merge",
+        "slice-worktree-reap#iron-rule-names-reap-exception"
+      ]
+    },
+    {
+      "id": "S6",
+      "title": "文档：opsx-apply 命令与同名 skill 的起飞步骤传 turns、回退路径改用 start --continue 与大片档；README 与 install.sh 的 agent 清单、留痕与回收说明",
+      "packet": "slices/S6.md",
+      "owns": [
+        "template/.claude/commands/opsx-apply.md",
+        "template/.claude/skills/openspec-apply-change/SKILL.md",
+        "README.md",
+        "install.sh",
+        "tests/test_agents_workflow.py",
+        "tests/test_resume_docs.py"
+      ],
+      "deps": [
+        "S3",
+        "S4"
+      ],
+      "verify": "python3 -m pytest -q tests/test_resume_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_template_docs.py tests/test_install.py tests/test_docs_iron_rules.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_clean_after_merged_docs.py",
+      "scenarios": [
+        "slice-continue#apply-docs-mirror-continue-and-tiers",
+        "turn-tiers#readme-and-installer-list-four-agents"
+      ]
+    },
+    {
+      "id": "S7",
+      "title": "spec_html.py：切片表多一列「轮次档」（取自 slice-gate.py turns；算不出留「—」）",
+      "packet": "slices/S7.md",
+      "owns": [
+        "template/.claude/hooks/spec_html.py",
+        "tests/test_spec_html_turns.py"
+      ],
+      "deps": [
+        "S3"
+      ],
+      "verify": "python3 -m pytest -q tests/test_spec_html_turns.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py tests/test_turn_tiers.py",
+      "scenarios": [
+        "turn-tiers#spec-html-shows-turn-tier"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "slice-continue#continue-replays-all-previous-commits": "tests/test_start_continue.py::test_continue_replays_all_previous_commits",
+    "slice-continue#continue-fast-forwards-descendant": "tests/test_start_continue.py::test_continue_fast_forwards_descendant",
+    "slice-continue#continue-conflict-rolls-back-with-g0": "tests/test_start_continue.py::test_continue_conflict_rolls_back_with_g0",
+    "slice-continue#continue-noop-when-already-applied": "tests/test_start_continue.py::test_continue_noop_when_already_applied",
+    "slice-continue#continue-populates-submodule-at-new-gitlink": "tests/test_start_continue.py::test_continue_populates_submodule_at_new_gitlink",
+    "slice-continue#base-is-branch-merge-base": "tests/test_start_continue.py::test_base_is_branch_merge_base",
+    "slice-evidence-shared#hook-writes-slice-rows-to-common-dir": "tests/test_evidence_shared_hook.py::test_hook_writes_slice_rows_to_common_dir",
+    "slice-evidence-shared#hook-leaves-heartbeat-on-any-bash": "tests/test_evidence_shared_hook.py::test_hook_leaves_heartbeat_on_any_bash",
+    "slice-evidence-shared#hook-recognizes-verify-script-runs": "tests/test_evidence_shared_hook.py::test_hook_recognizes_verify_script_runs",
+    "turn-tiers#turns-computed-from-owned-files": "tests/test_turn_tiers.py::test_turns_computed_from_owned_files",
+    "turn-tiers#turns-measured-at-baseline-commit": "tests/test_turn_tiers.py::test_turns_measured_at_baseline_commit",
+    "turn-tiers#turns-upgrade-declared-in-plan": "tests/test_turn_tiers.py::test_turns_upgrade_declared_in_plan",
+    "slice-continue#workflow-retry-continues-via-start": "tests/test_workflow_resume.py::test_workflow_retry_continues_via_start",
+    "slice-continue#executor-contract-describes-continue": "tests/test_workflow_resume.py::test_executor_contract_describes_continue",
+    "turn-tiers#workflow-picks-definition-by-tier": "tests/test_workflow_resume.py::test_workflow_picks_definition_by_tier",
+    "turn-tiers#large-definition-is-thin": "tests/test_workflow_resume.py::test_large_definition_is_thin",
+    "turn-tiers#large-executor-is-gated-and-audited": "tests/test_workflow_resume.py::test_large_executor_is_gated_and_audited",
+    "turn-tiers#noreturn-blocked-reason-names-tier-and-snapshot": "tests/test_workflow_resume.py::test_noreturn_blocked_reason_names_tier_and_snapshot",
+    "slice-evidence-shared#gate-reads-rows-written-from-another-worktree": "tests/test_evidence_shared_gate.py::test_gate_reads_rows_written_from_another_worktree",
+    "slice-evidence-shared#gate-fails-when-hook-alive-but-no-test-run": "tests/test_evidence_shared_gate.py::test_gate_fails_when_hook_alive_but_no_test_run",
+    "slice-evidence-shared#record-merges-slice-rows-into-branch-log": "tests/test_evidence_shared_gate.py::test_record_merges_slice_rows_into_branch_log",
+    "slice-evidence-shared#first-round-start-clears-stale-evidence": "tests/test_evidence_shared_gate.py::test_first_round_start_clears_stale_evidence",
+    "slice-worktree-reap#merge-reaps-merged-slice-worktrees": "tests/test_merge_reap.py::test_merge_reaps_merged_slice_worktrees",
+    "slice-worktree-reap#merge-keeps-worktree-with-unmerged-work": "tests/test_merge_reap.py::test_merge_keeps_worktree_with_unmerged_work",
+    "slice-worktree-reap#merge-never-touches-unrelated-worktrees": "tests/test_merge_reap.py::test_merge_never_touches_unrelated_worktrees",
+    "slice-worktree-reap#merge-reap-returns-borrowed-submodule": "tests/test_merge_reap.py::test_merge_reap_returns_borrowed_submodule",
+    "slice-worktree-reap#reap-failure-does-not-fail-merge": "tests/test_merge_reap.py::test_reap_failure_does_not_fail_merge",
+    "slice-worktree-reap#iron-rule-names-reap-exception": "tests/test_merge_reap.py::test_iron_rule_names_reap_exception",
+    "slice-continue#apply-docs-mirror-continue-and-tiers": "tests/test_resume_docs.py::test_apply_docs_mirror_continue_and_tiers",
+    "turn-tiers#readme-and-installer-list-four-agents": "tests/test_resume_docs.py::test_readme_and_installer_list_four_agents",
+    "turn-tiers#spec-html-shows-turn-tier": "tests/test_spec_html_turns.py::test_spec_html_shows_turn_tier"
+  }
+}

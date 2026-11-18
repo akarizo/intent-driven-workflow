@@ -1,0 +1,14 @@
+<!-- 本文件由 slices.json 生成，不要手写编辑；改动请改 slices.json 后重新生成。 -->
+> 切片规则：1–9 片 · DAG 深度 ≤ 3 · 同 wave 所有权不相交 · 每片 owns ≤ 12 条 · 每片一个 commit · 门禁绿才勾选。
+> 本仓库自身纪律：Python 脚本 TDD（先写失败测试）；测试函数首行 `# Given:` 三段中文注释；`python3 -m pytest -q tests` 全绿；`cd template && openspec schema validate intent-driven` 绿（gate.checks `schema-validate`）；`.claude/hooks/*.py` 可 compileall。
+> wave 1 = S1 ‖ S2（接续与起点 ‖ 留痕 hook）；wave 2 = S3 ‖ S4（轮次分档 ‖ 工作流与 agent 定义）；wave 3 = S5 ‖ S6 ‖ S7（留痕并回与回收 ‖ 文档 ‖ 审批页）。
+
+## 切片
+
+- [ ] S1 slice-gate.py：start --continue 接上一轮的全部提交（快进 / 逐个重放 / 冲突回滚给 G0）；带 --expect-branch 时区间起点恒为与 change 分支的合并基点 （deps: - · verify: `python3 -m pytest -q tests/test_start_continue.py tests/test_slice_gate.py tests/test_submodule_sync.py tests/test_submodule_gate.py tests/test_submodule_merge.py`）
+- [ ] S2 test-evidence.py：有切片标记时留痕写 git 共用目录（一片一个文件）、任何 Bash 留心跳、认 verify / gate.test 里的脚本路径 （deps: - · verify: `python3 -m pytest -q tests/test_evidence_shared_hook.py tests/test_evidence_timeline.py`）
+- [ ] S3 slice-gate.py：轮次分档——turns 子命令按基线 commit 上的现存文件数算档位，lint 校验计划里的 turns（可升不可降） （deps: S1 · verify: `python3 -m pytest -q tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_checks_lint.py tests/test_gate_scope_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_start_continue.py`）
+- [ ] S4 工作流与 agent 定义：重派经 start --continue、按档位选定义文件、未交回的 blocked 理由带档位与快照；新增薄定义 slice-executor-large；起飞门禁与模型对账认新类型 （deps: S1 · verify: `python3 -m pytest -q tests/test_workflow_resume.py tests/test_agents_workflow.py tests/test_approval_gate.py tests/test_evidence_timeline.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_template_docs.py tests/test_ship_verdict.py tests/test_goal_takeoff_docs.py`）
+- [ ] S5 slice-gate.py：门禁读共用目录的留痕、record 并回分支、首轮 start 清残留；merge 合回后回收切片临时 worktree；铁律 6 措辞 （deps: S2, S3 · verify: `python3 -m pytest -q tests/test_evidence_shared_gate.py tests/test_merge_reap.py tests/test_slice_gate.py tests/test_submodule_merge.py tests/test_submodule_gate.py tests/test_submodule_sync.py tests/test_evidence_shared_hook.py tests/test_start_continue.py tests/test_turn_tiers.py tests/test_clean_after_merged_docs.py tests/test_docs_iron_rules.py`）
+- [ ] S6 文档：opsx-apply 命令与同名 skill 的起飞步骤传 turns、回退路径改用 start --continue 与大片档；README 与 install.sh 的 agent 清单、留痕与回收说明 （deps: S3, S4 · verify: `python3 -m pytest -q tests/test_resume_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_template_docs.py tests/test_install.py tests/test_docs_iron_rules.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_clean_after_merged_docs.py`）
+- [ ] S7 spec_html.py：切片表多一列「轮次档」（取自 slice-gate.py turns；算不出留「—」） （deps: S3 · verify: `python3 -m pytest -q tests/test_spec_html_turns.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py tests/test_turn_tiers.py`）
