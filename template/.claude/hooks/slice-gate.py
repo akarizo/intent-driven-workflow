@@ -27,7 +27,8 @@
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
 #                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
-#   baseline --change-dir DIR [--full]        起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
+#                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
+#   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              全量耗时记在 gate-baseline.json 顶层 full_suite_sec（不写 slices.json）；退出码按 ok；
@@ -45,6 +46,7 @@
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
 #                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]，只改 final 不算过期
 #                                              分层文件存在时已选区域的基线 regions.<name>.cmd 须等于分层文件当前 cmd，否则基线过期
+#   ship     --change-dir DIR [--markdown]    draft / ready 裁决；--markdown 时 delta.json 的 commit 对得上最后一条 final 行才附「## 测试变更」
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -3942,6 +3944,7 @@ def cmd_final(args):
     durations = {} if tiers is not None else None
     unit_wall, region_wall, part_wall = 0.0, {}, {}
     v7, total, passed, w7 = scenario_status(root, data, durations=durations)
+    _LEDGER_OBS.clear()  # G7 只跑 scenario 用例：其观测不进收口账本，否则没重跑的用例会被误记成实测
     failed.extend(v7)
     warnings.extend(w7)
     baseline = load_baseline(args.change_dir)
@@ -3954,6 +3957,9 @@ def cmd_final(args):
             if w2:
                 warnings.append(w2)
     inc = None
+    # 收口账本（test-ledger design D6 / D9）：只在本次确实跑了套件时落账；lrerun 与对账共用
+    led, lrerun = None, None
+    lmeta = {"commit": head, "phase": "final", "mode": None, "lock": hold.info.get("state")}
     test_sec, check_secs = None, {}  # gate.test 三选一分支的秒数（不含区域）与各项检查的秒数（design D8）
     sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
     final_ctx = {"mode": "full", "delta": None, "anchor": ""}  # 检查与 gate.impacted 的注入（design D7）
@@ -3971,6 +3977,8 @@ def cmd_final(args):
             part_wall, region_wall = _final_parts(root, tiers, gate, baseline, failed, warnings, hold.info)
             unit_wall = sum(part_wall.values())
             inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
+            led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
+            warnings.extend([lwarn] if lwarn else [])
         elif not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
         else:
@@ -4030,9 +4038,11 @@ def cmd_final(args):
                     rdir = None
                     warnings.append("测试结果文件目录不可用（检查拿不到 GATE_TEST_RESULT）：%s" % e)
             t0 = time.time()
+            lmode = None  # 实跑了套件的分支（落账的 mode）；复核未过时保持 None，不落账
             if sfail:  # 复核未过：跳过测试运行，不写锚点
                 failed.extend(sfail)
             elif tonly is not None:  # 无图退路：只重跑改动的测试文件，不挂依赖图与探针、不写锚点（D5 / D6）
+                lmode = TESTS_ONLY
                 green, delta, files = tonly
                 outcomes, rc, text, timed_out = [], 0, "", False
                 if files:
@@ -4051,6 +4061,7 @@ def cmd_final(args):
                        "rerun": files, "rerun_tests": len({n for n, _ in outcomes}), "inherited_tests": None}
                 tres = {"mode": TESTS_ONLY, "inherited": None, "fails": fails}
             elif why is None and imp:  # gate.impacted 代替内建选测（design D8）
+                lmode = "impacted"
                 anchor, delta = pick
                 with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
                     tg = run_test_gate(imp, root, extra_env=dict(_final_env(final_ctx, tmp), **genv),
@@ -4067,6 +4078,7 @@ def cmd_final(args):
                        "anchor": {"change": anchor.get("change"), "commit": anchor.get("commit")}, "delta": len(delta),
                        "rerun": None, "rerun_tests": None, "inherited_tests": None}
             elif why is None:  # 增量（design D5；有分层时 D9：单元层挂探针、区域按需）
+                lmode = "incremental"
                 anchor, delta = pick
                 sel = _final_select(root, anchor, delta, extras["blind"])
                 run_sel, unit_files, hit = sel, set(), {}
@@ -4137,6 +4149,7 @@ def cmd_final(args):
                 anchor_part["hops"] = _anchor_hops(anchor, khops) + 1  # 链长（design D6）
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）
+                lmode = "full"
                 tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True, extra_env=genv,
                                    keep_junit=rjunit)
                 f2, w2 = (_nodes_verdict(tg, bt.get("failed_nodes")) if bt.get("failed_form") == "nodes"
@@ -4206,10 +4219,24 @@ def cmd_final(args):
                                         if full_run or n.split("::", 1)[0] not in rfiles}
                                 kept.update(rn)
                                 anchor_part["nodes"] = dict(sorted(kept.items()))
+            if lmode is not None:  # 收口账本（test-ledger design D6）：区域跑完之后、写锚点之前
+                lmod, lsrc = _ledger_mod(), None
+                if lmode in (TESTS_ONLY, "incremental"):
+                    lrerun = inc["rerun"]
+                if lmode == TESTS_ONLY and not isinstance(lmod, str):  # 来源 = 上一份收口账本，须在覆盖写之前读
+                    prev = lmod.load(root, name, "final")
+                    lsrc = prev if prev is not None and prev.get("commit") == tonly[0].get("commit") else None
+                elif lmode == "incremental" and not isinstance(lmod, str):
+                    lsrc = lmod.from_anchor(pick[0])
+                led, lwarn = _ledger_commit(root, name, dict(lmeta, mode=lmode), tiers,
+                                            universe=(anchor_part["nodes"] or None) if nodes_ok and anchor_part else None,
+                                            source=lsrc, rerun_files=lrerun)
+                warnings.extend([lwarn] if lwarn else [])
             if cur_snap is not None and anchor_part is not None:
+                # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
                                              byproducts=byproducts, cmd_key=akey, tiers_key=tkey,
-                                             tiers_detail=_tiers_detail(tiers)))
+                                             tiers_detail=_tiers_detail(tiers), secs=_ledger_secs(led)))
                 if w:
                     warnings.append(w)
             if tres is not None and rdir is not None:  # 结果交接（design D1）：gate.test 判定之后、检查之前
@@ -4272,6 +4299,17 @@ def cmd_final(args):
         segs.append("测试 %.1fs" % test_sec)
     if check_secs:
         segs.append("检查 " + " / ".join("%s %.1fs" % kv for kv in check_secs.items()))
+    if led is not None:  # 对账（test-ledger design D7 / D8 / D10）：只报告，不影响 ok / failed / 退出码
+        lmod = _ledger_mod()
+        result["tests"] = dict(lmod.summary(led), delta=None, why=None)
+        try:
+            d, dwhy = lmod.delta(lmod.load(root, name, "baseline"), led, lrerun, root)
+            if d is not None:
+                lmod.save(root, name, "delta", d)
+                segs.append(lmod.segment(d))
+            result["tests"].update(delta=d, why=dwhy)
+        except Exception as e:
+            result["tests"]["why"] = "对账失败：%s: %s" % (type(e).__name__, e)
     segs.append(_lock_note(hold.info))
     # 结论词恒在末尾（timeline.py 按末尾取结论）
     final_note = " ".join(x for x in (inc_note, " · ".join(s for s in segs if s), "ok" if result["ok"] else "red") if x)
@@ -4557,10 +4595,12 @@ def cmd_baseline(args):
     bl["test_ok"] = test_ok and len(reasons) == n_valid
     # 锚点（design D3）：跑了全量才写；任一运行的依赖图没测到或基线本身无效（reasons 非空，含运行期间改动、
     # 结束快照失败、plan 被改）→ measured false（照样写，供 final 判「没有可用锚点」）；部件形态不写锚点（design D8）
-    # 基线账本（test-ledger design D1 / D4）：写锚点之前落账，基线红也照落；部件形态由 S5 落账
+    # 基线账本（test-ledger design D1 / D4）：写锚点之前落账，基线红也照落；部件形态同样落账（mode parts）
     led, lwarn, lmod = None, None, _ledger_mod()
     lmeta = {"commit": bl["commit"], "phase": "baseline", "mode": "incremental", "lock": hold.info.get("state")}
-    if hit is None and not parts:
+    if parts:
+        led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
+    elif hit is None:
         led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="full"), tiers,
                                     universe=_nodes_lower(adeps["nodes"]) if adeps is not None else None)
     elif apart is not None:
@@ -6284,10 +6324,12 @@ def _rerun_forecast(change_dir, data):
 
 
 def cmd_ship(args):
-    """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；工作流的 blocked 只作说明。"""
+    """draft / ready 裁决：只读 gate-report.md、HEAD、review-findings.json；另读 delta.json（只用于 --markdown）；
+    工作流的 blocked 只作说明。"""
     root = toplevel()
     head = git(root, "rev-parse", "HEAD")
     reasons = []
+    final = None
     findings = {}
     fpath = os.path.join(args.change_dir, "review-findings.json")
     if os.path.isfile(fpath):
@@ -6325,6 +6367,14 @@ def cmd_ship(args):
         if blocked:
             parts.append("### 飞行中记 blocked 的切片\n\n" + "\n".join(
                 "- %s（%s）：%s" % (b.get("slice", "?"), b.get("kind", "infra"), b.get("reason", "")) for b in blocked))
+        try:  # 「测试变更」（test-ledger design D8）：delta.json 对得上 final 行的 commit 才附；任何异常 → 不附
+            lmod = _ledger_mod()
+            if final is not None and not isinstance(lmod, str):
+                d = lmod.load(root, os.path.basename(os.path.realpath(args.change_dir)), "delta")
+                if d is not None and str(d.get("commit"))[:10] == final["commit"]:
+                    parts.append(lmod.render(d))
+        except Exception:
+            pass
         print("\n\n".join(parts))
     else:
         print(json.dumps(result, ensure_ascii=False))
