@@ -94,3 +94,26 @@
 ## S7
 
 仅文档（flight-runner-contract.md / test-tiers.md / pr-ship.md / README.md），无公开代码接口。
+
+## S3
+
+```
+[9]{name,kind,signature}:
+  NO_SEC_RATIO/SLOW_MIN_SEC/SLOW_RATIO/TIER_GROWTH_MIN_SEC/TIER_GROWTH_RATIO/TOP_N,const,草案常量
+  advice,fn,def advice(d)  # 固定规则建议行，零 token
+  delta,fn,"def delta(base, final, rerun_files=None, root=None)"  # -> (dict | None, str | None)
+  parse_segment,fn,def parse_segment(note)  # 时间线备注 -> {added, removed, added_sec} | None
+  render,fn,def render(d)  # Markdown，首行 "## 测试变更"
+  segment,fn,def segment(d)  # "用例 +A/-R（新增 X.Xs）"
+  _delta_cmd,fn,def _delta_cmd(args)  # delta 子命令
+```
+
+## S4
+
+```
+[4]{name,kind,signature}:
+  _ledger_mod,fn,def _ledger_mod()  # 加载 test-ledger.py，失败返回原因字符串
+  _ledger_commit,fn,"def _ledger_commit(root, name, meta, tiers, universe=None, source=None, rerun_files=None)"
+  _ledger_secs,fn,def _ledger_secs(led)
+  _ledger_source,fn,"def _ledger_source(root, change, commit)"
+```
