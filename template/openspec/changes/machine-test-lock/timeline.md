@@ -17,3 +17,5 @@
 2026-11-18T02:40:48Z	review	findings=8 blocking=0 deferred=8
 2026-11-18T02:46:41Z	final	全量（Δ 含全局文件：tests/conftest.py） 测试 318.6s · 检查 schema-validate 3.9s · 排队 0.0s · 负载 3.8→3.6/18 ok
 2026-11-18T02:46:44Z	apply-done	blocked=0 blocking=0
+2026-11-18T02:47:00Z	apply-done	首飞 S3 规划漏钉键测试 blocked → 补计划重批 → 补飞 S3/S5/S6 绿
+2026-11-18T02:47:15Z	ship	ready
