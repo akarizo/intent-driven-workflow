@@ -10,15 +10,11 @@ import sys
 import time
 from datetime import datetime, timezone
 
-import pytest
-
 from conftest import commit_all, load_hook, run_hook, write
 from final_helpers import baseline, change_and_commit, make_repo
 from submodule_helpers import g
 from test_approval_gate import human, transcript
 from test_slice_gate import plan, slice_, write_plan
-
-PENDING = pytest.mark.xfail(strict=True, reason="骨架：切片 S1 实现后去掉")
 
 PAST = 1_600_000_000  # 2020-09-13，早于任何一次测试运行
 
@@ -48,7 +44,6 @@ def _run_baseline(repo, d, *args, env=None):
     return run_hook("slice-gate", "baseline", "--change-dir", str(d), *args, cwd=repo, env=env)
 
 
-@PENDING
 def test_baseline_leaves_plan_file_untouched(git_repo):
     # Given: 已提交的 change，gate.test 是直接的 pytest 调用，slices.json 里没有 full_suite_sec；它的修改时间钉在过去
     d = make_repo(git_repo)
@@ -66,7 +61,6 @@ def test_baseline_leaves_plan_file_untouched(git_repo):
     assert _is_number(_bl(d).get("full_suite_sec")), _bl(d)
 
 
-@PENDING
 def test_approval_survives_baseline_rerun(git_repo, tmp_path):
     # Given: 跑过一次 baseline 的 change；计划工件的修改时间在过去，人类此刻在会话里说「起飞」
     d = make_repo(git_repo)
@@ -85,7 +79,6 @@ def test_approval_survives_baseline_rerun(git_repo, tmp_path):
     assert "起飞" in p.stdout
 
 
-@PENDING
 def test_baseline_stops_without_gate_test(git_repo):
     # Given: 已提交的 change，gate.test 为空；仓库里有 tests/ 目录（探测得出 pytest 命令）
     d = git_repo / "openspec" / "changes" / "c"
@@ -104,7 +97,6 @@ def test_baseline_stops_without_gate_test(git_repo):
     assert (d / "slices.json").read_bytes() == before
 
 
-@PENDING
 def test_incremental_baseline_keeps_suite_sec(git_repo):
     # Given: 跑过一次全量基线的 change（full_suite_sec 为某个数值）；之后只改了一个测试文件并提交
     d = make_repo(git_repo)
@@ -121,7 +113,6 @@ def test_incremental_baseline_keeps_suite_sec(git_repo):
     assert second.get("full_suite_sec") == first["full_suite_sec"], (first, second)
 
 
-@PENDING
 def test_running_marker_carries_last_suite_sec(git_repo):
     # Given: 跑过一次基线的 change；gate.test 是运行期间读取 gate-baseline.json 的脚本
     write(git_repo / "check_marker.py", CHECK_MARKER)
@@ -141,7 +132,6 @@ def test_running_marker_carries_last_suite_sec(git_repo):
     assert _bl(d)["ok"] is True
 
 
-@PENDING
 def test_running_baseline_hint_shows_last_suite_sec(git_repo):
     # Given: gate-baseline.json 是进程仍在的运行标记，full_suite_sec 为 12.5；slices.json 里没有 full_suite_sec
     d = git_repo / "openspec" / "changes" / "c"
@@ -159,7 +149,6 @@ def test_running_baseline_hint_shows_last_suite_sec(git_repo):
     assert "仍在跑" in p.stderr and "12.5 秒" in p.stderr, p.stderr
 
 
-@PENDING
 def test_suite_sec_resolver_prefers_baseline(tmp_path):
     # Given: 一个 change 目录，计划里旧的 gate.full_suite_sec 为 816
     sg = load_hook("slice-gate")
@@ -181,7 +170,6 @@ def test_suite_sec_resolver_prefers_baseline(tmp_path):
     assert (no_baseline, from_baseline, bool_falls_back, nothing) == (816, 300.5, 816, None)
 
 
-@PENDING
 def test_staged_gitlink_commit_keeps_baseline_fresh(git_repo, tmp_path):
     # Given: 带子仓 mods/sub 的仓库，change 的计划已提交；子仓里新增一个提交，父仓把新 gitlink 暂存但没提交
     origin = tmp_path / "origin"

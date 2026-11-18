@@ -291,14 +291,14 @@ def test_incremental_when_only_test_file_changed(git_repo):
     #        gate.lint 运行时写标记
     d = setup_change(git_repo, lint=True)
     first = first_full(git_repo, d, marker(git_repo, "ran-lint"))
-    sec0 = read_plan(d)["gate"]["full_suite_sec"]
+    sec0 = read_bl(d)["full_suite_sec"]
     append(git_repo / "tests" / "test_cap.py", XFAIL_MORE)
 
     # When: 再运行 slice-gate.py baseline
     p = baseline(git_repo, d)
 
     # Then: 退出 0；全量标记不存在、lint 标记存在；mode 为 incremental，incremental.files 为 ["tests/test_cap.py"]，from.change 为 c；
-    #       test.failed 与第一次相同；gate.full_suite_sec 与第一次相同
+    #       test.failed 与第一次相同；基线的 full_suite_sec 与第一次相同
     assert p.returncode == 0, p.stdout + p.stderr
     assert not marker(git_repo, "ran-full").exists()
     assert marker(git_repo, "ran-lint").exists()
@@ -307,7 +307,7 @@ def test_incremental_when_only_test_file_changed(git_repo):
     assert bl["incremental"]["files"] == ["tests/test_cap.py"], bl["incremental"]
     assert bl["incremental"]["from"]["change"] == "c", bl["incremental"]
     assert bl["test"]["failed"] == first["test"]["failed"] and first["test"]["failed"], (bl["test"], first["test"])
-    assert read_plan(d)["gate"]["full_suite_sec"] == sec0
+    assert bl["full_suite_sec"] == sec0 and sec0 is not None, (bl, sec0)
 
 
 def test_incremental_noop_when_only_plan_changed(git_repo):

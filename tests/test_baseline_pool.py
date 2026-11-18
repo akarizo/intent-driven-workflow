@@ -42,13 +42,13 @@ def test_cross_change_reuse_same_tree(git_repo):
     p = baseline(git_repo, d)
 
     # Then: 退出 0；gate.test 没有运行；d 的 mode 为 incremental、from.change 为 c；d 的 test.exit 为 0；
-    #       d 的 gate.full_suite_sec 等于 c 基线的 test.sec
+    #       d 基线的 full_suite_sec 等于 c 基线的 test.sec
     assert p.returncode == 0, p.stdout + p.stderr
     assert not marker(git_repo, "ran-full").exists()
     bd = read_bl(d)
     assert bd["mode"] == "incremental" and bd["incremental"]["from"]["change"] == "c", bd
     assert bd["test"]["exit"] == 0 and bc["test"]["exit"] == 0, (bd["test"], bc["test"])
-    assert read_plan(d)["gate"]["full_suite_sec"] == bc["test"]["sec"]
+    assert bd["full_suite_sec"] == bc["test"]["sec"], (bd, bc["test"])
 
 
 def test_cross_change_reuse_after_test_only_commit(git_repo):
