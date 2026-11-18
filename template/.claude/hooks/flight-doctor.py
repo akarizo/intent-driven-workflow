@@ -4,6 +4,7 @@
 # CLI:
 #   flight-doctor.py forecast --change-dir DIR [--json]   起飞前预告 baseline / final 走全量还是增量
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
+#                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
 #   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare]
 #
 # 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用 _interfaces.md「S4 提供」列出的函数。
@@ -47,6 +48,10 @@ CHECKS_FILE = "gate-checks.json"
 ANCHOR_DIR = "flight-anchors"
 DECLARE_KEYS = ("global", "blind", "anchor_max_hops")
 SEC_RE = re.compile(r"exit -?\d+, ([\d.]+)s")
+TEST_RE = re.compile(r"测试 ([\d.]+)s")
+WAIT_RE = re.compile(r"排队 ([\d.]+)s")
+CHECKS_RE = re.compile(r"检查 (.+?)(?= · | ok$| red$|$)")
+CHECK_ITEM_RE = re.compile(r"^(.+) ([\d.]+)s$")
 INC_MARKS = ("增量", "同树沿用")
 FULL_MARKS = ("全量：", "全量（")
 
@@ -210,9 +215,22 @@ def parse_note(note):
     return "full", reason.strip(), (float(m.group(1)) if m else None)
 
 
+def note_costs(note):
+    """timeline 备注 → {"test": 秒 | None, "wait": 秒 | None, "checks": {名: 秒}}（design D8 的片段）。"""
+    t, w = TEST_RE.search(note), WAIT_RE.search(note)
+    checks = {}
+    m = CHECKS_RE.search(note)
+    for part in (m.group(1).split(" / ") if m else ()):
+        item = CHECK_ITEM_RE.match(part.strip())
+        if item:
+            checks[item.group(1)] = float(item.group(2))
+    return {"test": float(t.group(1)) if t else None, "wait": float(w.group(1)) if w else None, "checks": checks}
+
+
 def cost(change_dir):
     out = {ev: {"full": 0, "incremental": 0, "full_sec": 0.0} for ev in ("baseline", "final")}
     out["full_runs"] = []
+    wait = {"baseline": 0.0, "final": 0.0}
     try:
         with open(os.path.join(change_dir, TIMELINE), "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -222,14 +240,19 @@ def cost(change_dir):
         cols = line.split("\t")
         if len(cols) < 3 or cols[1] not in ("baseline", "final"):
             continue
+        nc = note_costs(cols[2])
+        wait[cols[1]] += nc["wait"] or 0.0
         parsed = parse_note(cols[2])
         if parsed is None:
             continue
         kind, reason, sec = parsed
+        if cols[1] == "final" and nc["test"] is not None:
+            sec = nc["test"]
         out[cols[1]][kind] += 1
         if kind == "full":
             out[cols[1]]["full_sec"] += sec or 0.0
             out["full_runs"].append({"event": cols[1], "reason": reason, "class": classify(reason), "sec": sec})
+    out["wait_sec"] = {ev: round(s, 1) for ev, s in wait.items()}
     return out
 
 
@@ -237,7 +260,8 @@ def cost_text(c):
     lines = ["测试成本归因："]
     for ev in ("baseline", "final"):
         s = c[ev]
-        lines.append("  %s：全量 %d 次（%.1f 秒）· 增量 %d 次" % (ev, s["full"], s["full_sec"], s["incremental"]))
+        lines.append("  %s：全量 %d 次（%.1f 秒）· 增量 %d 次 · 排队 %.1f 秒" % (
+            ev, s["full"], s["full_sec"], s["incremental"], c["wait_sec"][ev]))
     for r in c["full_runs"]:
         lines.append("  - %s 全量 [%s]：%s%s" % (r["event"], r["class"], r["reason"] or "（无原因）",
                                                "（%s 秒）" % r["sec"] if r["sec"] is not None else ""))

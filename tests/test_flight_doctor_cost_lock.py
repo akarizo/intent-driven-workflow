@@ -1,12 +1,8 @@
 """flight-doctor.py cost 读新备注里的 final 秒数与排队秒数（scenario: machine-test-lock#cost-reads-final-seconds-and-wait）。
-骨架：strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
+切片 S2 已实现并解锁。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change machine-test-lock S2 未实现")
 
 TIMELINE = (
     "<!-- timeline: ISO时间\\t事件\\t备注（由 hooks 自动追加） -->\n"
@@ -17,7 +13,6 @@ TIMELINE = (
 )
 
 
-@PENDING
 def test_cost_reads_final_seconds_and_wait(git_repo):
     # Given: 时间线里有一条旧格式的全量 baseline、一条带「排队 12.5s」的全量 baseline、
     #        一条带「测试 524.3s」「排队 212.0s」的全量 final、一条带「测试 8.0s」的增量 final
