@@ -12,3 +12,6 @@
 2026-11-18T12:01:28Z	gate	S6 ok
 2026-11-18T12:01:28Z	gate	S7 ok
 2026-11-18T12:01:39Z	integrate	wave 3
+2026-11-18T12:03:06Z	review	findings=15 blocking=0 deferred=15
+2026-11-18T12:13:14Z	final	增量（锚点 2cc616742f，重跑 87 个文件 / 沿用 210 个用例） 测试 574.3s · 检查 schema-validate 1.3s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 2.1→3.4/18 ok
+2026-11-18T12:13:18Z	apply-done	blocked=0 blocking=0
