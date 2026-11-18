@@ -3878,6 +3878,15 @@ def cmd_final(args):
             if pick is not None:
                 final_ctx = {"mode": "full" if why else "incremental", "delta": pick[1],
                              "anchor": pick[0].get("commit") or ""}
+            tonly = None  # 无图退路（ship-rerun-hardening D5）：(上次绿 final, Δ, 重跑的测试文件)
+            if why and pick is None and hcap is None and not args.full and not imp:
+                tonly, twhy = _tests_only_pick(root, args.change_dir, dict(data, gate=rgate), rec, baseline, cur_snap,
+                                               head, fps, tiers, idrop)
+                if tonly is not None:
+                    why = None
+                    final_ctx = {"mode": "incremental", "delta": tonly[1], "anchor": tonly[0].get("commit") or ""}
+                elif twhy:
+                    why = "%s；%s" % (why, twhy)
             # 开跑前复核选测范围（design D9）；--full 是显式要求，豁免
             if not args.full:
                 anc, dlt = pick if pick is not None else (None, None)
@@ -3904,6 +3913,24 @@ def cmd_final(args):
             t0 = time.time()
             if sfail:  # 复核未过：跳过测试运行，不写锚点
                 failed.extend(sfail)
+            elif tonly is not None:  # 无图退路：只重跑改动的测试文件，不挂依赖图与探针、不写锚点（D5 / D6）
+                green, delta, files = tonly
+                outcomes, rc, text, timed_out = [], 0, "", False
+                if files:
+                    outcomes, rc, text, timed_out = _pytest_outcomes(root, files, rgate, extra_env=genv,
+                                                                     keep_junit=rjunit)
+                unit_wall = time.time() - t0
+                fails = sorted({n for n, o in outcomes if o in ("FAILED", "ERROR")})
+                if timed_out:
+                    failed.append("G2 test：重跑改动的测试文件超时")
+                elif fails:
+                    failed.append("G2 test：新增失败 %d 条：%s" % (len(fails), ", ".join(fails)))
+                elif rc not in (0, 5) or "ERROR collecting" in text:
+                    failed.append("G2 test：重跑改动的测试文件 exit %s\n%s" % (rc, _tail(text)))
+                inc = {"mode": "incremental", "source": TESTS_ONLY,
+                       "anchor": {"change": green.get("change"), "commit": green.get("commit")}, "delta": len(delta),
+                       "rerun": files, "rerun_tests": len({n for n, _ in outcomes}), "inherited_tests": None}
+                tres = {"mode": TESTS_ONLY, "inherited": None, "fails": fails}
             elif why is None and imp:  # gate.impacted 代替内建选测（design D8）
                 anchor, delta = pick
                 with tempfile.TemporaryDirectory(prefix="flight-impacted-") as tmp:
@@ -4099,6 +4126,11 @@ def cmd_final(args):
             a10 = str(inc["anchor"]["commit"])[:10]
             result["summary"] += "；增量：gate.impacted，Δ %d 个文件，锚点 %s" % (inc["delta"], a10)
             inc_note = "增量（gate.impacted，锚点 %s，Δ %d 个文件）" % (a10, inc["delta"])
+        elif inc.get("source") == TESTS_ONLY:
+            a10 = str(inc["anchor"]["commit"])[:10]
+            result["summary"] += "；增量：无依赖图，只重跑改动的 %d 个测试文件（%d 个用例），其余沿用上次绿 final %s" % (
+                len(inc["rerun"]), inc["rerun_tests"], a10)
+            inc_note = "增量（无图：上次绿 final %s，只重跑 %d 个测试文件）" % (a10, len(inc["rerun"]))
         elif inc["mode"] == "incremental":
             a10 = str(inc["anchor"]["commit"])[:10]
             result["summary"] += "；增量：重跑 %d 个文件（%d 个用例）/ 沿用 %d 个，锚点 %s" % (
@@ -5994,6 +6026,48 @@ def _inert_drop(root, change_dir, data=None, recon=True):
     return drop, ctx
 
 
+TESTS_ONLY = "tests-only"  # final 无图退路的 incremental.source 与 GATE_TEST_RESULT.mode（ship-rerun-hardening D6）
+
+
+def _tests_only_pick(root, change_dir, data, rec, baseline, cur_snap, head, fps, tiers, drop):
+    """无图退路（ship-rerun-hardening D5）→ ((green, Δ, 要重跑的测试文件) | None, 不适用且值得说明的原因 | None)。
+    cmd_final 与 final_forecast 共用；只在「没有可用锚点」且非链长上限时调用。"""
+    if tiers is not None or cur_snap is None or _unreproducible_why(root, data.get("gate") or {}):
+        return None, None
+    green = _last_green(rec)
+    if not isinstance(green, dict) or not isinstance(green.get("snapshot"), dict):
+        return None, None
+    gf = green.get("fps") if isinstance(green.get("fps"), dict) else {}
+    fkey = lambda f: [(f.get("cmd") or {}).get("test"), (f.get("cmd") or {}).get("pytest"), f.get("tiers")]
+    if fkey(gf) != fkey(fps):
+        return None, None
+    change_rel = _change_rel(root, change_dir)
+    delta = _delta(root, green, cur_snap, head, change_rel, True)
+    if delta is None:
+        return None, None
+    kept, g10 = drop(delta), str(green.get("commit") or "")[:10]
+    extras = _scope_extras(change_dir)
+    other = [p for p in kept if not fnmatch.fnmatchcase(p.rsplit("/", 1)[-1], "test_*.py")
+             or any(fnmatch.fnmatchcase(p, g) for g in extras["global"])]
+    if other:
+        return None, "上次绿 final %s 后有非测试文件改动：%s" % (g10, ", ".join(other[:8]))
+    bt = (baseline or {}).get("test") or {}
+    stems = {p.rsplit("/", 1)[-1][:-3] for p in kept}  # 与 _try_reuse 同一比法
+    pre = [str(f) for f in bt.get("failed") or [] if stems & set(str(f).split("::", 1)[0].split("."))]
+    pre += [str(f) for f in bt.get("failed_nodes") or [] if str(f).split("::", 1)[0] in kept]
+    if pre:
+        return None, "上次绿 final %s 后改动的测试文件有预存红：%s" % (g10, ", ".join(pre[:8]))
+    files = {p for p in kept if os.path.isfile(os.path.join(root, p))}
+    if extras["blind"]:
+        try:
+            tracked = [p for p in _git_raw(root, ["ls-files", "-z"]).split("\0") if p and _py_test_file(p)]
+        except RuntimeError:
+            tracked = []
+        files.update(p for p in tracked if any(fnmatch.fnmatchcase(p, g) for g in extras["blind"]))
+    name = os.path.basename(os.path.realpath(change_dir))
+    return (dict(green, change=name), delta, sorted(files)), None
+
+
 def _final_fresh(root, change_dir, final_commit, data=None):
     """final 行的 commit 与 HEAD 的树之差只含 changes 根下任一 change 的记账文件（或为空）→ 新鲜（design D6）；
     其余路径全部按 inert 生效（ship-rerun-hardening D2，对账锚点见 _recon_anchor）也算新鲜；
@@ -6023,7 +6097,7 @@ def final_forecast(change_dir, data, baseline):
     name = os.path.basename(os.path.realpath(change_dir))
     akey = _anchor_key(root, change_rel, test_cmd, gate)
     tkey = _tiers_key(root, change_dir, tiers)
-    snap_why, pick = None, None
+    snap_why, pick, hcap = None, None, None
     try:
         snap = _snapshot(root, change_rel)
     except RuntimeError as e:
@@ -6031,8 +6105,9 @@ def final_forecast(change_dir, data, baseline):
     if snap is not None:
         head = git(root, "rev-parse", "HEAD")
         hops = _scope_extras(change_dir)["anchor_max_hops"]
-        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops,
-                            drop=_inert_drop(root, change_dir, data, recon=False)[0])
+        drop = _inert_drop(root, change_dir, data, recon=False)[0]
+        pick = _pick_anchor(root, akey, tkey, snap, head, change_rel, name, max_hops=hops, drop=drop)
+        hcap = _hops_cap(root, akey, tkey, pick, hops)
     tier_rel = _change_rel(root, _tiers_path(change_dir))
     bl = baseline if isinstance(baseline, dict) and baseline.get("running") is not True else None
     why, _ = _full_why(root, False, pick, bl, snap_why, gate=gate, tier_rel=tier_rel,
@@ -6040,6 +6115,14 @@ def final_forecast(change_dir, data, baseline):
     un = (bl or {}).get("deps_unmeasured")
     if why and pick is None and isinstance(un, dict):
         why = "依赖图未测（%s）：%s" % (un.get("kind"), un.get("why"))
+    if why and pick is None and snap is not None and hcap is None:  # 与 cmd_final 同一判定（ship-rerun-hardening D7）
+        tonly, twhy = _tests_only_pick(root, change_dir, data, _final_rec_read(root, name), bl, snap, head,
+                                       _final_fps(root, change_rel, data, tiers), tiers, drop)
+        if tonly is not None:
+            return "incremental", "无图：上次绿 final %s，只重跑 %d 个测试文件" % (
+                str(tonly[0].get("commit") or "")[:10], len(tonly[2]))
+        if twhy:
+            why = "%s；%s" % (why, twhy)
     if why:
         return "full", why
     return "incremental", "锚点 %s，Δ %d 个文件" % (str(pick[0].get("commit") or "")[:10], len(pick[1]))
