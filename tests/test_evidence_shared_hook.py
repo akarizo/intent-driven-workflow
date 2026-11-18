@@ -65,3 +65,23 @@ def test_hook_recognizes_verify_script_runs(git_repo):
     got = rows(shared_log(git_repo))
     assert [(r[1], r[2]) for r in got] == [("S1", "PASS"), ("S1", "FAIL")], got
     assert "viewer.sh" in got[0][3] and "tools/full.sh" in got[1][3]
+
+
+def test_hook_ignores_non_run_commands_naming_verify_files(git_repo):
+    # Given: S1 的 verify 是 `python3 -m pytest -q tests/test_x.py`（.py 是 pytest 的参数，不是被执行的脚本），
+    #        gate.test 是 `bash tools/full.sh`；读文件 / 暂存文件的命令输出里带 error / failed
+    change = marker_repo(git_repo)
+    write(change / "slices.json", json.dumps({"version": 1, "change": "c", "gate": {"test": "bash tools/full.sh"}, "slices": [
+        {"id": "S1", "title": "S1", "scenarios": [], "owns": ["src/**"], "deps": [],
+         "verify": "python3 -m pytest -q tests/test_x.py"}], "scenario_tests": {}}))
+
+    # When: 依次喂 cat / sed / git add 这些只是点名文件的命令，再跑一次 gate.test 脚本
+    fire(git_repo, "cat tests/test_x.py", stdout="assert errors == []  # 1 failed")
+    fire(git_repo, "sed -n 1,20p tests/test_x.py && git add tests/test_x.py", stdout="raise ValueError('error')")
+    fire(git_repo, "cat tools/full.sh | grep FAIL", stdout="echo FAIL")
+    fire(git_repo, "git status && bash tools/full.sh 2>&1 | tail -3", stdout="2 passed")
+
+    # Then: 只有真正执行 tools/full.sh 的那条记一行 PASS，点名文件的命令都不记
+    got = rows(shared_log(git_repo))
+    assert [(r[1], r[2]) for r in got] == [("S1", "PASS")], got
+    assert "tools/full.sh" in got[0][3]

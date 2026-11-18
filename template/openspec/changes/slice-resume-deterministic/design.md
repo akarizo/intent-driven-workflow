@@ -127,7 +127,7 @@
 - **位置**：`<git common dir>/flight-evidence/<change>/<S>.log`，一片一个文件，行格式不变（`时间\t切片\tPASS|FAIL\t命令前 120 字符`）。`<change>` 取标记里 `change_dir` 的目录名（与快照 ref 同规则）。
 - **hook（`test-evidence.py`）**：工作树根有切片标记时——
   - 任何 Bash 事件都确保该文件存在（空文件即心跳）；
-  - 命令被认作测试运行时追加一行。认定 = 原有的运行器正则，**或** 命令文本包含本片 `verify` 或 `gate.test` 里的脚本路径记号（按空白与 `;&|()'"` 切开后，含 `/` 且以 `.sh` / `.py` / `.js` / `.mjs` / `.ts` 结尾的记号）。读不到 `slices.json` 时只用运行器正则。
+  - 命令被认作测试运行时追加一行。认定 = 原有的运行器正则，**或** 命令执行位置上的脚本路径记号与本片 `verify` 或 `gate.test` 执行位置上的记号相同（按 `;` `&&` `||` `|` `&` 换行与括号切段；执行位置 = 段首词，或紧跟 `bash`/`sh`/`zsh`/`python`/`python3`/`node`/`npx`/`tsx` 的那个词；含 `/` 且以 `.sh` / `.py` / `.js` / `.mjs` / `.ts` 结尾；命中运行器正则的段不出记号。`cat` / `sed` / `git add` 这类只点名文件的命令不算，否则读测试文件就能伪造「先红」）。读不到 `slices.json` 时只用运行器正则。
   - 没有标记时（主会话）行为不变：写工作树里的 `<change>/evidence.log`。
 - **门禁（`evidence_state`）**：本片的行 = 分支工作树里 `<change>/evidence.log` 的本片行 + 共用目录里本片文件的行。两处都不存在 → `missing_file`（警告，`hooks_missing: true`，现状）；存在但没有本片的行 → `no_rows`（红，文案改为「hook 在工作，但本片没跑过测试（先运行本片的 verify 再过门禁）」）；其余判定不变。门禁收尾时把共用目录里本片的行并进所在工作树的 `<change>/evidence.log`（去重），`--gate=per-task` 路径下这就是分支上的那份。
 - **并回分支（`record`）**：integrator 在 change 家运行 `record --json` 时，把共用目录里该片的行追加进 `<change>/evidence.log`（已有的行不重复加），然后删掉共用目录里该片的文件。并回发生在「已记录过」的早退之前，重复执行是空操作。
