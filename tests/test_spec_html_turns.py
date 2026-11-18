@@ -2,12 +2,8 @@
 骨架：strict xfail，断言是真实的；切片 S7 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, write
 from test_spec_html import artifacts, render
-
-PENDING = pytest.mark.xfail(strict=True, reason="change slice-resume-deterministic S7 未实现")
 
 
 def _plan(change):
@@ -20,7 +16,6 @@ def _plan(change):
         "scenario_tests": {}}, ensure_ascii=False))
 
 
-@PENDING
 def test_spec_html_shows_turn_tier(git_repo, tmp_path):
     # Given: git 仓库里的 change：S1 的 owns 展开后有 9 个现存文件，S2 只有 1 个；另有一个不在 git 仓库里的同样的 change
     for i in range(9):

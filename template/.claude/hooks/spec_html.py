@@ -657,6 +657,23 @@ def render_forecast(change_dir):
            "：" + esc(", ".join(str(c) for c in checks)) if checks else ""))
 
 
+TIER_LABELS = {"large": "大片档", "standard": "标准档"}
+
+
+def slice_turns(change_dir):
+    """轮次档（design D3/D4）：子进程取 slice-gate.py turns；非 0 / 超时 / 非 JSON 对象 → {}（铁律 10，列留「—」）。"""
+    change_dir = os.path.abspath(change_dir)
+    cmd = [sys.executable, os.path.join(HOOKS_DIR, "slice-gate.py"), "turns", "--change-dir", change_dir]
+    try:
+        p = subprocess.run(cmd, cwd=change_dir, capture_output=True, text=True, timeout=FORECAST_TIMEOUT)
+        if p.returncode != 0:
+            return {}
+        data = json.loads(p.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def render_flight(change_dir):
     text = read_text(os.path.join(change_dir, "slices.json"))
     if not text:
@@ -673,15 +690,17 @@ def render_flight(change_dir):
     root = project_root(change_dir)
     scenario_tests = data.get("scenario_tests") or {}
     passed_slices = gate_report_passed_slices(change_dir)
+    turns = slice_turns(change_dir)
 
     slice_rows, scenario_rows = [], []
     for s in slices:
         sid = s.get("id", "?")
         owns_html = "<br>".join(esc(o) for o in (s.get("owns") or []))
         slice_rows.append(
-            '<tr><td class="mono">%s</td><td>%s</td><td>wave %d</td><td>%s</td><td>%s</td><td><code>%s</code></td></tr>'
+            '<tr><td class="mono">%s</td><td>%s</td><td>wave %d</td><td>%s</td><td>%s</td><td><code>%s</code></td><td>%s</td></tr>'
             % (esc(sid), inline_md(s.get("title", "")), wave_of.get(sid, 0),
-               esc(", ".join(s.get("deps") or []) or "-"), owns_html, esc(s.get("verify", "")))
+               esc(", ".join(s.get("deps") or []) or "-"), owns_html, esc(s.get("verify", "")),
+               TIER_LABELS.get(turns.get(sid), "—"))
         )
         for scen_id in s.get("scenarios") or []:
             target = scenario_tests.get(scen_id, "")
@@ -712,7 +731,7 @@ def render_flight(change_dir):
 
     return (
         '<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th>'
-        '<th>deps</th><th>owns</th><th>verify</th></tr></thead><tbody>%s</tbody></table>%s'
+        '<th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'
         '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s%s'
         % ("".join(slice_rows), render_scope(data.get("gate"), change_dir,
