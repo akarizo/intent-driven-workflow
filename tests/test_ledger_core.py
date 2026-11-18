@@ -4,11 +4,7 @@ import json
 import os
 import pathlib
 
-import pytest
-
 from conftest import git, load_hook, run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-ledger S1 未实现")
 
 META = {"change": "c", "commit": "0" * 40, "at": "2026-11-18T00:00:00Z", "phase": "final", "mode": "incremental",
         "lock": "held"}
@@ -25,7 +21,6 @@ def tier_of(path):
     return "hooks" if "/hooks/" in path else None
 
 
-@PENDING
 def test_build_marks_measured_and_inherited():
     # Given: 全集三条用例；本次只实测到 B 与 C；来源有 A 与 B 的耗时
     tl = load_hook("test-ledger")
@@ -49,7 +44,6 @@ def test_build_marks_measured_and_inherited():
                                "complete": True, "tiers": {"-": {"cases": 3, "sec": 2.1}}}
 
 
-@PENDING
 def test_build_keeps_unrerun_cases_from_source_ledger(tmp_path):
     # Given: 没有全集；观测有 junit 与 nodeid 两种形式；来源账本是 junit 形式；只补跑了 tests/test_b.py
     tl = load_hook("test-ledger")
@@ -75,7 +69,6 @@ def test_build_keeps_unrerun_cases_from_source_ledger(tmp_path):
     assert led3["cases"] == led["cases"] and led3["id_form"] == "junit", led3
 
 
-@PENDING
 def test_build_attributes_tiers_per_case():
     # Given: 一条单元层用例、一条区域 hooks 的用例；另有一条 id 里没有文件路径、观测自带 tier 的用例
     tl = load_hook("test-ledger")
@@ -96,7 +89,6 @@ def test_build_attributes_tiers_per_case():
     assert led3["tiered"] is True
 
 
-@PENDING
 def test_ledger_stored_per_change_in_git_common_dir(git_repo):
     # Given: 一个 git 仓库和它的一间 worktree；一份账本
     tl = load_hook("test-ledger")
@@ -121,7 +113,6 @@ def test_ledger_stored_per_change_in_git_common_dir(git_repo):
     assert "old00" not in names and {"c", "new", "old01", "old28"} <= names and len(names) == 30, sorted(names)
 
 
-@PENDING
 def test_show_lists_cases_by_tier_and_seconds(git_repo):
     # Given: change c 存有一份 final 账本：单元层两条（0.1 秒、2.0 秒），区域 hooks 一条（5.0 秒）
     tl = load_hook("test-ledger")
