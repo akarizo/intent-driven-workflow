@@ -20,3 +20,8 @@
 2026-11-18T09:33:20Z	final	增量（锚点 b1be3db4be，重跑 76 个文件 / 沿用 174 个用例） 测试 555.4s · 检查 schema-validate 2.8s · 排队 0.0s · 负载 8.4→5.2/18 ok
 2026-11-18T09:33:46Z	apply-done	blocked=0 blocking=0
 2026-11-18T09:34:35Z	ship	ready
+2026-11-18T09:34:46Z	ship	ready
+2026-11-18T09:35:33Z	ship	ready
+2026-11-18T09:36:23Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/20
+2026-11-18T09:52:21Z	final	增量（锚点 b1be3db4be，重跑 76 个文件 / 沿用 174 个用例） 测试 508.3s · 检查 schema-validate 2.4s · 排队 0.0s · 负载 3.0→4.1/18 ok
+2026-11-18T09:52:31Z	ship	ready
