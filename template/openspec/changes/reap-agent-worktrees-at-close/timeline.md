@@ -8,3 +8,6 @@
 2026-11-19T11:39:44Z	gate	S3 ok
 2026-11-19T11:39:54Z	integrate	wave 2
 2026-11-19T11:40:04Z	wave-check	wave 2/2 · 测试跳过（受影响测试约 453.6 秒（92 个文件），超过预算 120 秒，留给 final） · 排队 0.0s · 负载 10.1→10.1/18 ok
+2026-11-19T11:42:04Z	review	findings=12 blocking=0 deferred=12
+2026-11-19T11:54:15Z	final	增量（锚点 100e015188，重跑 92 个文件 / 沿用 218 个用例） 测试 719.7s · 检查 schema-validate 1.4s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 7.5→6.6/18 ok
+2026-11-19T11:54:45Z	apply-done	blocked=0 blocking=0
