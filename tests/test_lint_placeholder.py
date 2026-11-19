@@ -1,8 +1,5 @@
-"""slice-gate.py lint 对 scaffold 占位标记判红的单元测试（不映射 scenario；端到端见 test_propose_toolchain.py）。
-骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
+"""slice-gate.py lint 对 scaffold 占位标记判红的单元测试（不映射 scenario；端到端见 test_propose_toolchain.py）。"""
 import json
-
-import pytest
 
 from conftest import commit_all, run_hook, write
 
@@ -20,7 +17,6 @@ def plan(git_repo, body):
     return d
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_lint_flags_placeholder_in_scenario_test(git_repo):
     # Given: scenario 测试函数体仍含 PLAN-SCAFFOLD-PLACEHOLDER
     d = plan(git_repo, 'assert False, "PLAN-SCAFFOLD-PLACEHOLDER：换成真实断言"')
