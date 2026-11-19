@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+propose-speedup · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+propose-speedup
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">tasks</span><span class="chip" data-state="done">specs/baseline-warm</span><span class="chip" data-state="done">specs/plan-kit-commands</span><span class="chip" data-state="done">specs/propose-fork-assertions</span><span class="chip" data-state="done">specs/scenario-scaffold</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement"><code>/opsx-propose</code> 太慢。审批页 <code>docs/flight-routing-config.html</code> 第 02 节的实测（20 次有工件的 propose）：
+- <strong>四个阶段的平均耗时</strong>：P0 准备 23.4 分钟、P1 成稿 16.3 分钟、P2 4.1 分钟、P3 收尾 15.5 分钟；
+- <strong>时间花在哪</strong>：每次串行输出约 16 万 token，工具执行不到 4 分钟。所以快慢由「模型逐字写了多少」决定；
+- <strong>写入量的构成</strong>：测试骨架占 24%，模型自己写的 <code>/tmp</code> 脚本占 20%，切片包占 16%，verify 脚本占 5%。其中很多是机械搬运：Gherkin 原文抄进 GWT 注释、owns / verify / deps 抄进切片包、tasks.md 按 slices.json 抄一遍、每个工件分别调用一次 <code>openspec instructions</code>；
+- <strong>P3 卡在 baseline</strong>：P3 主要在等 baseline，afa 的中位数是 8.9 分钟，最长 64 分钟，而且它排在最后才开始跑。</p><p class="why-body">用户 2026-11-19 回复「全按推荐」，C2 相关的选择：
+- Q8-A：只在补断言这一步用 fork 并行，调研和决策类工件由主会话亲自做；
+- Q9-A：做 baseline 预热；
+- Q10-A：顺序为 C4 → C1 → C2 → C3。</p><p class="why-body">另有用户原话约束：「最终的解决方案和规划还是要继承主会话」。规划期的模型产出只能来自主会话或 fork（铁律 11，C1 已落地）。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>新增 <code>.claude/hooks/plan-kit.py</code></strong>，三个零 token 子命令：</li><li><code>instructions --change &lt;name&gt;</code>：一次打印全部待建工件的 instruction / template / rules，代替逐个工件调用 <code>openspec instructions</code>；</li><li><code>tasks --change-dir</code>：由 <code>slices.json</code> 生成 <code>tasks.md</code>，已勾选的切片保持勾选；</li><li><code>packets --change-dir</code>：渲染 <code>slices/&lt;S&gt;.md</code> 的机械区（标题、owns、依赖切片、scenario 的 Gherkin 原文、verify），机械区由标记包住；标记之外由主会话写的说明原样保留。</li><li><strong>新增 <code>.claude/hooks/plan-scaffold.py</code></strong>，两个子命令：</li><li><code>scaffold --change-dir</code>：按 <code>scenario_tests</code> 为缺失的测试函数生成 strict-xfail 骨架。GWT 注释取 Gherkin 原文，函数体是一条带固定占位标记的必败断言；已有的函数不动；首版只支持 pytest，其他语言列为跳过；</li><li><code>gwt --change-dir</code>：规划期的 G4 自查（GWT 注释齐全且顺序正确），并找出残留的占位标记。</li><li><strong><code>slice-gate.py lint</code> 加一条红线</strong>：scenario 测试函数里还留着 scaffold 占位标记时判红，没补断言的计划不能起飞。</li><li><strong>新增 <code>slice-gate.py warm --change-dir</code></strong>：建好 change 目录后立即在后台跑一次全量，结果写成本 change 的预热基线。</li><li><strong>命令怎么定</strong>：<code>--cmd</code> 显式给出时用它；否则沿用最近一个 change 的 <code>gate.test</code>。该命令引用的、位于那个 change 目录下的脚本，复制到本 change 的同一相对位置，并把命令改为指向本 change。</li><li><strong>跳过条件</strong>：分层仓库（有 <code>test-tiers.json</code>）恒走全量，预热帮不上，直接跳过；找不到可沿用的命令时也跳过。</li><li><strong>复用</strong>：正式 <code>baseline</code> 按现有「本 change 旧基线」规则判断：命令指纹相同、Δ 只有测试文件 → 只补跑这些测试文件。</li><li><strong>等待</strong>：正式 baseline 发现预热仍在跑时，先等它结束。</li><li><strong><code>/opsx-propose</code> 命令与 skill（同改）改用上面的工具</strong>：</li><li><strong>规划期不变式测试放宽一处</strong>：规划类文档里的派发只允许 fork（<code>subagent_type: &quot;fork&quot;</code>），其他派发仍判红。</li></ul><div class="impact"><span class="tag"><strong>新增</strong>：</span><span class="tag"><code>template/.claude/hooks/plan-kit.py</code>、<code>template/.claude/hooks/plan-scaffold.py</code>；</span><span class="tag"><code>tests/test_plan_kit.py</code>、<code>tests/test_plan_scaffold.py</code>、<code>tests/test_baseline_warm.py</code>、<code>tests/test_propose_speedup_docs.py</code>。</span><span class="tag"><strong>修改</strong>：</span><span class="tag"><code>template/.claude/hooks/slice-gate.py</code>：新增 warm 子命令；baseline 等待预热；lint 判占位标记；</span><span class="tag"><code>template/.claude/commands/opsx-propose.md</code>、<code>template/.claude/skills/openspec-propose/SKILL.md</code>；</span><span class="tag"><code>tests/test_routing_docs.py</code>：放宽规划期派发，只允许 fork。</span><span class="tag"><strong>不变</strong>：</span><span class="tag">baseline 的复用规则本身不改，预热只是提供一个候选；</span><span class="tag">takeoff-gate、preflight 不改：预热基线不带 <code>plan_sha</code>，正式 baseline 一定会覆盖它；</span><span class="tag"><code>/opsx-continue</code> 与 schema 的 tasks instruction 不改，留给后续。</span><span class="tag"><strong>验证方式</strong>：合入后用同一套探针重测 3 次 propose，前后对比；提速幅度不预估。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>plan-kit-commands</code>：instructions / tasks / packets 三个零 token 子命令。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>scenario-scaffold</code>：scaffold 与 gwt 两个子命令，以及 lint 对占位标记的红线。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>baseline-warm</code>：预热子命令、命令的沿用与跳过、正式 baseline 等待并复用预热结果。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>propose-fork-assertions</code>：propose 流程改用工具链，补断言用 fork 并行并配串行回退，规划期派发只允许 fork。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>baseline-warm <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 规划开始时在后台预热全量，结果写成本 change 的旧基线</p><p><code>slice-gate.py warm --change-dir D [--cmd CMD]</code> SHALL 按以下顺序定命令：
+1. <code>--cmd</code> 显式给出时用它；
+2. 否则，openspec 根有 <code>test-tiers.json</code> 时，打印以「跳过预热」开头的一行，exit 0，不写任何文件；
+3. 否则，在 changes 根（不含 <code>archive/</code>）下，取 <code>slices.json</code> 最新且不是本 change 的那个 change，用它的 <code>gate.test</code>（连同 <code>gate.pytest</code>）；
+4. 都没有时，打印以「跳过预热」开头的一行，exit 0。</p><p>命令引用的、位于来源 change 目录下的文件，SHALL 复制到 D 的同一相对位置（已存在则不覆盖），并把命令里的来源目录换成 D。</p><p>随后 SHALL 以与 <code>baseline</code> 相同的机制跑一次全量：只用 <code>gate.test</code>，不跑 verify、检查、lint 与 typecheck，不复用候选。结果写入 <code>D/gate-baseline.json</code>：
+- 带 <code>&quot;warm&quot;: true</code>，<code>plan_sha</code> 为 null；
+- 带 <code>change</code>、<code>cmd_key</code> 与 <code>snapshot</code>；
+- 运行期间的改动检测与 <code>baseline</code> 相同。</p><p>时间线记 <code>warm</code> 事件，stdout 的 JSON 带 <code>test_cmd</code>。</p><p>Feature: 基线预热
+Rule: 提前跑全量，命令沿用最近的 change，分层仓库跳过</p><div class="scenario"><p class="scenario-name">Scenario: warm-runs-full-suite-as-own-baseline</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个仓库：change <code>prev</code> 的 <code>gate.test</code> 是直接的 pytest 全量命令；新 change <code>c</code> 只有目录，没有 <code>slices.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py warm --change-dir openspec/changes/c</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0；<code>c/gate-baseline.json</code> 的 <code>warm</code> 为 true、<code>change</code> 为 <code>c</code>、<code>ok</code> 为 true、<code>mode</code> 为 <code>full</code>、<code>plan_sha</code> 为 null</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stdout JSON 的 <code>test_cmd</code> 等于 <code>prev</code> 的 <code>gate.test</code>，<code>c/timeline.md</code> 有 <code>warm</code> 事件</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: warm-adopts-latest-change-wrapper</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change <code>prev</code> 的 <code>gate.test</code> 运行 <code>openspec/changes/prev/verify/full.py</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对新 change <code>c</code> 运行 <code>warm</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>openspec/changes/c/verify/full.py</code> 被创建，内容与 <code>prev</code> 的相同</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stdout JSON 的 <code>test_cmd</code> 引用 <code>openspec/changes/c/verify/full.py</code>，不再引用 <code>prev</code> 的目录</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: warm-skips-tiered-repo</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根有 <code>test-tiers.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对新 change <code>c</code> 运行 <code>warm</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出以「跳过预热」开头，<code>c/gate-baseline.json</code> 不存在</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 正式 baseline 等待预热并按旧基线规则复用</p><p><code>slice-gate.py baseline</code> SHALL 在读取旧基线之前检查 <code>gate-baseline.json</code>：如果它是 <code>warm: true</code> 的运行标记，且 pid 仍存活，SHALL 等它结束，等待期间 stderr 打印一行「等待预热结束」。</p><p>之后 SHALL 按现有的本 change 旧基线规则判断复用。复用规则本身 MUST NOT 改动。</p><p>Feature: 复用预热结果
+Rule: 先等预热，再按原规则复用</p><div class="scenario"><p class="scenario-name">Scenario: baseline-reuses-warm-when-only-tests-changed</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>新 change <code>c</code> 已预热成功</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后写入 <code>c/slices.json</code>（gate.test 等于预热打印的命令），并新增一个测试文件 <code>tests/test_new.py</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>baseline --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>mode</code> 为 <code>incremental</code>，<code>incremental.from.change</code> 为 <code>c</code>，<code>incremental.rerun_files</code> 为 <code>[&quot;tests/test_new.py&quot;]</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-waits-for-running-warm</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>对新 change <code>c</code> 在后台启动 <code>warm</code>，它的全量要跑几秒</span></li><li><span class="step-key" data-kw="AND">AND</span><span>预热写出运行标记后，写入 <code>c/slices.json</code>（gate.test 等于同一命令）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>预热还在跑时运行 <code>baseline --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>stderr 含「等待预热结束」，结果 <code>mode</code> 为 <code>incremental</code>，<code>incremental.from.change</code> 为 <code>c</code></span></li></ul></div></div></div><div class="spec-card"><h3>plan-kit-commands <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 一次取全部待建工件的 instruction</p><p><code>.claude/hooks/plan-kit.py instructions --change &lt;name&gt;</code> SHALL 按以下步骤工作：
+1. 运行一次 <code>openspec status --change &lt;name&gt; --json</code>；
+2. 对每个状态不是 <code>done</code> 的工件，运行 <code>openspec instructions &lt;id&gt; --change &lt;name&gt; --json</code>；
+3. 按工件依次打印一节，节标题为 <code>## &lt;id&gt; → &lt;outputPath&gt;</code>，内容依次是 instruction、template，以及非空的 rules。</p><p>带 <code>--all</code> 时，<code>done</code> 的工件也打印。任一次 openspec 调用失败时 MUST 以 exit 2 退出，并在 stderr 写出失败的命令。</p><p>Feature: 汇总 instruction
+Rule: 一次运行拿全待建工件的写作要求</p><div class="scenario"><p class="scenario-name">Scenario: kit-instructions-prints-pending-artifacts</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 openspec 桩命令：proposal 已 done，design 与 tasks 待建，每个工件的 instruction 与 template 各不相同</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-kit.py instructions --change c</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出有 <code>## design → design.md</code> 与 <code>## tasks → tasks.md</code> 两节，各含自己的 instruction 与 template</span></li><li><span class="step-key" data-kw="AND">AND</span><span>输出没有 proposal 那一节</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: kit-instructions-fails-loud</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 openspec 桩命令，<code>instructions design</code> 以非 0 退出</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-kit.py instructions --change c</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 2，stderr 含 <code>openspec instructions design</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 由 slices.json 生成 tasks.md</p><p><code>plan-kit.py tasks --change-dir D</code> SHALL 生成 <code>D/tasks.md</code>：
+- 第一行是生成声明注释，接着是 <code>## 切片</code>；
+- 每片一行：<code>- [ ] &lt;id&gt; &lt;title&gt; （deps: &lt;逗号分隔的依赖或 -&gt; · verify: \</code>&lt;verify&gt;\<code>）</code>，与 <code>templates/tasks.md</code> 的格式一致；
+- 旧 <code>tasks.md</code> 里已勾选的切片 id MUST 保持 <code>[x]</code>。</p><p>Feature: 生成 tasks.md
+Rule: 格式与模板一致，勾选状态不丢</p><div class="scenario"><p class="scenario-name">Scenario: kit-tasks-generates-from-slices</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两片计划：S1 无依赖，S2 依赖 S1，各有 verify</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-kit.py tasks --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>tasks.md</code> 有 <code>- [ ] S1 &lt;S1 标题&gt; （deps: - · verify: \</code>&lt;S1 verify&gt;\<code>）</code> 与 <code>- [ ] S2 &lt;S2 标题&gt; （deps: S1 · verify: \</code>&lt;S2 verify&gt;\<code>）</code> 两行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: kit-tasks-keeps-checked-state</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>旧 <code>tasks.md</code> 里 S1 已勾选</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再次运行 <code>plan-kit.py tasks --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>S1 那一行仍是 <code>- [x]</code>，S2 那一行是 <code>- [ ]</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 切片包的机械区由脚本渲染，说明原样保留</p><p><code>plan-kit.py packets --change-dir D</code> SHALL 为每个切片渲染 <code>slices/&lt;S&gt;.md</code> 的机械区，放在 <code>&lt;!-- plan-kit:begin --&gt;</code> 与 <code>&lt;!-- plan-kit:end --&gt;</code> 之间。机械区依次包含：
+- 标题行 <code># &lt;S&gt; · &lt;title&gt;</code>；
+- owns 列表；
+- 依赖切片（id、标题、包路径）；
+- 每个 scenario 的能力名、scenario 名、映射的测试，以及取自 <code>specs/&lt;能力&gt;/spec.md</code> 的 GIVEN / WHEN / THEN / AND / BUT 原文；
+- verify。</p><p>已存在的包 MUST 只替换标记之间的内容，标记之外的文字保持不变。已存在但没有标记时，机械区插到最前面，原内容整体保留。</p><p>Feature: 渲染切片包
+Rule: 机械部分由脚本写，判断部分由主会话写</p><div class="scenario"><p class="scenario-name">Scenario: kit-packets-renders-mechanical-region</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两片计划：S2 依赖 S1，S2 有一个 scenario，其 spec 原文含 GIVEN / WHEN / THEN 各一行</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-kit.py packets --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>slices/S2.md</code> 的标记之间含标题行、S2 的每个 owns、S1 的标题、该 scenario 的 GIVEN 原文与映射的测试，以及 S2 的 verify</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: kit-packets-preserves-notes</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>slices/S1.md</code> 已有机械区，标记之后有主会话写的一段说明</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后 <code>slices.json</code> 里 S1 的 owns 多了一个文件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再次运行 <code>plan-kit.py packets --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>机械区出现新文件，标记之后的说明逐字不变</span></li></ul></div></div></div><div class="spec-card"><h3>propose-fork-assertions <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: propose 改用工具链，补断言按测试文件用 fork 并行</p><p><code>/opsx-propose</code> 命令与 <code>openspec-propose</code> skill（同改）SHALL 按以下顺序使用工具链：
+1. 建 change 目录之后，在后台运行 <code>slice-gate.py warm --change-dir …</code>；
+2. 用 <code>plan-kit.py instructions --change</code> 一次读取全部 instruction；
+3. 写完 <code>slices.json</code> 后，依次运行 <code>plan-kit.py packets</code>、<code>plan-scaffold.py scaffold</code>；
+4. 补断言：按测试文件分组。多于 1 组时，在同一条消息里为每组派一个 fork；fork 报错或不可用时，由主会话串行补完；只有 1 组时由主会话自己写；
+5. 然后依次运行 <code>plan-scaffold.py gwt</code>（须 exit 0）、<code>plan-kit.py tasks</code>、<code>slice-gate.py lint</code>、<code>model-routing.py pin</code>。</p><p>两份文档的工具调用顺序 MUST 一致。</p><p>Feature: propose 工具链
+Rule: 机械产物由脚本生成，断言由主会话或 fork 写</p><div class="scenario"><p class="scenario-name">Scenario: propose-docs-use-plan-kit-in-order</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>opsx-propose.md</code> 与 <code>openspec-propose/SKILL.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>依次查找 <code>slice-gate.py warm</code>、<code>plan-kit.py instructions</code>、<code>plan-kit.py packets</code>、<code>plan-scaffold.py scaffold</code>、<code>plan-scaffold.py gwt</code>、<code>plan-kit.py tasks</code>、<code>slice-gate.py lint --change-dir</code>、<code>model-routing.py pin</code> 的首次出现位置</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两份文档都含这 8 处，且按此顺序出现</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: propose-docs-fork-with-serial-fallback</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两份 propose 文档</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>取补断言那一段（<code>plan-scaffold.py scaffold</code> 与 <code>plan-scaffold.py gwt</code> 之间）</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>这一段写明按测试文件分组、派发 <code>subagent_type: &quot;fork&quot;</code>、fork 不可用时由主会话串行完成，并点名 <code>PLAN-SCAFFOLD-PLACEHOLDER</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 规划期派发只允许 fork</p><p>规划类命令与 skill 的正文里，每个 <code>subagent_type</code> MUST 是 <code>&quot;fork&quot;</code>，<code>model: &quot;</code> 仍然 MUST NOT 出现。这些文件由 <code>model-routing.py</code> 的规划期组名得出，与 C1 相同。</p><p>Feature: 规划期派发不变式
+Rule: 规划期只能 fork，不能派冷启动或降配子 agent</p><div class="scenario"><p class="scenario-name">Scenario: planning-dispatch-allows-only-fork</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>规划类命令与 skill</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>找出正文里每个 <code>subagent_type</code> 的取值</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>每个取值都是 <code>&quot;fork&quot;</code>，且至少在 propose 文档里出现一次</span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有一个文件含 <code>model: &quot;</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 未补完的骨架不能通过 lint</p><p><code>slice-gate.py lint --change-dir D</code> SHALL 在任何 <code>.py</code> scenario 测试函数仍含 <code>PLAN-SCAFFOLD-PLACEHOLDER</code> 时判红，错误以 <code>skeleton:</code> 开头并点名 <code>path::func</code>。<code>plan-scaffold.py</code> 与 <code>slice-gate.py</code> 识别的占位标记 MUST 是同一个字符串。</p><p>Feature: 骨架红线
+Rule: scaffold 产出的占位断言补完之前不能起飞</p><div class="scenario"><p class="scenario-name">Scenario: lint-rejects-unfilled-scaffold</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个计划，用 <code>plan-scaffold.py scaffold</code> 生成了骨架，尚未补断言</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 非 0，stderr 有以 <code>skeleton:</code> 开头、点名该函数的一条</span></li><li><span class="step-key" data-kw="AND">AND</span><span>把占位那行换成真实断言后再运行 lint，这一条消失</span></li></ul></div></div></div><div class="spec-card"><h3>scenario-scaffold <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 按 scenario 映射生成 strict-xfail 骨架</p><p><code>.claude/hooks/plan-scaffold.py scaffold --change-dir D</code> SHALL 对 <code>scenario_tests</code> 的每一项 <code>path::func</code> 按以下规则处理：
+- <code>path</code> 不是 <code>.py</code> → 列入 <code>skipped</code>，不改文件；
+- 函数已存在 → 列入 <code>existing</code>，不改文件；
+- 否则追加一个函数，列入 <code>created</code>，形式如下：
+  - 带 <code>@pytest.mark.xfail(strict=True, reason=&quot;&lt;切片 id&gt; 未实现&quot;)</code>；
+  - 函数体是 <code># Given:</code> / <code># When:</code> / <code># Then:</code> 三行注释，内容取自对应 scenario 的 Gherkin 原文，AND / BUT 并入它前面那个关键字所在的行；
+  - 最后一行是 <code>assert False, &quot;PLAN-SCAFFOLD-PLACEHOLDER：换成真实断言&quot;</code>。</p><p>文件缺 <code>import pytest</code> 时 SHALL 补上。stdout 输出 <code>{&quot;created&quot;, &quot;existing&quot;, &quot;skipped&quot;}</code>。映射里的 scenario 在 specs 中找不到时 MUST 以 exit 2 退出，并点名该 scenario。</p><p>Feature: 测试骨架生成
+Rule: 只补缺的函数，GWT 取 Gherkin 原文</p><div class="scenario"><p class="scenario-name">Scenario: scaffold-creates-strict-xfail-skeletons</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个计划：S1 有一个 scenario，映射到尚不存在的 <code>tests/test_new.py::test_alpha</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>该 scenario 的 spec 原文是 GIVEN「已有订单」、AND「订单已付款」、WHEN「用户申请退款」、THEN「订单变为退款中」</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-scaffold.py scaffold --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>tests/test_new.py</code> 含 <code>import pytest</code> 与带 <code>strict=True</code> 的 xfail 函数 <code>test_alpha</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>它的 Given 行含「已有订单」与「订单已付款」，When 行含「用户申请退款」，Then 行含「订单变为退款中」，函数体含 <code>PLAN-SCAFFOLD-PLACEHOLDER</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>stdout 的 <code>created</code> 是 <code>[&quot;tests/test_new.py::test_alpha&quot;]</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: scaffold-leaves-existing-functions</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>tests/test_old.py</code> 已有写好断言的 <code>test_beta</code>，计划同时映射 <code>test_beta</code> 与尚不存在的 <code>test_gamma</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>scaffold</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>test_beta</code> 的源码逐字不变，文件末尾多出 <code>test_gamma</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>stdout 的 <code>existing</code> 含 <code>test_beta</code>，<code>created</code> 含 <code>test_gamma</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: scaffold-skips-non-python</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 scenario 映射到 <code>web/a.test.js::renders</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>scaffold</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 的 <code>skipped</code> 含 <code>web/a.test.js::renders</code>，<code>web/a.test.js</code> 没有被创建</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 规划期自查 GWT 与占位残留</p><p><code>plan-scaffold.py gwt --change-dir D</code> SHALL 只针对 <code>scenario_tests</code> 映射到的函数做两项检查，逐条打印问题，有任何一条即 exit 1，全部通过时 exit 0：
+- 用与切片门禁 G4 相同的判据，检查 GWT 注释；
+- 检查函数体里有没有残留 <code>PLAN-SCAFFOLD-PLACEHOLDER</code>。</p><p>Feature: 规划期 G4 自查
+Rule: 骨架补完才算规划完成</p><div class="scenario"><p class="scenario-name">Scenario: gwt-reports-missing-steps-and-placeholders</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个映射函数缺 <code># When:</code> 注释，另一个映射函数仍含 <code>PLAN-SCAFFOLD-PLACEHOLDER</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>plan-scaffold.py gwt --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 1，输出分别点名这两个函数</span></li><li><span class="step-key" data-kw="AND">AND</span><span>把两处都修好后再运行，退出 0</span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p>现状（main @ 03a2077，C1 已合入）：</p><ul><li>propose 的 step 3 要求逐个工件调用 <code>openspec instructions &lt;id&gt; --change &lt;name&gt; --json</code>。openspec 1.3.1 一次只出一个工件，5 个工件就是 5 次工具往返；输出里有 <code>instruction</code> / <code>template</code> / <code>rules</code> 等字段。</li><li>切片包、<code>tasks.md</code>、测试骨架全由模型逐字写，没有生成器。<code>tasks.md</code> 的格式见 <code>schemas/intent-driven/templates/tasks.md</code>：一片一行，<code>- [ ] S&lt;n&gt; &lt;标题&gt; （deps: … · verify: \</code>…\<code>）</code>。</li><li>现有 G4 检查是 <code>slice-gate.py</code> 的 <code>gwt_violations(root, test_files)</code>，切片门禁时才运行；G7 用 <code>scenario_status</code> 判 xfail 标记与实跑结果。</li><li>baseline 的复用候选依次是：本 change 旧基线 → 锚点 → 基线池（<code>_baseline_candidates</code>）。</li><li><strong>本 change 旧基线</strong>（<code>_try_reuse(own=True)</code>）的条件：<code>ok</code> 或 <code>test_ok</code> 为真；<code>cmd_key</code> 相同；Δ 只有 <code>test_*.py</code>。计划工件不算进 Δ（<code>PLAN_FILES</code> / <code>PLAN_DIRS</code>）；本 change 目录里在 gate.test 闭包内、且内容没变的脚本也不算。满足时只补跑 Δ 里的测试文件，允许有预存红，只要改动的测试文件不在预存红里。</li><li><strong>有 <code>test-tiers.json</code> 时</strong>没有任何候选，恒走全量（<code>nocand = args.full or tiers is not None</code>，原设计 D5：G10 / G11 要单元层探针）。</li><li><code>cmd_key</code> 把命令文本与命令直接引用的仓库内文件（含 shell 闭包）的内容做指纹；本 change 的目录名会被归一成 <code>&lt;change&gt;</code>。所以只要文件内容按词边界替换后相同，在另一个 change 目录下的同名包装脚本也算同一个指纹。</li><li><code>cmd_baseline</code> 在取锁之前读旧基线；旧基线是运行标记（<code>running: true</code>）时按 None 处理。preflight 用 pid 判断运行标记是「仍在跑」还是「已中断」。</li><li>afa 的 <code>gate.test</code> 是每个 change 自带的包装脚本（<code>bash openspec/changes/&lt;name&gt;/verify/full_suite.sh</code>），没有分层文件。本仓库是 <code>python3 -m pytest -q tests</code>，也没有分层文件。</li></ul><p>在役 ADR： - <code>DRAFT-baseline-reuse-by-content-fingerprint</code>：本 change 旧基线复用； - <code>DRAFT-baseline-reuse-via-dependency-anchor</code>：锚点； - <code>DRAFT-execution-routing-by-config</code>：规划期只用主会话或 fork。</p><p>本 change 只是给这些规则多提供一个候选、多一种派发方式，不改其中任何一条。</p></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals</strong> - 机械搬运的部分改由脚本生成：instruction 汇总、tasks.md、切片包的机械区、测试骨架。 - 补断言这一步按测试文件用 fork 并行，fork 不可用时由主会话串行补，语义与现状一致。 - baseline 的全量提前到规划开始时在后台跑，正式 baseline 能复用就只补跑骨架。 - 骨架没补完不能起飞（机械红线）。</p><p><strong>Non-Goals</strong> - 不改 baseline 的复用规则；分层仓库不预热。 - 不改 <code>/opsx-continue</code>、schema 的 tasks instruction 与 spec.html。 - 不让 fork 写 proposal / design / specs / ADR / slices.json（Q8-A）。 - 不预估提速分钟数，合入后用探针实测。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><strong><code>plan-kit.py</code></strong>（instructions / tasks / packets）与 <strong><code>plan-scaffold.py</code></strong>（scaffold / gwt）都是新文件。两个文件能在同一个 wave 里并行实现，也不会把 6000 多行的 <code>slice-gate.py</code> 再撑大。</summary></details><details><summary><strong><code>warm</code></strong> 要复用 <code>cmd_baseline</code> 的整套机制</summary><p>快照、指纹、锁、锚点、账本、运行期间改动检测，所以只能放进 <code>slice-gate.py</code>。</p></details><details><summary><strong><code>gwt</code></strong> 按路径加载 <code>slice-gate.py</code>，复用 <code>gwt_violations</code>，不复制判据。</summary></details><details><summary>先运行 <code>openspec status --change &lt;name&gt; --json</code>，取 <code>artifacts</code>；对其中每个 <code>status != &quot;done&quot;</code> 的工件，再运行 <code>openspec instructions &lt;id&gt; --change &lt;name&gt; --json</code>。</summary></details><details><summary>按工件依次打印一节</summary><p><code>## &lt;id&gt; → &lt;outputPath&gt;</code>，下面依次是 instruction、template、rules（rules 为空就省略）。</p></details><details><summary><code>--all</code> 时 done 的工件也打印。</summary></details><details><summary>命令在当前目录运行（与 openspec CLI 一致），任一次失败 → exit 2，stderr 写出失败的命令与它的 stderr。</summary></details><details><summary><strong>格式</strong>与 <code>templates/tasks.md</code> 逐字一致</summary></details><details><summary>文件头是注释行 <code>&lt;!-- 本文件由 slices.json 生成，不要手写编辑；改动请改 slices.json 后重新生成。 --&gt;</code>；</summary></details><details><summary>然后是 <code>## 切片</code>；</summary></details><details><summary>每片一行 <code>- [ ] &lt;id&gt; &lt;title&gt; （deps: &lt;逗号分隔或 -&gt; · verify: \</code>&lt;verify&gt;\<code>）</code>。</summary></details><details><summary>旧 <code>tasks.md</code> 里已勾选（<code>[x]</code>）的切片 id 保持勾选。</summary></details><details><summary>标题行 <code># &lt;S&gt; · &lt;title&gt;</code>；</summary></details><details><summary><code>## owns</code>；</summary></details><details><summary><code>## 依赖的切片</code></summary><p>每个 dep 一行「<code>&lt;dep&gt;</code> · 标题 · 包路径」，没有依赖时写「无」；</p></details><details><summary><code>## scenario</code></summary><p>每个 scenario 一个小节，含能力名、scenario 名、映射的测试 <code>path::func</code>，以及取自 <code>specs/&lt;能力&gt;/spec.md</code> 的 GIVEN / WHEN / THEN / AND / BUT 原文；</p></details><details><summary><code>## verify</code>。</summary></details><details><summary><code>path</code> 不是 <code>.py</code> → 记进 <code>skipped</code>，不动文件；</summary></details><details><summary>函数已存在（与 G7 同样的 <code>def &lt;func&gt;(</code> 匹配）→ 不动；</summary></details><details><summary>否则追加</summary></details><details><summary>AND / BUT 并入它前面那个关键字所在的行；</summary></details><details><summary>函数参数为空，需要 fixture 由补断言的人改；</summary></details><details><summary>新文件写入 docstring</summary><p>「&lt;能力名&gt; 的 scenario 骨架（strict xfail；切片 &lt;S&gt; 实现后去掉标记即解锁）」，再加 <code>import pytest</code>；已有文件缺 <code>import pytest</code> 时，插在最后一条顶层 import 之后（没有 import 就插在 docstring 之后）。</p></details><details><summary><strong>输出</strong></summary><p>stdout 打印 JSON <code>{&quot;created&quot;: [path::func…], &quot;existing&quot;: […], &quot;skipped&quot;: […]}</code>，exit 0。scenario 在 specs 里找不到 → exit 2，点名。</p></details><details><summary><strong>占位标记</strong></summary><p>固定字符串 <code>PLAN-SCAFFOLD-PLACEHOLDER</code>，<code>plan-scaffold.py</code> 与 <code>slice-gate.py</code> 各自定义同名常量。两边一致由 S4 的端到端 scenario 机械保证。</p></details><details><summary><strong><code>plan-scaffold.py gwt --change-dir</code></strong></summary><p>对 <code>scenario_tests</code> 涉及的测试文件跑 <code>gwt_violations</code>，只报映射到的函数；再找函数体里残留的占位标记。逐条打印，有任何一条 → exit 1。</p></details><details><summary><strong><code>slice-gate.py lint</code></strong></summary><p>给了 <code>--change-dir</code> 时，对 <code>.py</code> 的 scenario 测试函数查占位标记，命中 → 判红：<code>skeleton: &lt;path::func&gt; 仍是 scaffold 占位断言</code>。现有夹具不含这个标记，不会扩散。</p></details><details><summary>运行标记与结果都带 <code>&quot;warm&quot;: true</code>；</summary></details><details><summary>结果的 <code>plan_sha</code> 为 null；</summary></details><details><summary>锚点、基线池、账本照常写（它就是一次合法的全量）；</summary></details><details><summary>运行期间的改动检测照旧</summary><p>主会话在预热期间改了已有文件或测试文件 → 结果 <code>ok: false</code>、<code>test_ok: false</code>，不会被复用。</p></details><details><summary>计划的 <code>gate.test</code> 与 warm 打印的命令相同；</summary></details><details><summary>预热之后除计划工件外只改了 <code>test_*.py</code>。</summary></details><details><summary>多于 1 组</summary><p>同一条消息里为每组派一个 fork（Agent 工具，<code>subagent_type: &quot;fork&quot;</code>）。prompt 写明「只改这些文件：把 <code>PLAN-SCAFFOLD-PLACEHOLDER</code> 那行换成真实断言，保留 GWT 注释与 xfail 标记；不碰其他文件；完成后运行 <code>plan-scaffold.py gwt --change-dir …</code>，回报改了哪些函数」。</p></details><details><summary>fork 报错或不可用 → 由主会话串行补完剩下的组。</summary></details><details><summary>只有 1 组 → 主会话自己写。</summary></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[风险] 多个 fork 同时写测试，写法各自为政</strong> → 按文件分组避免互相覆盖；gwt 与 lint 机械验收；不合格的组由主会话接手。</summary></details><details><summary><strong>[风险] fork 在非交互会话里是否默认开启，文档没写</strong> → 每处都有主会话串行回退（铁律 10）。</summary></details><details><summary><strong>[取舍] 预热与规划争 CPU</strong> → 预热与正式 baseline 一样持全机测试锁；锁被别人持有时预热排队，不会叠两套全量。</summary></details><details><summary><strong>[风险] 预热期间改了被测代码</strong> → 运行期间改动检测把结果判为不可复用，正式 baseline 回退到原路径，不会误用。</summary></details><details><summary><strong>[取舍] 有新 ADR 的 change 命不中复用</strong> → 与现状一致，不放宽规则；是否把 <code>openspec/adr/</code> 声明为 inert 由各仓库决定，留作后续。</summary></details><details><summary><strong>[未验证] 提速幅度</strong> → 合入后用审批页第 02 节同一套探针重测 3 次 propose。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><ul><li>合入后：下游 <code>install.sh --upgrade</code> 拿到新的 hooks 与文档即可生效，不需要迁移数据。</li><li>回滚：revert 即可。预热写的 <code>gate-baseline.json</code> 一定会被正式 baseline 覆盖；packets 的标记是注释，旧流程会忽略它。</li></ul></div><div class="design-block"><h3>Open Questions</h3><ul><li>无阻断项。不立新 ADR：工具化归铁律 9（零 token 优先），fork 规则已在 <code>DRAFT-execution-routing-by-config</code>，预热不改任何复用规则。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-execution-routing-by-config.md">DRAFT. 执行层模型按派发用途由仓库配置显式路由，规划期继承主会话</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-executor-turn-tiers-by-owned-files.md">DRAFT. 执行体的轮次上限按切片的现存文件数分两档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-tests-only-rerun-without-graph.md">DRAFT. 没有依赖图时，只改了测试文件的 final 只重跑这些文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-flight-close-reaps-slice-worktrees.md">DRAFT. 飞行收口回收全部临时 worktree，作废尝试先归档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-inert-paths-declared-and-reconciled.md">DRAFT. 与测试无关的路径由仓库声明，并与依赖图对账</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-measurements-stay-out-of-plan-files.md">DRAFT. 脚本测出来的东西不写进计划文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-owns-cap-follows-turn-tier.md">DRAFT. owns 条数上限随轮次档，宽通配要写理由</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-retakeoff-skips-landed-slices.md">DRAFT. 重新起飞时已落地的切片不再派执行体</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-evidence-in-git-common-dir.md">DRAFT. 切片的测试留痕写在 git 共用目录，记录门禁结论时并回分支</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-worktrees-reaped-after-merge.md">DRAFT. 切片临时 worktree 在提交合回后由合回脚本回收</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-ledger-outside-repo-follows-anchors.md">DRAFT. 测试账本：逐用例数据放 git common dir，耗时跟着锚点沿用，入库的只有摘要</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-remediation-tracks.md">DRAFT. 测试整改按去向分三条轨道：机械处置命令内做，放行归人，改用例实现另立 change</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-suite-standard-audited-outside-gates.md">DRAFT. 测试套件的合规标准写成明文规则表，由门禁之外的只读体检来量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-time-budgets-ratchet-on-ledger.md">DRAFT. 时间预算写在分层文件里，集成层按账本做棘轮</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-unmeasured-deps-need-plan-statement.md">DRAFT. 基线的依赖图未测时计划须表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-wave-integration-check-and-cross-slice-fix.md">DRAFT. 每个 wave 合回后做集成检查，红了走工作流内的跨片修复</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>模型路由</h3><p>来源：<code>template/openspec/model-routing.json</code></p><table class="flight-table"><thead><tr><th>键</th><th>模型</th><th>effort</th></tr></thead><tbody><tr><td class="mono">flight.executor</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.executor-large</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.fixer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.integrator</td><td>sonnet</td><td>low</td></tr><tr><td class="mono">ship.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">ship.followup</td><td>opus</td><td>high</td></tr></tbody></table><h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody><tr><td class="mono">S1</td><td>plan-kit.py：instructions 一次取全部待建工件、tasks 由 slices.json 生成并保留勾选、packets 渲染切片包机械区（标记外原样保留）</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/plan-kit.py<br>tests/test_plan_kit.py</td><td><code>python3 -m pytest -q tests/test_plan_kit.py</code></td><td>标准档</td></tr><tr><td class="mono">S2</td><td>plan-scaffold.py：scaffold 按 scenario 映射生成 strict-xfail 骨架（GWT 取 Gherkin 原文、占位标记）、gwt 规划期 G4 与占位自查</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/plan-scaffold.py<br>tests/test_plan_scaffold.py</td><td><code>python3 -m pytest -q tests/test_plan_scaffold.py</code></td><td>标准档</td></tr><tr><td class="mono">S3</td><td>slice-gate.py：warm 预热全量写成本 change 旧基线（沿用最近 change 的 gate.test 与包装脚本、分层仓库跳过）、baseline 等待预热、lint 判 scaffold 占位</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_baseline_warm.py<br>tests/test_lint_placeholder.py</td><td><code>python3 -m pytest -q tests/test_baseline_warm.py tests/test_lint_placeholder.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_anchor_reuse.py tests/test_baseline_skip.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate.py</code></td><td>大片档</td></tr><tr><td class="mono">S4</td><td>propose 命令与 skill 改用工具链（warm → instructions → packets → scaffold → fork 补断言 → gwt → tasks → lint → pin），规划期派发只允许 fork</td><td>wave 2</td><td>S1, S2, S3</td><td>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>tests/test_propose_toolchain.py<br>tests/test_routing_docs.py</td><td><code>python3 -m pytest -q tests/test_propose_toolchain.py tests/test_routing_docs.py tests/test_template_docs.py tests/test_approval_gate.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py</code></td><td>标准档</td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>plan-kit-commands#kit-instructions-prints-pending-artifacts</td><td><code>tests/test_plan_kit.py::test_kit_instructions_prints_pending_artifacts</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>plan-kit-commands#kit-instructions-fails-loud</td><td><code>tests/test_plan_kit.py::test_kit_instructions_fails_loud</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>plan-kit-commands#kit-tasks-generates-from-slices</td><td><code>tests/test_plan_kit.py::test_kit_tasks_generates_from_slices</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>plan-kit-commands#kit-tasks-keeps-checked-state</td><td><code>tests/test_plan_kit.py::test_kit_tasks_keeps_checked_state</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>plan-kit-commands#kit-packets-renders-mechanical-region</td><td><code>tests/test_plan_kit.py::test_kit_packets_renders_mechanical_region</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>plan-kit-commands#kit-packets-preserves-notes</td><td><code>tests/test_plan_kit.py::test_kit_packets_preserves_notes</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>scenario-scaffold#scaffold-creates-strict-xfail-skeletons</td><td><code>tests/test_plan_scaffold.py::test_scaffold_creates_strict_xfail_skeletons</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>scenario-scaffold#scaffold-leaves-existing-functions</td><td><code>tests/test_plan_scaffold.py::test_scaffold_leaves_existing_functions</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>scenario-scaffold#scaffold-skips-non-python</td><td><code>tests/test_plan_scaffold.py::test_scaffold_skips_non_python</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>scenario-scaffold#gwt-reports-missing-steps-and-placeholders</td><td><code>tests/test_plan_scaffold.py::test_gwt_reports_missing_steps_and_placeholders</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>baseline-warm#warm-runs-full-suite-as-own-baseline</td><td><code>tests/test_baseline_warm.py::test_warm_runs_full_suite_as_own_baseline</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>baseline-warm#warm-adopts-latest-change-wrapper</td><td><code>tests/test_baseline_warm.py::test_warm_adopts_latest_change_wrapper</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>baseline-warm#warm-skips-tiered-repo</td><td><code>tests/test_baseline_warm.py::test_warm_skips_tiered_repo</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>baseline-warm#baseline-reuses-warm-when-only-tests-changed</td><td><code>tests/test_baseline_warm.py::test_baseline_reuses_warm_when_only_tests_changed</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>baseline-warm#baseline-waits-for-running-warm</td><td><code>tests/test_baseline_warm.py::test_baseline_waits_for_running_warm</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>propose-fork-assertions#propose-docs-use-plan-kit-in-order</td><td><code>tests/test_propose_toolchain.py::test_propose_docs_use_plan_kit_in_order</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>propose-fork-assertions#propose-docs-fork-with-serial-fallback</td><td><code>tests/test_propose_toolchain.py::test_propose_docs_fork_with_serial_fallback</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>propose-fork-assertions#planning-dispatch-allows-only-fork</td><td><code>tests/test_propose_toolchain.py::test_planning_dispatch_allows_only_fork</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>propose-fork-assertions#lint-rejects-unfilled-scaffold</td><td><code>tests/test_propose_toolchain.py::test_lint_rejects_unfilled_scaffold</code></td><td><span class="chip" data-state="pending">pending</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>incremental</code></td><td>-</td><td>131.6</td></tr><tr><td>final</td><td><code>incremental</code></td><td>锚点 dc6c26a128，Δ 34 个文件</td><td>-</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><table class="flight-table"><thead><tr><th>时间</th><th>事件</th><th>备注</th></tr></thead><tbody><tr><td class="mono">2026-11-19T15:11:29Z</td><td>baseline</td><td>增量（经锚点 model-routing-config@dc6c26a128，补跑 51 个测试文件 131.6s） red；排队 0.0s · 负载 6.1→4.7/18</td></tr></tbody></table>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 plan-kit.py：instructions 一次取全部待建工件、tasks 由 slices.json 生成并保留勾选、packets 渲染切片包机械区（标记外原样保留） （deps: - · verify: <code>python3 -m pytest -q tests/test_plan_kit.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 plan-scaffold.py：scaffold 按 scenario 映射生成 strict-xfail 骨架（GWT 取 Gherkin 原文、占位标记）、gwt 规划期 G4 与占位自查 （deps: - · verify: <code>python3 -m pytest -q tests/test_plan_scaffold.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 slice-gate.py：warm 预热全量写成本 change 旧基线（沿用最近 change 的 gate.test 与包装脚本、分层仓库跳过）、baseline 等待预热、lint 判 scaffold 占位 （deps: - · verify: <code>python3 -m pytest -q tests/test_baseline_warm.py tests/test_lint_placeholder.py tests/test_baseline_incremental.py tests/test_baseline_pool.py tests/test_baseline_anchor_reuse.py tests/test_baseline_skip.py tests/test_slice_gate_baseline_preflight.py tests/test_slice_gate.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 propose 命令与 skill 改用工具链（warm → instructions → packets → scaffold → fork 补断言 → gwt → tasks → lint → pin），规划期派发只允许 fork （deps: S1, S2, S3 · verify: <code>python3 -m pytest -q tests/test_propose_toolchain.py tests/test_routing_docs.py tests/test_template_docs.py tests/test_approval_gate.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-19 15:12 · 章节 8 · 图示 0 · 任务 4
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
