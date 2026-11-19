@@ -23,10 +23,14 @@
 #   render     --probe PATH --plan PATH --out PATH
 #              按划分稿（{tiers, moves}）推算每个探针用例的落点与所属层（部件形态标「部件/unit」或区域名），
 #              写单文件审批页（内联 CSS、导出 Markdown / 复制）
+#   audit      [--openspec-root DIR] [--change-dir DIR | --ledger PATH | --no-ledger] [--probe PATH]... [--json] [--out PATH]
+#              只读体检（change test-audit）：分层文件 + 测试文件清单 + 一份测量（账本 ∪ 探针）按当前工作树重新归层，
+#              按 AUDIT_RULES 列出不合规项与提示；不跑测试、不取测试锁、不写分层文件与账本（--out 除外）
 #
-# 退出码：0 成立 / 无问题；1 有问题（run unit 有部件非 0、check 点名、canary 未通过、render 落点不合规）；
+# 退出码：0 成立 / 无问题；1 有问题（run unit 有部件非 0、check 点名、canary 未通过、render 落点不合规、audit 有不合规项）；
 #         2 输入不可用（分层文件缺失或不合法、部件不存在或没有 probe、probe.cmd 里没有仓库内文件、探针不可度量、
-#         理由为空、--limit-sec / --expires 不合法、文件读不了）；3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）。
+#         理由为空、--limit-sec / --expires 不合法、文件读不了；audit 的分层文件不合法、账本 / 探针 / change 目录读不了）；
+#         3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）。
 #
 # 复用 slice-gate.py 与 takeoff-gate.py 的判定（按路径加载），只读不改它们。兼容 Python 3.8+，只用标准库。
 import argparse
@@ -34,6 +38,7 @@ import datetime
 import html
 import importlib.util
 import json
+import math
 import os
 import posixpath
 import re
@@ -58,6 +63,7 @@ def _load(name):
 
 sg = _load("slice-gate")
 tg = _load("takeoff-gate")
+tl = _load("test-ledger")
 
 
 def fail(msg, code=2):
@@ -144,55 +150,66 @@ def _probe(args, top, root):
 
 def check_parts(top, tiers, listed):
     """部件形态（design D4）：全仓测试文件 = 内置命名 ∪ 各部件测试文件，去掉金丝雀；逐个判恰属一个部件、在该部件内恰落一层。
-    → (测试文件数, 问题行)。"""
+    → (测试文件数, {恰落一层的文件: 层}, [(文件, 问题行)])。"""
     paths = sorted(p for p in set(listed)
                    if not sg.is_canary(tiers, p) and (sg.TIER_TEST_NAME_RE.search(p) or sg.parts_of(top, tiers, p)))
-    problems = []
+    placed, problems = {}, []
     for p in paths:
         owners = sg.parts_of(top, tiers, p)
         if not owners:
-            problems.append("不属于任何部件：%s" % p)
+            problems.append((p, "不属于任何部件：%s" % p))
             continue
         if len(owners) > 1:
-            problems.append("属于多个部件：%s（%s）" % (p, "、".join(owners)))
+            problems.append((p, "属于多个部件：%s（%s）" % (p, "、".join(owners))))
             continue
         part = tiers["parts"][owners[0]]
         layers = [("unit", part["unit"])] + sorted((part.get("regions") or {}).items())
         try:
             hit = [n for n, layer in layers if sg.layer_matches(top, part, layer, p)]
         except RuntimeError as e:
-            problems.append("无法判定所在层：%s（list 失败：%s）" % (p, e))
+            problems.append((p, "无法判定所在层：%s（list 失败：%s）" % (p, e)))
             continue
         if not hit:
-            problems.append("未归层：%s" % p)
+            problems.append((p, "未归层：%s" % p))
         elif len(hit) > 1:
-            problems.append("匹配多层：%s（%s）" % (p, "、".join(hit)))
-    return len(paths), problems
+            problems.append((p, "匹配多层：%s（%s）" % (p, "、".join(hit))))
+        else:
+            placed[p] = hit[0]
+    return len(paths), placed, problems
+
+
+def layering(top, tiers, listed):
+    """check 的判据（简写 / 部件两形态同一出口）→ (测试文件数, {恰落一层的文件: 层}, [(文件, 问题行)])。"""
+    if sg.tiers_is_parts(tiers):
+        return check_parts(top, tiers, listed)
+    paths = sorted(p for p in set(listed) if sg.TEST_FILE_RE.search(p))
+    placed, problems = {}, []
+    for p in paths:
+        layers = sg.tiers_matching(p, tiers)
+        if not layers:
+            problems.append((p, "未归层：%s" % p))
+        elif len(layers) > 1:
+            problems.append((p, "匹配多层：%s（%s）" % (p, "、".join(layers))))
+        else:
+            placed[p] = layers[0]
+    return len(paths), placed, problems
+
+
+def listed_files(root):
+    return sg.git(root, "ls-files", "--cached", "--others", "--exclude-standard").splitlines()
 
 
 def cmd_check(args):
     _, tiers = load_tiers(args)
     root = sg.toplevel()
-    listed = sg.git(root, "ls-files", "--cached", "--others", "--exclude-standard").splitlines()
-    if sg.tiers_is_parts(tiers):
-        n, problems = check_parts(root, tiers, listed)
-        if problems:
-            print("\n".join(problems))
-            return 1
-        print("全部 %d 个测试文件恰属一个部件、恰落一层" % n)
-        return 0
-    paths = sorted(p for p in set(listed) if sg.TEST_FILE_RE.search(p))
-    problems = []
-    for p in paths:
-        layers = sg.tiers_matching(p, tiers)
-        if not layers:
-            problems.append("未归层：%s" % p)
-        elif len(layers) > 1:
-            problems.append("匹配多层：%s（%s）" % (p, "、".join(layers)))
+    n, _, problems = layering(root, tiers, listed_files(root))
     if problems:
-        print("\n".join(problems))
+        print("\n".join(text for _, text in problems))
         return 1
-    print("全部 %d 个测试文件恰好归一层" % len(paths))
+    if sg.tiers_is_parts(tiers):
+        print("全部 %d 个测试文件恰属一个部件、恰落一层" % n)
+    else:
+        print("全部 %d 个测试文件恰好归一层" % n)
     return 0
 
 
@@ -463,6 +480,244 @@ def cmd_render(args):
     return 1 if problems else 0
 
 
+# ---------------------------------------------------------------- audit
+
+AUDIT_RULES = {
+    "no-tiers": {"rule": "R1", "level": "violation", "fix": [], "title": "没有分层文件"},
+    "layering": {"rule": "R2", "level": "violation", "fix": ["move", "retier"], "title": "测试文件归层有误"},
+    "unit-impure": {"rule": "R3", "level": "violation", "fix": ["purify", "move", "split"], "title": "单元层用例有触碰"},
+    "unit-slow": {"rule": "R4", "level": "violation", "fix": ["speedup", "move", "allow"], "title": "单元层用例超线"},
+    "no-case-limit": {"rule": "R5", "level": "violation", "fix": ["budget"], "title": "集成区域没写单条上限"},
+    "region-slow": {"rule": "R6", "level": "violation", "fix": ["speedup", "allow", "delete"], "title": "集成区域用例超线"},
+    "total-over": {"rule": "R7", "level": "violation", "fix": ["speedup", "delete", "budget"], "title": "范围合计超预算"},
+    "allow-stale": {"rule": "R8", "level": "violation", "fix": ["drop-allow"], "title": "放行所指文件已不存在"},
+    "allow-expired": {"rule": "R8", "level": "violation", "fix": ["allow", "speedup", "move", "drop-allow"],
+                      "title": "放行已过期"},
+    "allow-unbounded": {"rule": "R8", "level": "violation", "fix": ["allow", "drop-allow"], "title": "放行缺上限或期限"},
+    "allow-soon": {"rule": None, "level": "advice", "fix": [], "title": "放行快到期"},
+    "allow-unneeded": {"rule": None, "level": "advice", "fix": ["drop-allow"], "title": "放行已不需要"},
+    "pure-in-region": {"rule": None, "level": "advice", "fix": ["move", "split"], "title": "区域里有无触碰的快用例"},
+    "purity-unchecked": {"rule": None, "level": "advice", "fix": [], "title": "纯度未核对"},
+    "gwt-missing": {"rule": None, "level": "advice", "fix": [], "title": "用例缺 Given / When / Then 注释"},
+    "unjudged": {"rule": None, "level": "unjudged", "fix": [], "title": "判不了"},
+}
+LEVEL_TEXT = {"violation": "不合规", "advice": "提示", "unjudged": "未判"}
+
+
+def audit_item(cat, key, text, scope=None, case=None, file=None, sec=None, line=None):
+    r = AUDIT_RULES[cat]
+    return {"id": "%s:%s" % (cat, key), "category": cat, "rule": r["rule"], "level": r["level"], "scope": scope,
+            "case": case, "file": file, "sec": sec, "line": line, "text": text, "fix": list(r["fix"])}
+
+
+def _looks_like_path(s):
+    return "/" in s or bool(os.path.splitext(s)[1])
+
+
+def _rank(xs, p):
+    """最近秩分位数；xs 已排序。"""
+    return xs[max(0, int(math.ceil(p * len(xs))) - 1)] if xs else None
+
+
+def pick_ledger(args, top):
+    """账本选取：--no-ledger > --ledger > --change-dir（收口，没有则基线）> 本机 at 最新 → (账本, change, phase)。"""
+    if args.no_ledger:
+        return None, None, None
+    if args.ledger:
+        led = read_json(args.ledger, "账本")
+        if not isinstance(led, dict) or not isinstance(led.get("cases"), dict):
+            fail("账本 %s 不是含 cases 的对象" % args.ledger)
+        return led, led.get("change"), led.get("phase")
+    if args.change_dir:
+        if not os.path.isdir(args.change_dir):
+            fail("--change-dir %s 不是存在的目录" % args.change_dir)
+        name = os.path.basename(os.path.normpath(os.path.abspath(args.change_dir)))
+        for phase in tl.PHASES:
+            led = tl.load(top, name, phase)
+            if led is not None:
+                return led, name, phase
+        return None, None, None
+    try:
+        names = sorted(os.listdir(tl.ledger_dir(top)))
+    except (RuntimeError, OSError):
+        return None, None, None
+    best = (None, None, None)
+    for name in names:
+        for phase in tl.PHASES:
+            led = tl.load(top, name, phase)
+            if led is not None and (best[0] is None or str(led.get("at") or "") > str(best[0].get("at") or "")):
+                best = (led, name, phase)
+    return best
+
+
+def load_probes(args):
+    out = []
+    for path in args.probe or []:
+        obj = read_json(path, "探针结果")
+        if not isinstance(obj, dict) or not isinstance(obj.get("tests"), dict):
+            fail("探针结果 %s 不是含 tests 的对象" % path)
+        out.append(obj["tests"])
+    return out
+
+
+def case_table(top, tiers, led, probes):
+    """账本 ∪ 探针 → ({用例 id: {s, t, hits, file}}, id 形式, 丢弃的用例 id 集合)；层按当前分层文件由所在文件重新归层。"""
+    form = (led or {}).get("id_form") or "nodeid"
+    table, dropped = {}, set()
+
+    def place(cid, cand, recorded):
+        if cand and os.path.isfile(os.path.join(top, cand)):
+            return (sg.tiers_matching(cand, tiers, top) or [None])[0], cand
+        if cand and _looks_like_path(cand):
+            dropped.add(cid)
+            return None
+        return (None if recorded == tl.NO_TIER else recorded), None
+
+    for cid, c in sorted(((led or {}).get("cases") or {}).items()):
+        cand = tl._file_of(cid, form, top) if form == "junit" else cid.split("::", 1)[0]
+        got = place(cid, cand, c.get("t"))
+        if got is not None:
+            table[cid] = {"s": c.get("s"), "t": got[0], "hits": None, "file": got[1]}
+    for tests in probes:
+        for nid, rec in sorted(tests.items()):
+            cid = tl._to_junit(nid) if form == "junit" else nid
+            got = place(cid, nid.split("::", 1)[0], (table.get(cid) or {}).get("t"))
+            if got is not None:
+                table[cid] = {"s": rec.get("sec"), "t": got[0], "hits": rec.get("hits") or {}, "file": got[1]}
+    return table, form, dropped
+
+
+def _head(top):
+    try:
+        return sg.git(top, "rev-parse", "--verify", "-q", "HEAD") or None
+    except RuntimeError:
+        return None
+
+
+def audit_report(top, tiers, led, probes):
+    """体检主体（只读）→ (items, scopes, allow 段, source 的 cases / dropped)。"""
+    table, form, dropped = case_table(top, tiers, led, probes)
+    budgets, scope_of = sg.tier_budgets(tiers), sg.budget_scope_of(tiers)
+    aview = sg.allow_view(tiers.get("slow_allow") or {})
+    like = {"cases": {cid: {"s": c["s"], "t": c["t"], "m": 1} for cid, c in table.items()},
+            "id_form": form, "complete": True, "mode": "full"}
+    items = []
+    _, _, problems = layering(top, tiers, listed_files(top))
+    items.extend(audit_item("layering", f, text, file=f) for f, text in problems)
+    for v in tl.violations(like, budgets, scope_of, aview):
+        cat = "unit-slow" if v["kind"] == "unit" else "region-slow"
+        items.append(audit_item(cat, v["case"], "%s %.1fs，超出%s %ss"
+                                % (v["case"], v["sec"], "放行上限" if v["by"] == "allow" else "单条上限", tl._g(v["line"])),
+                                scope=v["scope"], case=v["case"], file=table[v["case"]]["file"],
+                                sec=v["sec"], line=v["line"]))
+    for sc in sorted(budgets):
+        if budgets[sc]["kind"] == "region" and budgets[sc]["case_sec"] is None:
+            items.append(audit_item("no-case-limit", sc, "区域 %s 没写单条上限 budget.case_sec" % sc, scope=sc))
+    b = tl.budget(like, None, budgets, scope_of, aview, "baseline")
+    secs = {}
+    for cid, c in table.items():
+        sc = scope_of(cid, c["t"])
+        if sc in budgets and c["s"] is not None:
+            secs.setdefault(sc, []).append(c["s"])
+    scopes = {}
+    for sc in sorted(b["totals"]):
+        tot, xs = b["totals"][sc], sorted(secs.get(sc, []))
+        scopes[sc] = {"kind": tot["kind"], "cases": tot["cases"], "sec": tot["sec"], "no_sec": tot["no_sec"],
+                      "case_sec": budgets[sc]["case_sec"], "total_sec": tot["budget"], "over": tot["over"],
+                      "p50": _rank(xs, 0.5), "p95": _rank(xs, 0.95), "max": xs[-1] if xs else None}
+        if tot["over"]:
+            label = "区域 %s" % sc if tot["kind"] == "region" else tl._part_label(sc)
+            items.append(audit_item("total-over", sc, "%s 合计 %.1fs，超过总量预算 %ss"
+                                    % (label, tot["sec"], tl._g(tot["budget"])),
+                                    scope=sc, sec=tot["sec"], line=tot["budget"]))
+    part_names = set(tiers["parts"]) if sg.tiers_is_parts(tiers) else set()
+    for key in sorted(aview):
+        a, head = aview[key], key.split("::", 1)[0]
+        c = table.get(tl._to_junit(key) if form == "junit" else key)
+        if _looks_like_path(head) and head not in part_names and not os.path.isfile(os.path.join(top, head)):
+            cat, text = "allow-stale", "放行 %s 所指的测试文件 %s 已不存在" % (key, head)
+        elif a["expired"]:
+            cat, text = "allow-expired", "放行 %s 已于 %s 过期" % (key, a["expires"])
+        elif a["limit"] is None or a["expires"] is None:
+            miss = "、".join(n for n, v in (("limit_sec", a["limit"]), ("expires", a["expires"])) if v is None)
+            cat, text = "allow-unbounded", "放行 %s 缺 %s" % (key, miss)
+        elif a["soon"]:
+            cat, text = "allow-soon", "放行 %s 将于 %s 到期" % (key, a["expires"])
+        else:
+            continue
+        items.append(audit_item(cat, key, text, scope=scope_of(key, c["t"]) if c else None, case=key,
+                                file=c["file"] if c else None, sec=c["s"] if c else None))
+    if probes:
+        pure = {}
+        for cid in sorted(table):
+            c = table[cid]
+            if c["hits"] is None:
+                continue
+            sc = scope_of(cid, c["t"])
+            kind = (budgets.get(sc) or {}).get("kind")
+            if c["hits"] and kind == "unit":
+                k = sorted(c["hits"])[0]
+                items.append(audit_item("unit-impure", cid, "%s 在单元层却有触碰：%s：%s" % (cid, k, c["hits"][k]),
+                                        scope=sc, case=cid, file=c["file"], sec=c["s"]))
+            elif not c["hits"] and kind == "region" and c["file"] and c["s"] is not None and c["s"] < sg.UNIT_MAX_SEC:
+                pure.setdefault((c["file"], sc), []).append(cid)
+        for (f, sc), cids in sorted(pure.items()):
+            items.append(audit_item("pure-in-region", f, "区域 %s 的 %s 里有 %d 条用例无触碰且低于 %gs（如 %s）"
+                                    % (sc, f, len(cids), sg.UNIT_MAX_SEC, cids[0]), scope=sc, file=f))
+    else:
+        items.append(audit_item("purity-unchecked", "", "没有探针结果，单元层纯度未在体检里核对"
+                                                        "（可加 --probe <test-tiers.py probe --json 的结果>）"))
+    order = list(AUDIT_RULES)
+    items.sort(key=lambda it: order.index(it["category"]))
+    return items, scopes, b["allow"], len(table), len(dropped)
+
+
+def emit_audit(args, rep):
+    counts = {lv: sum(1 for it in rep["items"] if it["level"] == lv) for lv in LEVEL_TEXT}
+    by_cat = {}
+    for it in rep["items"]:
+        by_cat[it["category"]] = by_cat.get(it["category"], 0) + 1
+    counts["by_category"] = by_cat
+    rep["counts"] = counts
+    rep["verdict"] = "violations" if counts["violation"] else "compliant"
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(rep, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+    if args.json:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        led = rep["source"]["ledger"]
+        print("测试体检：不合规 %d 条 · 提示 %d 条 · 未判 %d 项" % (counts["violation"], counts["advice"], counts["unjudged"]))
+        print("测量来源：%s；探针 %d 份；用例 %d 条；丢弃 %d 条"
+              % ("账本 %s · %s · %s" % (led["change"], led["phase"], led["at"]) if led else "无账本",
+                 rep["source"]["probes"], rep["source"]["cases"], rep["source"]["dropped"]))
+        for it in rep["items"]:
+            print("[%s] %s  %s" % (LEVEL_TEXT[it["level"]], it["id"], it["text"]))
+        print("结论：%s" % ("不合规" if counts["violation"] else "合规"))
+    return 1 if counts["violation"] else 0
+
+
+def cmd_audit(args):
+    top = sg.toplevel()
+    led, change, phase = pick_ledger(args, top)
+    probes = load_probes(args)
+    meta = None if led is None else dict({"change": change, "phase": phase},
+                                         **{k: led.get(k) for k in ("commit", "at", "mode", "complete", "id_form")})
+    rep = {"v": 1, "at": sg.now_iso(), "head": _head(top), "form": "none", "verdict": None,
+           "source": {"ledger": meta, "probes": len(probes), "cases": 0, "dropped": 0},
+           "counts": None, "items": [], "scopes": {}, "allow": None}
+    path = tiers_path(args)
+    if not os.path.isfile(path):
+        rep["items"] = [audit_item("no-tiers", "", "没有测试分层文件 %s：先跑 /test-tiers 划分测试层" % path)]
+        return emit_audit(args, rep)
+    _, tiers = load_tiers(args)
+    rep["form"] = "parts" if sg.tiers_is_parts(tiers) else "shorthand"
+    rep["items"], rep["scopes"], rep["allow"], rep["source"]["cases"], rep["source"]["dropped"] = \
+        audit_report(top, tiers, led, probes)
+    return emit_audit(args, rep)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="test-tiers.py")
     sub = ap.add_subparsers(dest="command")
@@ -495,9 +750,22 @@ def main(argv=None):
     p.add_argument("--probe", required=True)
     p.add_argument("--plan", required=True)
     p.add_argument("--out", required=True)
+    p = sub.add_parser("audit")
+    p.add_argument("--openspec-root")
+    p.add_argument("--change-dir")
+    p.add_argument("--ledger")
+    p.add_argument("--no-ledger", action="store_true")
+    p.add_argument("--probe", action="append")
+    p.add_argument("--scope", action="append")
+    p.add_argument("--category", action="append")
+    p.add_argument("--top", type=int)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--out")
+    p.add_argument("--compare")
+    p.add_argument("--plan")
     args = ap.parse_args(argv)
     handler = {"run": cmd_run, "probe": cmd_probe, "check": cmd_check, "canary": cmd_canary,
-               "allow-slow": cmd_allow_slow, "render": cmd_render}[args.command]
+               "allow-slow": cmd_allow_slow, "render": cmd_render, "audit": cmd_audit}[args.command]
     return handler(args)
 
 
