@@ -16,3 +16,6 @@
 2026-11-19T14:25:03Z	apply-done	blocked=0 blocking=0
 2026-11-19T14:25:37Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
 2026-11-19T14:25:41Z	ship	ready
+2026-11-19T14:26:27Z	ship	ready
+2026-11-19T14:26:58Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/26
+2026-11-19T14:33:04Z	ship	ready
