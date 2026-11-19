@@ -70,6 +70,10 @@
 #                                              有测试要跑持独占锁，否则共享锁；不写锚点、不落账；--fix-base：列 SHA..HEAD 的文件与 owns 外的文件，
 #                                              飞行记录文件判 G6、SHA 不存在或非 HEAD 祖先判 G0（跳过守护与测试）；
 #                                              追加 gate-report.md（切片列 wave）与时间线 wave-check 事件；退出码按 ok
+#   reap     --change-dir DIR                 飞行收口：在 change 家回收本次飞行（切片标记或本 change 飞行记录改动为证）的临时 worktree；
+#                                              锁定 / 含自有子仓克隆 → kept；HEAD 已并入 change 家 → _reap_one + 分支 -d；否则先归档到
+#                                              refs/flight/<change>/attic/<目录名> 再回收；打印 {ok, reaped, archived, kept, freed_kb, warnings}、
+#                                              时间线 reap 事件；恒 exit 0
 #
 # G2 差分：gate / final 的 lint / typecheck 非 0 时，与 gate-baseline.json 里规范化后的输出行比对，只为新增行判红；
 #          无基线或该项基线为 null 时行为不变（直接判红）。
@@ -5589,6 +5593,167 @@ def cmd_merge(args):
     sys.exit(0 if ok else 1)
 
 
+def _git_dir_abs(base, flag):
+    """git -C base rev-parse <flag>（--git-dir / --git-common-dir）→ 绝对 realpath；失败 → None。"""
+    r = _run_git(base, "rev-parse", flag)
+    out = r.stdout.strip()
+    return os.path.realpath(os.path.join(base, out)) if r.returncode == 0 and out else None
+
+
+def _within(path, top):
+    return bool(path and top) and (path == top or path.startswith(top.rstrip(os.sep) + os.sep))
+
+
+def _own_sub_clone(root, wt):
+    """wt 里自己初始化的子仓克隆（非 change 家借出的子仓 worktree）→ 第一个路径；没有 → None（design D5）。"""
+    wt_gitdir = None
+    for p in sorted(_gitlinks(wt)):
+        if not _sub_ready(wt, p):
+            continue
+        common = _git_dir_abs(os.path.join(wt, p), "--git-common-dir")
+        home = _git_dir_abs(os.path.join(root, p), "--git-common-dir") if _sub_ready(root, p) else None
+        if wt_gitdir is None:
+            wt_gitdir = _git_dir_abs(wt, "--git-dir")
+        if not _within(common, home) and _within(common, wt_gitdir):
+            return p
+    return None
+
+
+def _disk_bytes(top):
+    """top 下全部文件（不跟随符号链接）的磁盘占用 → 字节数。"""
+    total = 0
+    for d, _, files in os.walk(top, followlinks=False):
+        for name in files:
+            try:
+                st = os.lstat(os.path.join(d, name))
+            except OSError:
+                continue
+            blocks = getattr(st, "st_blocks", None)
+            total += blocks * 512 if blocks is not None else st.st_size
+    return total
+
+
+def _attic(wt, head, change, keep):
+    """作废尝试归档（design D4）：keep 为空 → HEAD；否则临时索引把 keep 写成以 HEAD 为父的提交。→ (ref, tip)。"""
+    tip = head
+    if keep:
+        tmp = tempfile.mkdtemp(prefix="flight-attic-")
+        try:
+            env = dict(os.environ, GIT_INDEX_FILE=os.path.join(tmp, "index"))
+
+            def run(*args):
+                r = subprocess.run(["git", "-C", wt, *args], capture_output=True, text=True, env=env)
+                if r.returncode != 0:
+                    raise RuntimeError("git %s: %s" % (args[0], _first_line(r.stderr, "失败")))
+                return r.stdout.strip()
+
+            run("read-tree", "HEAD")
+            run("add", "-A", "--", *keep)
+            tree = run("write-tree")
+            tip = run("commit-tree", tree, "-p", "HEAD", "-m",
+                      "attic: %s 的未提交改动（reap 归档）" % os.path.basename(wt))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    ref = "refs/flight/%s/attic/%s" % (change, os.path.basename(wt))
+    old = _run_git(wt, "rev-parse", "-q", "--verify", ref).stdout.strip()
+    if old and old != tip:
+        ref = "%s-%s" % (ref, head[:7])
+    git(wt, "update-ref", ref, tip)
+    return ref, tip
+
+
+def cmd_reap(args):
+    """飞行收口回收本次飞行的临时 worktree（design D1–D6）：已落地直接回收，作废尝试先归档再回收。恒 exit 0。"""
+    reaped, archived, kept, warnings = [], [], [], []
+    freed = 0
+    try:
+        r = _run_git(os.getcwd(), "rev-parse", "--show-toplevel")
+        root = r.stdout.strip()
+        if r.returncode != 0 or not root:
+            warnings.append("reap: 不在 git 仓库内：%s" % _first_line(r.stderr, "?"))
+        elif not os.path.isdir(args.change_dir):
+            warnings.append("reap: change 目录不存在：%s" % args.change_dir)
+        else:
+            change = os.path.basename(os.path.abspath(args.change_dir).rstrip(os.sep))
+            here = os.path.realpath(root)
+            root_head = git(root, "rev-parse", "HEAD")
+            blocks = git(root, "worktree", "list", "--porcelain").split("\n\n")
+            for i, block in enumerate(blocks):
+                lines = block.splitlines()
+                wt = next((x[len("worktree "):] for x in lines if x.startswith("worktree ")), None)
+                if i == 0 or not wt or os.path.realpath(wt) == here or "bare" in lines or not os.path.isdir(wt):
+                    continue
+                try:
+                    freed += _reap_close_one(root, wt, lines, change, root_head, reaped, archived, kept, warnings)
+                except Exception as e:  # noqa: BLE001 回收是善后，单间失败不影响其余
+                    kept.append({"path": wt, "why": str(e)})
+            timeline_record(args.change_dir, "reap", "回收 %d 个 · 释放 %.1f MB · 归档 %d 个 · 保留 %d 个" % (
+                len(reaped), freed / 1024.0 / 1024.0, len(archived), len(kept)))
+    except Exception as e:  # noqa: BLE001
+        warnings.append("reap: %s" % e)
+    print(json.dumps({"ok": True, "reaped": reaped, "archived": archived, "kept": kept,
+                      "freed_kb": int(freed // 1024), "warnings": warnings}, ensure_ascii=False))
+    return 0
+
+
+def _reap_close_one(root, wt, lines, change, root_head, reaped, archived, kept, warnings):
+    """收口回收一间 worktree；不属于本次飞行的不碰。→ 释放的字节数。"""
+    entries = _status_entries(wt)
+    mine = False
+    try:
+        with open(os.path.join(wt, MARKER), "r", encoding="utf-8") as f:
+            mark = json.load(f)
+        mine = os.path.basename(os.path.abspath(str(mark.get("change_dir", ""))).rstrip(os.sep)) == change
+    except (OSError, ValueError, AttributeError):
+        pass
+    if not mine:
+        for _, p in entries:
+            parts = p.split("/")
+            if len(parts) >= 3 and parts[-3] == "changes" and parts[-2] == change and parts[-1] in FLIGHT_RECORDS:
+                mine = True
+                break
+    if not mine:
+        return 0
+    if any(x == "locked" or x.startswith("locked ") for x in lines):
+        kept.append({"path": wt, "why": "已锁定"})
+        return 0
+    own = _own_sub_clone(root, wt)
+    if own:
+        kept.append({"path": wt, "why": "含自有子仓克隆 %s，交 /clean-after-merged" % own})
+        return 0
+    size = _disk_bytes(wt)
+    head = next((x[len("HEAD "):] for x in lines if x.startswith("HEAD ")), None) or git(wt, "rev-parse", "HEAD")
+    branch = next((x[len("branch refs/heads/"):] for x in lines if x.startswith("branch refs/heads/")), None)
+
+    def why():
+        return next((w for w in reversed(warnings) if wt in w), "回收失败")
+
+    if _is_ancestor(root, head, root_head):
+        if not _reap_one(root, wt, warnings):
+            kept.append({"path": wt, "why": why()})
+            return 0
+        reaped.append(wt)
+        if branch and _run_git(root, "rev-parse", "-q", "--verify", "refs/heads/" + branch).stdout.strip() == head:
+            d = _run_git(root, "branch", "-d", branch)
+            if d.returncode != 0:
+                warnings.append("未回收分支 %s：%s" % (branch, _first_line(d.stderr, "git branch -d 失败")))
+        return size
+    links = _gitlinks(wt)
+    keep = [(xy, p) for xy, p in entries if p not in links and not _flight_dirt(xy, p)]
+    ref, _ = _attic(wt, head, change, [p for _, p in keep])
+    for xy, p in keep:
+        if xy == "??":
+            _drop_untracked(wt, [p])
+        else:
+            _run_git(wt, "checkout", "--", p)
+    if not _reap_one(root, wt, warnings):
+        kept.append({"path": wt, "why": why()})
+        return 0
+    reaped.append(wt)
+    archived.append({"path": wt, "ref": ref})
+    return size
+
+
 def cmd_preflight(args):
     """起飞前四项校验：计划合法、基线存在且绿、基线未过期、基线 commit 在当前分支历史。通过打印 waves。"""
     root = toplevel()
@@ -7336,6 +7501,8 @@ def main():
     p.add_argument("--warnings")
     p = sub.add_parser("merge", help="integrator 合回：逐片 merge --no-ff 并处理 gitlink；打印 {ok, merged, failed, warnings}，exit 0 / 1")
     p.add_argument("pairs", nargs="+", metavar="S=sha")
+    p = sub.add_parser("reap", help="飞行收口：回收本次飞行的临时 worktree（作废尝试先归档 attic）；打印 {ok, reaped, archived, kept, freed_kb, warnings}，恒 exit 0")
+    p.add_argument("--change-dir", required=True)
     p = sub.add_parser("ship", help="draft / ready 裁决：读 gate-report.md + HEAD + review-findings.json；退出码 0 ready / 1 draft")
     p.add_argument("--change-dir", required=True)
     p.add_argument("--markdown", action="store_true", help="打印可贴入 PR 正文的段落而不是 JSON")
@@ -7348,7 +7515,7 @@ def main():
     {"lint": cmd_lint, "waves": cmd_lint, "start": cmd_start, "gate": cmd_gate, "record": cmd_record,
      "final": cmd_final, "baseline": cmd_baseline, "preflight": cmd_preflight, "ship": cmd_ship,
      "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync,
-     "merge": cmd_merge, "turns": cmd_turns, "landed": cmd_landed, "wave-check": cmd_wave_check}[args.cmd](args)
+     "merge": cmd_merge, "reap": cmd_reap, "turns": cmd_turns, "landed": cmd_landed, "wave-check": cmd_wave_check}[args.cmd](args)
 
 
 if __name__ == "__main__":
