@@ -1,12 +1,8 @@
 """文档：运行器契约的「测试套件合规标准」一节，/test-tiers 命令文档指向体检
 （scenario: test-audit#contract-states-compliance-standard、#test-tiers-doc-points-to-audit）。
 骨架：strict xfail，断言是真实的；切片 S6 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT
 from test_budget_docs import CONTRACT, OLD_HEADS, TIERS_DOC
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S6 未实现")
 
 TITLE = "测试套件合规标准"
 VIOLATIONS = ("no-tiers", "layering", "unit-impure", "unit-slow", "no-case-limit", "region-slow", "total-over",
@@ -25,7 +21,6 @@ def standard_section(text=None):
     return "\n".join(lines[start + 1:end])
 
 
-@PENDING
 def test_contract_states_compliance_standard():
     # Given: 模板仓库的运行器契约文档
     text = CONTRACT.read_text(encoding="utf-8")
@@ -49,7 +44,6 @@ def test_contract_states_compliance_standard():
     assert any(h.startswith("## 10.") and "时间预算" in h for h in heads), heads
 
 
-@PENDING
 def test_test_tiers_doc_points_to_audit():
     # Given: /test-tiers 的命令文档
     lines = TIERS_DOC.read_text(encoding="utf-8").splitlines()
