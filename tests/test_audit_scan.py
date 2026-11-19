@@ -7,11 +7,7 @@
 import datetime
 import json
 
-import pytest
-
 from conftest import run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S2 未实现")
 
 UF, HF = "tests/unit/test_u.py", "tests/integration/hooks/test_h.py"
 U, H = UF + "::", HF + "::"
@@ -92,7 +88,6 @@ def in_days(n):
     return (datetime.datetime.now(datetime.timezone.utc).date() + datetime.timedelta(days=n)).isoformat()
 
 
-@PENDING
 def test_audit_without_tiers_file_points_to_test_tiers(git_repo):
     # Given: 被测仓库没有分层文件，也没有账本
     write(git_repo / "tests" / "test_a.py", GWT % "test_a")
@@ -107,7 +102,6 @@ def test_audit_without_tiers_file_points_to_test_tiers(git_repo):
     assert "/test-tiers" in out["items"][0]["text"], out["items"]
 
 
-@PENDING
 def test_audit_lists_over_line_cases_from_ledger(git_repo):
     # Given: 区域 hooks 单条上限 5 秒；change c 的收口账本里单元层一条 4.0 秒、hooks 一条 9.0 秒，其余在线内
     setup(git_repo, tiers(hooks_budget={"case_sec": 5}),
@@ -127,7 +121,6 @@ def test_audit_lists_over_line_cases_from_ledger(git_repo):
     assert all(k in out["scopes"]["hooks"] for k in ("p50", "p95", "max")) and out["scopes"]["hooks"]["max"] == 9.0
 
 
-@PENDING
 def test_audit_recomputes_layer_and_drops_missing_files(git_repo):
     # Given: 账本记 tests/a/test_x.py::test_x 在 unit、4.0 秒，但当前分层文件里它落在区域 hooks（单条 5 秒）；
     #        另一条 8.0 秒用例所在的文件已不存在
@@ -144,7 +137,6 @@ def test_audit_recomputes_layer_and_drops_missing_files(git_repo):
     assert out["source"]["dropped"] == 1, out["source"]
 
 
-@PENDING
 def test_audit_works_for_parts_form(git_repo):
     # Given: 部件形态：部件 py（root svc/py，单元层 svc/py/tests/unit/**）；账本里它的一条用例 4.0 秒；
     #        另有一个不属于任何部件的测试文件 misc/test_loose.py
@@ -163,7 +155,6 @@ def test_audit_works_for_parts_form(git_repo):
     assert "不属于任何部件" in item(out, "layering:misc/test_loose.py")["text"], out["items"]
 
 
-@PENDING
 def test_audit_flags_layering_problems(git_repo):
     # Given: 区域 hooks 的 paths 含 tests/integration/** 与 tests/unit/test_both.py；仓库里有未归层与匹配多层的测试文件
     t = tiers(hooks_budget={"case_sec": 5}, hooks_paths=["tests/integration/**", "tests/unit/test_both.py"])
@@ -181,7 +172,6 @@ def test_audit_flags_layering_problems(git_repo):
     assert "layering:tests/unit/test_a.py" not in ids(out), ids(out)
 
 
-@PENDING
 def test_audit_flags_region_without_case_limit(git_repo):
     # Given: 区域 hooks 写了单条上限，区域 docs 没写 budget
     setup(git_repo, tiers(hooks_budget={"case_sec": 5}, docs=True), ledger=False)
@@ -196,7 +186,6 @@ def test_audit_flags_region_without_case_limit(git_repo):
     assert "no-case-limit:hooks" not in ids(out), ids(out)
 
 
-@PENDING
 def test_audit_flags_total_over_budget(git_repo):
     # Given: 单元层总量预算 2 秒、账本合计 3.0 秒；区域 hooks 总量预算 5 秒、账本合计 9.0 秒
     cases = {U + "test_u%02d" % i: 0.25 for i in range(12)}
@@ -213,7 +202,6 @@ def test_audit_flags_total_over_budget(git_repo):
     assert "3.0" in tu["text"] and "2" in tu["text"] and "9.0" in th["text"] and "5" in th["text"], (tu, th)
 
 
-@PENDING
 def test_audit_flags_allow_entries(git_repo):
     # Given: 放行名单五条：已过期的、没有上限也没有期限的、所指文件已不存在的、3 天后到期的、远期到期的；对应用例都是 5.0 秒
     gone, bare, soon, far = (U + "test_u%d" % i for i in (1, 2, 3, 4))
@@ -236,7 +224,6 @@ def test_audit_flags_allow_entries(git_repo):
     assert not [i for i in ids(out) if i.endswith(far)], ids(out)
 
 
-@PENDING
 def test_audit_probe_flags_impure_unit_cases(git_repo, tmp_path):
     # Given: 探针结果：单元层用例 test_spawns 有「子进程」触碰；区域 hooks 的文件里两条用例中有一条无触碰且 0.1 秒
     cases = {U + "test_spawns": 0.1, U + "test_pure": 0.1, H + "test_io": 1.0, H + "test_calc": 0.1}
