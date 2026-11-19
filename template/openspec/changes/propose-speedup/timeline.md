@@ -10,3 +10,6 @@
 2026-11-19T16:40:09Z	gate	S4 ok
 2026-11-19T16:40:19Z	integrate	wave 2
 2026-11-19T16:40:24Z	wave-check	wave 2/2 · 测试跳过（受影响测试约 424.8 秒（107 个文件），超过预算 120 秒，留给 final） · 排队 0.0s · 负载 10.0→10.0/18 ok
+2026-11-19T17:06:53Z	fix	blocking=1
+2026-11-19T17:06:53Z	review	findings=16 blocking=1 deferred=15
+2026-11-19T17:13:48Z	final	增量（锚点 dc6c26a128，重跑 107 个文件 / 沿用 181 个用例） 测试 394.9s · 检查 schema-validate 1.8s · 用例 +2/-289（新增 0.5s） · 排队 0.0s · 负载 4.3→3.7/18 red
