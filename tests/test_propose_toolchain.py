@@ -5,8 +5,6 @@
 import json
 import re
 
-import pytest
-
 from conftest import ROOT, load_hook, run_hook, write
 
 CMD = ROOT / "template" / ".claude" / "commands"
@@ -21,7 +19,6 @@ def read(p):
     return p.read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_propose_docs_use_plan_kit_in_order():
     # Given: 两份 propose 文档
     for doc in DOCS:
@@ -35,7 +32,6 @@ def test_propose_docs_use_plan_kit_in_order():
         assert pos == sorted(pos), (doc.name, dict(zip(ORDER, pos)))
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_propose_docs_fork_with_serial_fallback():
     # Given: 两份 propose 文档
     for doc in DOCS:
@@ -49,7 +45,6 @@ def test_propose_docs_fork_with_serial_fallback():
         assert "串行" in seg and "PLAN-SCAFFOLD-PLACEHOLDER" in seg, (doc.name, seg)
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_planning_dispatch_allows_only_fork():
     # Given: 由 model-routing.py 规划期组名得出的规划类命令与 skill
     groups = sorted(load_hook("model-routing").PLANNING_GROUPS)
@@ -64,7 +59,6 @@ def test_planning_dispatch_allows_only_fork():
     assert all('model: "' not in read(f) for f in files)
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_lint_rejects_unfilled_scaffold(git_repo):
     # Given: 计划的 scenario 由 plan-scaffold.py 生成骨架，尚未补断言
     d = git_repo / "openspec" / "changes" / "c"
