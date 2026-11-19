@@ -16,6 +16,8 @@
 #   ledger_dir(root) · save(root, change, name, obj) · load(root, change, name)
 #   delta(base, final, rerun_files=None, root=None) -> (对账结果 | None, 原因 | None)
 #   advice(d) -> [行]   segment(d) -> 片段   parse_segment(note) -> dict | None   render(d) -> Markdown
+#   budget(final, base, budgets, scope_of, allow=None, phase="final") -> 预算结论（G13 集成层单条 · G14 层总量）
+#   budget_changes(old_budgets, new_budgets, old_allow, new_allow) -> [行]   （change tier-budgets D3、D5、D7）
 # 只读仓库；只写 git common dir 下的 flight-ledger/，不改仓库文件。
 # 不反向加载 slice-gate.py：层的归属由调用方传 tier_of(文件) -> 层名 | None。
 # 纯标准库，兼容 Python 3.9。
@@ -248,6 +250,8 @@ def delta(base, final, rerun_files=None, root=None):
         b = bc.get(cid)
         if b is None or c.get("m") != 1 or c.get("s") is None or b.get("s") is None:
             continue
+        if c.get("t") is not None and c.get("t") != UNIT_TIER:  # 区域用例的单次波动交给 G13 棘轮（tier-budgets D8）
+            continue
         if c["s"] >= b["s"] * SLOW_RATIO and c["s"] - b["s"] >= SLOW_MIN_SEC:
             slower.append((cid, b["s"], c["s"], c.get("t") or NO_TIER))
     slower.sort(key=lambda x: (-(x[2] - x[1]), x[0]))
@@ -296,6 +300,8 @@ def advice(d):
         out.append(line)
     slower_tiers = d.get("slower_tiers") or []
     for t, slot in (d.get("tiers") or {}).items():
+        if t not in (UNIT_TIER, NO_TIER):  # 区域的总量走 G14（tier-budgets D8）
+            continue
         b, a = slot["before"][1], slot["after"][1]
         if a - b >= TIER_GROWTH_MIN_SEC and a >= b * (1 + TIER_GROWTH_RATIO):
             ids = [x[0] for x in d.get("top_added") or [] if (x[2] or NO_TIER) == t]
@@ -350,7 +356,219 @@ def render(d):
             lines.append("  - %s %s → %s" % (cid, _fmt_sec(b), _fmt_sec(a)))
     for line in d.get("advice") or []:
         lines.append("- 建议：" + line)
+    if d.get("budget"):
+        lines += _budget_lines(d["budget"])
     return "\n".join(lines)
+
+
+# ---------- 预算（change tier-budgets D3、D5、D7；纯函数，不读文件、不取时间） ----------
+
+def _g(v):
+    return "%g" % v
+
+
+def _gs(v, none="未设"):
+    return none if v is None else "%gs" % v
+
+
+def _part_label(scope):
+    if scope == UNIT_TIER:
+        return "单元层"
+    if scope.endswith("/" + UNIT_TIER):
+        return "部件 %s 的单元层" % scope[:-len(UNIT_TIER) - 1]
+    return scope
+
+
+def _top_text(top):
+    return "、".join("%s %.1fs" % (cid, s) for cid, s in top)
+
+
+def budget(final, base, budgets, scope_of, allow=None, phase="final"):
+    """收口（或基线）账本 → 预算结论：集成层单条棘轮（G13）与层总量（G14）。"""
+    budgets = budgets or {}
+    raw = final.get("cases") or {}
+    form = final.get("id_form") or "nodeid"
+    conv = str
+    base_ok = base is not None and base.get("complete") is not False
+    bc = (base or {}).get("cases") or {}
+    if base is not None and (base.get("id_form") or "nodeid") != form:  # 同 delta()：nodeid 那一份换成 junit
+        if base.get("id_form") != "junit":
+            bc = {_to_junit(k): v for k, v in bc.items()}
+        else:
+            conv, form = _to_junit, "junit"
+    allow = allow or {}
+    amap = {_to_junit(k): v for k, v in allow.items()} if form == "junit" else allow
+    judged, why = True, None
+    if phase != "baseline" and not base_ok:
+        judged, why = False, "基线账本不在本机" if base is None else "基线账本不完整"
+
+    failed, warnings, allowed_n = [], [], 0
+    groups = {"new": [], "debt": [], "cross": [], "unjudged": []}
+    totals = {sc: {"kind": spec.get("kind"), "cases": 0, "sec": 0.0, "no_sec": 0, "budget": spec.get("total_sec"),
+                   "over": None, "added_sec": None if (phase == "baseline" or not base_ok) else 0.0, "top": []}
+              for sc, spec in budgets.items()}
+    for orig in sorted(raw):
+        c = raw[orig]
+        sc = scope_of(orig, c.get("t"))
+        if sc not in budgets:
+            continue
+        cid, spec, s, tot = conv(orig), budgets[sc], c.get("s"), totals[sc]
+        tot["cases"] += 1
+        if s is None:
+            tot["no_sec"] += 1
+        else:
+            tot["sec"] += s
+            tot["top"].append([cid, s])
+            if tot["added_sec"] is not None and cid not in bc:
+                tot["added_sec"] += s
+        if spec.get("kind") != "region" or c.get("m") != 1 or s is None:
+            continue
+        case_sec, a = spec.get("case_sec"), amap.get(cid)
+        via_allow = bool(a) and not a.get("expired")
+        line = a.get("limit") if via_allow else case_sec
+        if via_allow and case_sec is not None and s > case_sec and (line is None or s <= line):
+            allowed_n += 1
+            warnings.append("G13 已放行：%s %.1fs（%s）" % (cid, s, a.get("approved") or "-"))
+        if line is None or s <= line:
+            continue
+        row = [cid, s, sc, line]
+        if phase == "baseline":
+            groups["debt"].append(row)
+        elif not base_ok:
+            groups["unjudged"].append(row)
+        elif cid not in bc:
+            groups["new"].append(row)
+            failed.append("G13 slow integration test: %s %.1fs（区域 %s %s %gs，本 change 新增）："
+                          "提速、拆小，或由人类放行（test-tiers.py allow-slow --limit-sec）"
+                          % (cid, s, sc, "放行上限" if via_allow else "单条上限", line))
+        elif bc[cid].get("s") is not None and case_sec is not None and bc[cid]["s"] > case_sec:
+            groups["debt"].append(row)
+        else:
+            groups["cross"].append(row)
+
+    for rows in groups.values():
+        rows.sort(key=lambda r: (-r[1], r[0]))
+    for key, fmt in (("unjudged", "G13 未判：%s（集成层超线只警告）：区域 %s 有 %d 条超线，最慢 %s %.1fs"),
+                     ("debt", "G13 老债：区域 %s 有 %d 条用例基线时已超线（单条上限 %s，未判红）：最慢 %s %.1fs"),
+                     ("cross", "G13 本次量到超线：区域 %s 有 %d 条用例基线时未超线（单次测量不足以区分噪声，未判红）：%s %.1fs")):
+        by_scope = {}
+        for r in groups[key]:
+            by_scope.setdefault(r[2], []).append(r)
+        for sc in sorted(by_scope):
+            rs = by_scope[sc]
+            if key == "unjudged":
+                warnings.append(fmt % (why, sc, len(rs), rs[0][0], rs[0][1]))
+            elif key == "debt":
+                warnings.append(fmt % (sc, len(rs), _gs(rs[0][3]), rs[0][0], rs[0][1]))
+            else:
+                warnings.append(fmt % (sc, len(rs), rs[0][0], rs[0][1]))
+
+    for sc in sorted(totals):
+        tot = totals[sc]
+        tot["sec"] = round(tot["sec"], 1)
+        if tot["added_sec"] is not None:
+            tot["added_sec"] = round(tot["added_sec"], 1)
+        tot["top"] = sorted(tot["top"], key=lambda x: (-x[1], x[0]))[:3]
+        limit = tot["budget"]
+        if limit is None:
+            continue
+        if final.get("complete") is False:
+            warnings.append("G14 未判：%s 的账本不完整" % sc)
+            continue
+        if final.get("mode") == "impacted":  # 选测只落实测的那部分用例，合计不是整层的量
+            warnings.append("G14 未判：%s 选测（gate.impacted）只跑了部分用例，合计不可比" % sc)
+            continue
+        if tot["cases"] > 0 and tot["no_sec"] / tot["cases"] > NO_SEC_RATIO:
+            warnings.append("G14 未判：%s 有 %d 条用例无耗时（共 %d 条）" % (sc, tot["no_sec"], tot["cases"]))
+            continue
+        tot["over"] = tot["sec"] > limit
+        if not tot["over"]:
+            continue
+        if tot["kind"] == "region":
+            added = "" if tot["added_sec"] is None else "本 change 新增 %.1fs；" % tot["added_sec"]
+            warnings.append("G14 区域 %s 合计 %.1fs，超过总量预算 %ss（只警告）：%s最慢 %s"
+                            % (sc, tot["sec"], _g(limit), added, _top_text(tot["top"])))
+        else:
+            failed.append("G14 tier budget: %s 合计 %.1fs，超过总量预算 %ss：最慢 %s"
+                          % (_part_label(sc), tot["sec"], _g(limit), _top_text(tot["top"])))
+
+    keys = sorted(allow)
+    out = {"judged": judged, "why": why, "failed": failed, "warnings": warnings, "allowed_n": allowed_n,
+           "totals": totals,
+           "allow": {"total": len(keys), "expired": [k for k in keys if allow[k].get("expired")],
+                     "soon": [[k, allow[k].get("expires")] for k in keys if allow[k].get("soon")],
+                     "unlimited": sum(1 for k in keys if not allow[k].get("expired") and allow[k].get("limit") is None)}}
+    for key in ("new", "debt", "cross"):
+        out[key + "_n"], out[key] = len(groups[key]), groups[key][:TOP_N]
+    return out
+
+
+def budget_changes(old_budgets, new_budgets, old_allow, new_allow):
+    """两版预算与原样的 slow_allow → 变动行；没有变动 → []。"""
+    old_budgets, new_budgets = old_budgets or {}, new_budgets or {}
+    out = []
+    for sc in sorted(set(old_budgets) | set(new_budgets)):
+        ob, nb = old_budgets.get(sc) or {}, new_budgets.get(sc) or {}
+        for key, label in (("case_sec", "单条上限"), ("total_sec", "总量预算")):
+            o, n = ob.get(key), nb.get(key)
+            if o == n:
+                continue
+            loose = n is None or (o is not None and n > o)
+            out.append("%s %s %s → %s（%s）" % (sc, label, _gs(o), _gs(n), "放宽" if loose else "收紧"))
+    old_allow, new_allow = old_allow or {}, new_allow or {}
+    for cid in sorted(set(old_allow) | set(new_allow)):
+        o, n = old_allow.get(cid), new_allow.get(cid)
+        if o is None:
+            out.append("放行新增 %s（上限 %s · 到期 %s）" % (cid, _gs(n.get("limit_sec"), "无上限"),
+                                                     n.get("expires") or "不过期"))
+        elif n is None:
+            out.append("放行移除 %s" % cid)
+        else:
+            parts = []
+            if o.get("limit_sec") != n.get("limit_sec"):
+                parts.append("上限 %s → %s" % (_gs(o.get("limit_sec"), "无上限"), _gs(n.get("limit_sec"), "无上限")))
+            if o.get("expires") != n.get("expires"):
+                parts.append("到期 %s → %s" % (o.get("expires") or "不过期", n.get("expires") or "不过期"))
+            if parts:
+                out.append("放行改动 %s：%s" % (cid, "；".join(parts)))
+    return out
+
+
+def _budget_lines(b):
+    """render 的预算段（只追加在原有输出之后）。"""
+    lines = []
+    for cid, s, sc, line in b.get("new") or []:
+        lines.append("- 新增超线：%s %.1fs（%s 上限 %s）" % (cid, s, sc, _gs(line)))
+    more = (b.get("new_n") or 0) - len(b.get("new") or [])
+    if more > 0:
+        lines.append("- 新增超线另有 %d 条" % more)
+    if b.get("debt_n") or b.get("cross_n"):
+        lines.append("- 老债 %d 条 · 本次量到超线 %d 条（未判红）" % (b.get("debt_n") or 0, b.get("cross_n") or 0))
+    for sc, tot in (b.get("totals") or {}).items():
+        if tot.get("budget") is None:
+            continue
+        line = "- 预算 %s：%.1fs / %ss" % (sc, tot.get("sec") or 0.0, _g(tot["budget"]))
+        if tot.get("over") is None:
+            line += "（未判）"
+        elif tot["over"]:
+            line += "（超预算）"
+        if tot.get("added_sec") is not None and tot["added_sec"] > 0:
+            line += " · 本 change 新增 %.1fs" % tot["added_sec"]
+        lines.append(line)
+    al = b.get("allow") or {}
+    if al.get("total"):
+        expired = al.get("expired") or []
+        line = "- 放行：共 %d 条 · 已过期 %d 条" % (al["total"], len(expired))
+        if expired:
+            line += "（%s）" % "、".join(expired)
+        line += " · 14 天内到期 %d 条 · 无上限 %d 条" % (len(al.get("soon") or []), al.get("unlimited") or 0)
+        lines.append(line)
+    if b.get("changes"):
+        lines.append("- 预算变更：")
+        lines += ["  - " + x for x in b["changes"]]
+    if b.get("judged") is False:
+        lines.append("- 集成层单条未判：%s" % (b.get("why") or "-"))
+    return lines
 
 
 # ---------- 存取 ----------

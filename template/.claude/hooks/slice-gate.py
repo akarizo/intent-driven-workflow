@@ -39,8 +39,9 @@
 #                                              把（临时 worktree 里跑出的）门禁结论幂等写回分支的 gate-report.md / timeline.md
 #   final    --change-dir DIR                 先 G7（全部 scenario 状态），再 lint / typecheck，最后全量 test（均按基线差分）；
 #                                              G7 红不跑全量；最后运行 gate.checks 的 final（G9，先核对基线记录，G7 红不跑）
-#                                              分层文件合法时：单元层带探针判 G10 / G11，已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
+#                                              分层文件合法时：单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒），已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
+#                                              分层文件写了 budget 时落账之后判预算（G13 集成层新增超线 / G14 层总量；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 tests.budget 与 delta.json，附相对基线的预算变更
 #   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
@@ -54,7 +55,8 @@
 #                                              且目录仍在），检查红 / 超时 → 基线红；检查带 slice 时另以 GATE_PHASE=slice 跑一遍，
 #                                              记 checks.<name>.slice（沿用条件同 baseline 命令；红 / 超时 → 基线红；不清空目录）
 #                                              写基线账本（见 test-ledger.py），`ledger` 为摘要；
-#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（红 → 基线红），verify 之后逐个跑已选区域记 regions；
+#                                              分层文件写了 budget 时落账之后判预算（G14 层总量红 → 基线红、不动 test_ok；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 ledger.budget
+#                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒；红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
@@ -112,7 +114,7 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 MAX_SLICES = 9
 MAX_DEPTH = 3
@@ -672,9 +674,12 @@ DEPS_KIND_WHY = {
 # 逐用例结局的对外口径（结果文件与锚点 nodes）：插件内部的大写结论 → 小写
 OUTCOME_LOWER = {"PASSED": "passed", "FAILED": "failed", "ERROR": "error", "SKIPPED": "skipped", "XFAIL": "xfailed",
                  "XPASS": "xpassed"}
-# 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限（秒，不可配置）
+# 测试分层（design D1、D4、D13）：仓库级分层文件在 <openspec 根>/test-tiers.json；单元层用例耗时上限的缺省值（秒，
+# 分层文件的 unit.budget.case_sec 可改）；放行到期前 ALLOW_SOON_DAYS 天起警告带「将于」（tier-budgets D1、D2）
 TIER_FILE = "test-tiers.json"
 UNIT_MAX_SEC = 3.0
+ALLOW_SOON_DAYS = 14
+BUDGET_FIELDS = ("case_sec", "total_sec")
 TIER_NAME_RE = re.compile(r"[a-z0-9-]+")
 # 部件形态（test-tiers-polyglot D3、D4、D8）：gate.test 须是驱动命令；list 选择器超时；内置测试命名 = TEST_FILE_RE ∪ 其他语言
 # （Rust 的 root/tests/*.rs 按部件 root 判，见 part_test_files）
@@ -1245,28 +1250,75 @@ def _selected_regions(gate):
     return [n for n in integration if isinstance(n, str)] if isinstance(integration, list) else []
 
 
-def slow_candidates(probe):
-    """首跑耗时 >= UNIT_MAX_SEC 的 nodeid（排序）；probe 为 None → []。"""
+def slow_candidates(probe, case_sec=UNIT_MAX_SEC):
+    """首跑耗时 >= case_sec 的 nodeid（排序）；probe 为 None → []。"""
     if not probe:
         return []
-    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= UNIT_MAX_SEC)
+    return sorted(n for n, r in probe.items() if float(r.get("sec") or 0.0) >= case_sec)
 
 
-def tier_verdicts(probe, probe_why, rerun, allow):
-    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选须单独重跑仍超线（或重跑无记录）才确认。"""
+def _iso_day(v):
+    """形如 YYYY-MM-DD 的真实日期 → date；否则 None。"""
+    if not (isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
+        return None
+    try:
+        return date.fromisoformat(v)
+    except ValueError:
+        return None
+
+
+def _pos_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+
+
+def allow_view(allow, today=None):
+    """slow_allow 的判定视图（tier-budgets D2）：{用例 id: {limit, expires, expired, soon, approved, reason}}。
+    today 缺省 UTC 当天；expires 解析不了按没有期限处理（形状错由 lint 管）。"""
+    today = today or datetime.now(timezone.utc).date()
+    view = {}
+    for nid, item in (allow or {}).items():
+        exp = _iso_day(item.get("expires"))
+        limit = item.get("limit_sec")
+        view[nid] = {"limit": float(limit) if _pos_num(limit) else None,
+                     "expires": exp.isoformat() if exp else None,
+                     "expired": bool(exp and today > exp),
+                     "soon": bool(exp and today <= exp and (exp - today).days <= ALLOW_SOON_DAYS),
+                     "approved": item.get("approved") or "", "reason": item.get("reason") or ""}
+    return view
+
+
+def _slow_verdict(where, nid, sec, again, allow, case_sec, today):
+    """确认了的慢用例 → ("failed" | "warnings", 文本)；where 是部件版的「部件 <name>：」前缀（简写形态为空）。
+    三种失败都以 "G10 slow unit test" 开头（_time_verdicts 靠这个前缀降级）。"""
+    shown = "未取得" if again is None else "%.1fs" % again
+    if nid not in allow:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s（≥%gs）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
+                          % (where, nid, sec, shown, case_sec))
+    v = allow_view({nid: allow[nid]}, today)[nid]
+    if v["expired"]:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s（≥%gs）：放行已于 %s 到期，重新放行（test-tiers.py allow-slow）、提速或移入集成区域"
+                          % (where, nid, sec, shown, case_sec, v["expires"]))
+    took = sec if again is None else min(sec, again)
+    if v["limit"] is not None and took > v["limit"]:
+        return "failed", ("G10 slow unit test: %s%s 首跑 %.1fs，重跑 %s：超过放行上限 %gs，提速或重新放行（test-tiers.py allow-slow --limit-sec）"
+                          % (where, nid, sec, shown, v["limit"]))
+    text = "G10 slow unit test 已人工放行：%s%s %.1fs（%s）" % (where, nid, sec, v["approved"])
+    return "warnings", text + ("，放行将于 %s 到期" % v["expires"] if v["soon"] else "")
+
+
+def tier_verdicts(probe, probe_why, rerun, allow, case_sec=UNIT_MAX_SEC, today=None):
+    """单元层 G10 / G11 判定（纯函数）→ (failed, warnings)。慢候选（≥ case_sec）须单独重跑仍超线（或重跑无记录）才确认；
+    确认了的用例在 allow 里时再看放行的上限与期限（tier-budgets D2）。"""
     if probe is None:
         return [], ["G10/G11 不可度量：%s" % probe_why]
     failed, warnings = [], []
-    for nid in slow_candidates(probe):
+    out = {"failed": failed, "warnings": warnings}
+    for nid in slow_candidates(probe, case_sec):
         again = rerun.get(nid)
-        if again is not None and again < UNIT_MAX_SEC:
+        if again is not None and again < case_sec:
             continue
-        sec = float(probe[nid].get("sec") or 0.0)
-        if nid in allow:
-            warnings.append("G10 slow unit test 已人工放行：%s %.1fs（%s）" % (nid, sec, allow[nid]["approved"]))
-        else:
-            failed.append("G10 slow unit test: %s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
-                          % (nid, sec, "未取得" if again is None else "%.1fs" % again))
+        kind, text = _slow_verdict("", nid, float(probe[nid].get("sec") or 0.0), again, allow, case_sec, today)
+        out[kind].append(text)
     for nid in sorted(probe):
         hits = probe[nid].get("hits") or {}
         if hits:
@@ -1368,23 +1420,32 @@ def run_part(top, name, part, probe=True):
     return res
 
 
-def part_tier_verdicts(name, res, rerun, allow):
+def _observe_part_region(tiers, rname, rpart, junit):
+    """部件形态的区域运行进账本（tier-budgets D10）：junit 在且解析出用例 → 以 nodeid 形式、区域名为层上报耗时
+    （同部件单元层，没有结局）；拿不到 junit → 什么都不做。"""
+    if not os.path.isfile(junit):
+        return
+    pname = next((n for n, p in tiers["parts"].items() if p is rpart), None)
+    secs = _junit_secs([junit], rpart["root"], pname)
+    if secs:
+        _ledger_observe("nodeid", {}, secs, tier=rname)
+
+
+def part_tier_verdicts(name, res, rerun, allow, case_sec=UNIT_MAX_SEC, today=None):
     """部件单元层 G10 / G11 判定（纯函数）→ (failed, warnings)，文本都带「部件 <name>」。
-    G10 候选 = secs 中 ≥ UNIT_MAX_SEC 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认。"""
+    G10 候选 = secs 中 ≥ case_sec 的 id；rerun（dict | None）里该 id 存在且低于阈值才不确认；放行判法同 tier_verdicts。"""
     failed, warnings, gaps = [], [], {}
+    out = {"failed": failed, "warnings": warnings}
     secs, probe = res.get("secs"), res.get("probe")
     if secs is None:
         gaps["G10"] = res.get("secs_why")
     else:
-        for nid in sorted(n for n, s in secs.items() if float(s or 0.0) >= UNIT_MAX_SEC):
+        for nid in sorted(n for n, s in secs.items() if float(s or 0.0) >= case_sec):
             again = (rerun or {}).get(nid)
-            if again is not None and again < UNIT_MAX_SEC:
+            if again is not None and again < case_sec:
                 continue
-            if nid in allow:
-                warnings.append("G10 slow unit test 已人工放行：部件 %s：%s %.1fs（%s）" % (name, nid, secs[nid], allow[nid]["approved"]))
-            else:
-                failed.append("G10 slow unit test: 部件 %s：%s 首跑 %.1fs，重跑 %s（≥3s）：提速、移入集成区域，或由人类放行（test-tiers.py allow-slow）"
-                              % (name, nid, secs[nid], "未取得" if again is None else "%.1fs" % again))
+            kind, text = _slow_verdict("部件 %s：" % name, nid, float(secs[nid] or 0.0), again, allow, case_sec, today)
+            out[kind].append(text)
     if probe is None:
         gaps["G11"] = res.get("probe_why")
     else:
@@ -1529,33 +1590,95 @@ def _lock_note(info):
 
 
 def _lock_expect_sec(baseline, gate):
-    """持有上限的依据（design D5）：基线的 test.sec，读不到退 gate.full_suite_sec，都没有 → None。"""
-    for v in ((((baseline or {}).get("test") or {}) if isinstance(baseline, dict) else {}).get("sec"),
-              (gate or {}).get("full_suite_sec")):
-        if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return v
-    return None
+    """持有上限的依据（tier-budgets D12）：取全量秒数——基线的 full_suite_sec、gate.full_suite_sec、
+    非增量基线的 test.sec 三者中的最大值；增量基线的 test.sec 只是补跑秒数，不算。都没有 → None。"""
+    bl = baseline if isinstance(baseline, dict) else {}
+    cands = [bl.get("full_suite_sec"), (gate or {}).get("full_suite_sec")]
+    if bl.get("mode") != "incremental":
+        cands.append((bl.get("test") or {}).get("sec"))
+    nums = [v for v in cands if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return max(nums) if nums else None
+
+
+TIME_VERDICT_PREFIXES = ("G10 slow unit test", "G13 slow integration test", "G14 tier budget")
 
 
 def _time_verdicts(failed, warnings, lock_info):
-    """lock_info["state"] == "timeout" 时，把以 "G10 slow unit test" 开头的失败项挪进 warnings，
+    """lock_info["state"] == "timeout" 时，把以 TIME_VERDICT_PREFIXES 任一开头的失败项挪进 warnings，
     原文保留并在末尾加「（排队放弃后未持锁，时间类判定降为警告：<why>）」；其他状态原样返回。"""
     if not isinstance(lock_info, dict) or lock_info.get("state") != "timeout":
         return failed, warnings
     tag = "（排队放弃后未持锁，时间类判定降为警告：%s）" % (lock_info.get("why") or "")
-    slow = [f for f in failed if f.startswith("G10 slow unit test")]
+    slow = [f for f in failed if f.startswith(TIME_VERDICT_PREFIXES)]
     return [f for f in failed if f not in slow], list(warnings) + [f + tag for f in slow]
+
+
+def _tiers_has_budget(tiers):
+    """分层文件里任一部件的单元层或区域写了 budget 键。"""
+    return any("budget" in part["unit"] or any("budget" in reg for reg in (part.get("regions") or {}).values())
+               for part in tier_parts(tiers).values())
+
+
+def _tiers_at(root, commit, tiers_file):
+    """commit 时的分层文件（tiers_file 为绝对路径）；当时没有、解析不了或形状不合法 → None。"""
+    rel = os.path.relpath(os.path.realpath(tiers_file), os.path.realpath(root)).replace(os.sep, "/")
+    try:
+        raw = git(root, "show", "%s:%s" % (commit, rel))
+    except RuntimeError:
+        return None
+    with tempfile.TemporaryDirectory(prefix="flight-tiers-") as tmp:  # 复用 _load_tiers_file 的形状校验
+        path = os.path.join(tmp, TIER_FILE)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(raw)
+        return _load_tiers_file(path)[0]
+
+
+def _budget_judge(root, name, tiers, led, phase, lock_info, base=None, base_commit=None, tiers_file=None):
+    """预算判定（tier-budgets D5 / D6 / D7）→ (failed, warnings, 摘要 | None)；已过 _time_verdicts。
+    没写任何 budget → ([], [], None)，不碰账本模块；final 给了 base_commit 与 tiers_file 时附相对基线的预算变更。
+    任何异常 → ([], ["预算未判：<原因>"], None)，不改结论。"""
+    try:
+        if tiers is None or not _tiers_has_budget(tiers):
+            return [], [], None
+        mod = _ledger_mod()
+        if led is None or isinstance(mod, str):
+            return [], ["预算未判：测试账本不可用（%s）" % (mod if isinstance(mod, str) else "账本未写")], None
+        budgets = tier_budgets(tiers)
+        res = mod.budget(led, base, budgets, budget_scope_of(tiers), allow_view(tiers.get("slow_allow") or {}), phase)
+        summary = {k: v for k, v in res.items() if k not in ("failed", "warnings")}
+        warnings = list(res.get("warnings") or [])
+        if phase == "final" and base_commit and tiers_file:
+            old = _tiers_at(root, base_commit, tiers_file)
+            if old is not None:
+                lines = mod.budget_changes(tier_budgets(old), budgets, old.get("slow_allow") or {},
+                                           tiers.get("slow_allow") or {})
+                if lines:
+                    warnings.append("预算变更（相对基线 %s）：%s" % (str(base_commit)[:10], "；".join(lines)))
+                summary["changes"] = lines
+        failed, warnings = _time_verdicts(list(res.get("failed") or []), warnings, lock_info)
+        return failed, warnings, summary
+    except Exception as e:
+        return [], ["预算未判：%s: %s" % (type(e).__name__, e)], None
+
+
+def _final_budget(root, name, change_dir, tiers, led, baseline, lock_info):
+    """final 落账之后的预算判定：基线账本作 base，基线 commit 上的分层文件作预算变更的比较对象。"""
+    lmod = _ledger_mod()
+    base = None if isinstance(lmod, str) else lmod.load(root, name, "baseline")
+    return _budget_judge(root, name, tiers, led, "final", lock_info, base, (baseline or {}).get("commit"),
+                         tiers_file=_tiers_path(change_dir))
 
 
 def part_tier_verdict(top, name, part, res, allow):
     """有 G10 候选时整部件再 run_part 一次取 secs 作 rerun（拿不到 → None，按确认处理），再交给 part_tier_verdicts。
     → (failed, warnings, extra_sec)；extra_sec = 重跑墙钟（没重跑为 0）。"""
-    cands = [n for n, s in (res.get("secs") or {}).items() if float(s or 0.0) >= UNIT_MAX_SEC]
+    line = (part["unit"].get("budget") or {}).get("case_sec") or UNIT_MAX_SEC
+    cands = [n for n, s in (res.get("secs") or {}).items() if float(s or 0.0) >= line]
     rerun, extra = {}, 0.0
     if cands:
         again = run_part(top, name, part)
         rerun, extra = again["secs"], again["sec"]
-    failed, warnings = part_tier_verdicts(name, res, rerun, allow)
+    failed, warnings = part_tier_verdicts(name, res, rerun, allow, case_sec=line)
     return failed, warnings, extra
 
 
@@ -1618,8 +1741,11 @@ def _final_parts(top, tiers, gate, baseline, failed, warnings, lock_info=None):
             failed.append("G2 region %s：基线缺记录或命令已变，重跑 baseline" % rname)
             continue
         t0 = time.time()
-        rg = run_test_gate(rdef["cmd"], top, cwd=os.path.join(top, rpart["root"]))
-        region_wall[rname] = time.time() - t0
+        with tempfile.TemporaryDirectory(prefix="flight-region-") as tmp:
+            junit = os.path.join(tmp, "junit-region.xml")
+            rg = run_test_gate(rdef["cmd"], top, cwd=os.path.join(top, rpart["root"]), keep_junit=junit)
+            region_wall[rname] = time.time() - t0
+            _observe_part_region(tiers, rname, rpart, junit)
         f2, w2 = _diff_verdict("region " + rname, rg, rrec.get("failed"))
         failed.extend([f2] if f2 else [])
         warnings.extend([w2] if w2 else [])
@@ -2169,6 +2295,22 @@ def _tier_shape(label, obj, fields, selector=False):
             errors.append("tiers: %s 的 covers 须是数组（可为空）、每项非空" % label)
     if not _nonblank(obj.get("cmd")):
         errors.append("tiers: %s 缺少 cmd（须是非空字符串）" % label)
+    if "budget" in fields and "budget" in obj:
+        errors.extend(_budget_shape(label, obj["budget"]))
+    return errors
+
+
+def _budget_shape(label, budget):
+    """unit / 区域的 budget（tier-budgets D1）：对象，只含 case_sec / total_sec，写了的须是大于 0 的数。"""
+    if not isinstance(budget, dict):
+        return ["tiers: %s 的 budget 须是对象（case_sec / total_sec）" % label]
+    errors = []
+    extra = sorted(str(k) for k in budget if k not in BUDGET_FIELDS)
+    if extra:
+        errors.append("tiers: %s 的 budget 有未知字段 %s" % (label, ", ".join(extra)))
+    for k in BUDGET_FIELDS:
+        if k in budget and not _pos_num(budget[k]):
+            errors.append("tiers: %s 的 budget.%s 须是大于 0 的数" % (label, k))
     return errors
 
 
@@ -2231,7 +2373,7 @@ def _parts_shape(tiers):
             errors.append("tiers: %s 的 test_files 须是非空数组、每项非空" % label)
         unit = part.get("unit")
         if isinstance(unit, dict):
-            errors.extend(_tier_shape("%s 的 unit" % label, unit, ("paths", "list", "cmd", "junit", "probe"), selector=True))
+            errors.extend(_tier_shape("%s 的 unit" % label, unit, ("paths", "list", "cmd", "junit", "probe", "budget"), selector=True))
             if "junit" in unit and not _nonblank(unit["junit"]):
                 errors.append("tiers: %s 的 unit.junit 须是非空字符串" % label)
             if "probe" in unit:
@@ -2247,7 +2389,7 @@ def _parts_shape(tiers):
             if not TIER_NAME_RE.fullmatch(r):
                 errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % r)
             if isinstance(regions[r], dict):
-                errors.extend(_tier_shape("%s 的区域 %s" % (label, r), regions[r], ("paths", "list", "covers", "cmd"), selector=True))
+                errors.extend(_tier_shape("%s 的区域 %s" % (label, r), regions[r], ("paths", "list", "covers", "cmd", "budget"), selector=True))
             else:
                 errors.append("tiers: %s 的区域 %s 须是对象（paths | list / covers / cmd）" % (label, r))
     for r in sorted(owners):
@@ -2276,7 +2418,7 @@ def _load_tiers_file(path):
             errors.append("tiers: 分层文件顶层有未知字段 %s" % ", ".join(extra))
         unit = tiers.get("unit")
         if isinstance(unit, dict):
-            errors.extend(_tier_shape("unit", unit, ("paths", "cmd")))
+            errors.extend(_tier_shape("unit", unit, ("paths", "cmd", "budget")))
         else:
             errors.append("tiers: 分层文件缺少 unit（须是含 paths 与 cmd 的对象）")
         regions = tiers.get("regions", {})
@@ -2287,7 +2429,7 @@ def _load_tiers_file(path):
             if not TIER_NAME_RE.fullmatch(name):
                 errors.append("tiers: 区域名 %s 不合法（须匹配 [a-z0-9-]+）" % name)
             if isinstance(regions[name], dict):
-                errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd")))
+                errors.extend(_tier_shape("区域 %s" % name, regions[name], ("paths", "covers", "cmd", "budget")))
             else:
                 errors.append("tiers: 区域 %s 须是对象（paths / covers / cmd）" % name)
     slow = tiers.get("slow_allow", {})
@@ -2299,12 +2441,16 @@ def _load_tiers_file(path):
         if not isinstance(item, dict):
             errors.append("tiers: slow_allow 的 %s 须是对象（reason / approved）" % nid)
             continue
-        extra = sorted(str(k) for k in item if k not in ("reason", "approved"))
+        extra = sorted(str(k) for k in item if k not in ("reason", "approved", "limit_sec", "expires"))
         if extra:
             errors.append("tiers: slow_allow 的 %s 有未知字段 %s" % (nid, ", ".join(extra)))
         for k in ("reason", "approved"):
             if not _nonblank(item.get(k)):
                 errors.append("tiers: slow_allow 的 %s 缺少 %s（须是非空字符串）" % (nid, k))
+        if "limit_sec" in item and not _pos_num(item["limit_sec"]):
+            errors.append("tiers: slow_allow 的 %s 的 limit_sec 须是大于 0 的数" % nid)
+        if "expires" in item and _iso_day(item["expires"]) is None:
+            errors.append("tiers: slow_allow 的 %s 的 expires 须是 YYYY-MM-DD 的真实日期" % nid)
     return (None if errors else tiers), errors
 
 
@@ -2336,6 +2482,47 @@ def tier_parts(tiers):
     if tiers_is_parts(tiers):
         return tiers["parts"]
     return {"main": {"root": ".", "unit": tiers["unit"], "regions": tiers.get("regions") or {}}}
+
+
+def tier_budgets(tiers):
+    """预算范围摊平（tier-budgets D1）→ {范围: {kind, case_sec, total_sec, part}}；tiers 为 None → {}。
+    范围：简写形态 "unit" 与各区域名；部件形态 "<部件>/unit" 与各区域名。单元层 case_sec 缺省 UNIT_MAX_SEC。"""
+    if tiers is None:
+        return {}
+    parts = tiers_is_parts(tiers)
+    out = {}
+    for pname, part in tier_parts(tiers).items():
+        owner = pname if parts else None
+        ub = part["unit"].get("budget") or {}
+        out["%s/unit" % pname if parts else "unit"] = {"kind": "unit", "case_sec": ub.get("case_sec", UNIT_MAX_SEC),
+                                                       "total_sec": ub.get("total_sec"), "part": owner}
+        for r, reg in (part.get("regions") or {}).items():
+            rb = reg.get("budget") or {}
+            out[r] = {"kind": "region", "case_sec": rb.get("case_sec"), "total_sec": rb.get("total_sec"), "part": owner}
+    return out
+
+
+def budget_scope_of(tiers):
+    """→ 函数 (用例 id, 层) -> 范围 | None。层不是 unit 时原样返回；部件形态按 id 首段定部件：
+    恰是部件名 → 该部件；否则当顶层路径，取 root 前缀最长的部件，root 为 . 的兜底。"""
+    parts = tiers["parts"] if tiers_is_parts(tiers) else None
+
+    def scope(nid, layer):
+        if layer is None:
+            return None
+        if layer != "unit":
+            return layer
+        if parts is None:
+            return "unit"
+        head = str(nid).split("::", 1)[0]
+        if head in parts:
+            name = head
+        else:
+            hits = [(len(p["root"]), n) for n, p in parts.items() if p["root"] != "." and head.startswith(p["root"] + "/")]
+            name = max(hits)[1] if hits else next((n for n, p in sorted(parts.items()) if p["root"] == "."), None)
+        return None if name is None else "%s/unit" % name
+
+    return scope
 
 
 def _tier_regions(tiers):
@@ -3496,11 +3683,11 @@ def _tier_rerun(root, gate, nodeids):
     return {n: r["sec"] for n, r in probe.items()}
 
 
-def _unit_tier_verdict(root, gate, tg, allow):
-    """单元层 G10 / G11：有慢候选才重跑，再交给 tier_verdicts。"""
-    cands = slow_candidates(tg["probe"])
+def _unit_tier_verdict(root, gate, tg, allow, case_sec=UNIT_MAX_SEC):
+    """单元层 G10 / G11：有慢候选（≥ case_sec）才重跑，再交给 tier_verdicts。"""
+    cands = slow_candidates(tg["probe"], case_sec)
     rerun = (_tier_rerun(root, gate, cands) or {}) if cands else {}
-    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow)
+    return tier_verdicts(tg["probe"], tg["probe_why"], rerun, allow, case_sec=case_sec)
 
 
 def _g7_diag(text):
@@ -4300,7 +4487,7 @@ def cmd_final(args):
                 warnings.append(w2)
     inc = None
     # 收口账本（test-ledger design D6 / D9）：只在本次确实跑了套件时落账；lrerun 与对账共用
-    led, lrerun = None, None
+    led, lrerun, bsum = None, None, None  # bsum：预算摘要（tier-budgets D5），只在落账之后判
     lmeta = {"commit": head, "phase": "final", "mode": None, "lock": hold.info.get("state")}
     test_sec, check_secs = None, {}  # gate.test 三选一分支的秒数（不含区域）与各项检查的秒数（design D8）
     sfail, scope_info = [], None  # 选测范围复核（design D9）的失败项与 scope 段
@@ -4321,6 +4508,9 @@ def cmd_final(args):
             inc = {"mode": "full", "full_why": PARTS_FULL_WHY}
             led, lwarn = _ledger_commit(root, name, dict(lmeta, mode="parts"), tiers)
             warnings.extend([lwarn] if lwarn else [])
+            f, w, bsum = _final_budget(root, name, args.change_dir, tiers, led, baseline, hold.info)
+            failed.extend(f)
+            warnings.extend(w)
         elif not test_cmd:
             warnings.append("未配置也未探测到全量测试命令")
         else:
@@ -4465,7 +4655,7 @@ def cmd_final(args):
                     if probe is not None:
                         probe = {n: r for n, r in probe.items() if n.split("::", 1)[0] in unit_files}
                     f10, w10 = _unit_tier_verdict(root, gate, {"probe": probe, "probe_why": pr.get("probe_why")},
-                                                  tiers.get("slow_allow") or {})
+                                                  tiers.get("slow_allow") or {}, tier_budgets(tiers)["unit"]["case_sec"])
                     f10, w10 = _time_verdicts(f10, w10, hold.info)
                     failed.extend(f10)
                     warnings.extend(w10)
@@ -4478,7 +4668,7 @@ def cmd_final(args):
                        "inherited_tests": inherited}
                 if tiers is not None:
                     inc["regions_skipped"] = [r for r in _selected_regions(gate) if r not in run_regions]
-                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes)
+                anchor_part = _anchor_forward(root, anchor, rerun, d, fails, outcomes, ran=bool(run_sel))
                 anchor_part["deps_kind"] = None if d or not run_sel else "incomplete"
                 nodes_ok = _anchor_has_nodes(anchor) and (bool(d) or not run_sel)
                 tres = {"mode": "incremental", "fails": fails, "rerun_nodes": _nodes_lower(d.get("nodes")) if d else None,
@@ -4499,7 +4689,8 @@ def cmd_final(args):
                 failed.extend([f2] if f2 else [])
                 warnings.extend([w2] if w2 else [])
                 if tiers is not None:
-                    f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+                    f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {},
+                                                  tier_budgets(tiers)["unit"]["case_sec"])
                     f10, w10 = _time_verdicts(f10, w10, hold.info)
                     unit_wall = time.time() - t0
                     failed.extend(f10)
@@ -4574,6 +4765,9 @@ def cmd_final(args):
                                             universe=(anchor_part["nodes"] or None) if nodes_ok and anchor_part else None,
                                             source=lsrc, rerun_files=lrerun)
                 warnings.extend([lwarn] if lwarn else [])
+                f, w, bsum = _final_budget(root, name, args.change_dir, tiers, led, baseline, hold.info)
+                failed.extend(f)
+                warnings.extend(w)
             if cur_snap is not None and anchor_part is not None:
                 # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
                 w = _anchor_write(root, dict(anchor_part, change=name, commit=head, at=now_iso(), snapshot=cur_snap,
@@ -4644,9 +4838,13 @@ def cmd_final(args):
     if led is not None:  # 对账（test-ledger design D7 / D8 / D10）：只报告，不影响 ok / failed / 退出码
         lmod = _ledger_mod()
         result["tests"] = dict(lmod.summary(led), delta=None, why=None)
+        if bsum is not None:
+            result["tests"]["budget"] = bsum
         try:
             d, dwhy = lmod.delta(lmod.load(root, name, "baseline"), led, lrerun, root)
             if d is not None:
+                if bsum is not None:
+                    d["budget"] = bsum
                 lmod.save(root, name, "delta", d)
                 segs.append(lmod.segment(d))
             result["tests"].update(delta=d, why=dwhy)
@@ -4793,7 +4991,8 @@ def cmd_baseline(args):
         elif rc != 0:
             reasons.append("全量测试在基线上红（exit %d；按退出码判：%s）" % (rc, tg["why"]))
         if tiers is not None:
-            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {})
+            f10, w10 = _unit_tier_verdict(root, gate, tg, tiers.get("slow_allow") or {},
+                                          tier_budgets(tiers)["unit"]["case_sec"])
             f10, w10 = _time_verdicts(f10, w10, hold.info)
             reasons.extend(f10)
             warnings.extend(w10)
@@ -4849,9 +5048,14 @@ def cmd_baseline(args):
         rpart, rdef = _tier_regions(tiers)[rname]
         rcmd = rdef["cmd"]
         t0 = time.time()
-        # 部件形态：在所属部件 root 下运行；不写锚点，依赖图不测（design D8）
-        rg = run_test_gate(rcmd, root, deps=not parts, cwd=os.path.join(root, rpart["root"]) if parts else None)
-        rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+        # 部件形态：在所属部件 root 下运行；不写锚点，依赖图不测（design D8）；逐用例耗时经 junit 进账本（tier-budgets D10）
+        with tempfile.TemporaryDirectory(prefix="flight-region-") as tmp:
+            junit = os.path.join(tmp, "junit-region.xml") if parts else None
+            rg = run_test_gate(rcmd, root, deps=not parts, cwd=os.path.join(root, rpart["root"]) if parts else None,
+                               keep_junit=junit)
+            rec = {"exit": rg["rc"], "sec": round(time.time() - t0, 1), "cmd": rcmd}
+            if parts:
+                _observe_part_region(tiers, rname, rpart, junit)
         if rg["deps"] is None:
             deps_un.append((rg["deps_kind"], "区域 %s：%s" % (rname, rg["deps_why"])))
         elif adeps is not None:
@@ -4990,6 +5194,12 @@ def cmd_baseline(args):
         warnings.append(lwarn)
     if led is not None:
         bl["ledger"] = lmod.summary(led)
+    # 预算判定（tier-budgets D5）：在 test_ok 之后，G14 只让基线红、不动 test_ok；锚点 measured 随 reasons 一并变
+    f14, w14, bsum = _budget_judge(root, name, tiers, led, "baseline", hold.info)
+    reasons.extend(f14)
+    warnings.extend(w14)
+    if bsum is not None and "ledger" in bl:
+        bl["ledger"]["budget"] = bsum
     if hit is None and not parts:
         measured = adeps is not None and not deps_un and not deps_whys and not reasons
         if deps_un:
@@ -6471,9 +6681,10 @@ def _anchor_has_nodes(anchor):
     return isinstance(nodes, dict) and (bool(nodes) or not anchor.get("tests"))
 
 
-def _anchor_forward(root, old, sel, d, fails, outcomes):
+def _anchor_forward(root, old, sel, d, fails, outcomes, ran=None):
     """增量后的新锚点依赖部分：重跑文件（与已删除的文件）换成本次结果，其余照抄旧锚点。
-    nodes 同口径：旧锚点带 nodes 且本次依赖图测到（或无重跑）时，未重跑文件的旧结局 ∪ 本次结局；否则 {}。"""
+    nodes 同口径：旧锚点带 nodes 且本次依赖图测到（或无重跑）时，未重跑文件的旧结局 ∪ 本次结局；否则 {}。
+    ran：本次是否真的起了 pytest（缺省按 sel 非空）；只重跑区域时 sel 含区域文件而 ran 为假，nodes 照样沿用。"""
     known = set(old.get("files") or []) | set(old.get("deps") or {}) | set(old.get("tests") or {})
     drop = set(sel) | {f for f in known if not os.path.isfile(os.path.join(root, f))}
     deps = {f: v for f, v in (old.get("deps") or {}).items() if f not in drop}
@@ -6481,7 +6692,7 @@ def _anchor_forward(root, old, sel, d, fails, outcomes):
     tests = {f: n for f, n in (old.get("tests") or {}).items() if f not in drop}
     tests.update(_node_counts(n for n, _ in outcomes))
     nodes = {}
-    if _anchor_has_nodes(old) and (d or not sel):
+    if _anchor_has_nodes(old) and (d or not (sel if ran is None else ran)):
         nodes = {n: o for n, o in old["nodes"].items() if str(n).split("::", 1)[0] not in drop}
         nodes.update(_nodes_lower(d.get("nodes")))
     return {
