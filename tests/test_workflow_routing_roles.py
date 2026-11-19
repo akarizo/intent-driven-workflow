@@ -30,7 +30,6 @@ def run_raw(tmp_path, args, replies):
     return json.loads(p.stdout)
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_workflow_routes_large_slice_to_executor_large(tmp_path):
     # Given: 两片计划，S1 为大片档、S2 为标准档；executor-large = fable·high，executor = opus·medium
     args = flight_args(waves=[["S1", "S2"]], turns={"S1": "large"},
@@ -48,7 +47,6 @@ def test_workflow_routes_large_slice_to_executor_large(tmp_path):
     assert (calls["S2"]["model"], calls["S2"]["effort"]) == ("opus", "medium"), calls["S2"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_workflow_routes_fixes_to_fixer(tmp_path):
     # Given: 一片计划，评审返回一条 HIGH；fixer = fable·high
     args = flight_args(waves=[["S1"]],
@@ -66,7 +64,6 @@ def test_workflow_routes_fixes_to_fixer(tmp_path):
     assert (calls["fix"]["model"], calls["fix"]["effort"]) == ("fable", "high"), calls["fix"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_workflow_defaults_new_roles_to_executor(tmp_path):
     # Given: args 只有三个角色（executor = opus·medium）；S1 为大片档，评审给出 HIGH 触发批量修复
     args = flight_args(waves=[["S1"]], turns={"S1": "large"},
@@ -86,7 +83,6 @@ def test_workflow_defaults_new_roles_to_executor(tmp_path):
     assert set(out["result"]["efforts"]) == ROLES, out["result"]["efforts"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_workflow_rejects_unknown_effort(tmp_path):
     # Given: efforts.reviewer = huge
     args = flight_args(efforts={"executor": "high", "reviewer": "huge", "integrator": "low"})
