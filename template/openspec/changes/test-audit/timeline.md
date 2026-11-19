@@ -19,3 +19,5 @@
 2026-11-19T03:09:46Z	review	findings=25 blocking=2 deferred=23
 2026-11-19T03:09:46Z	final	同树沿用 e220ffb01e ok
 2026-11-19T03:09:48Z	apply-done	blocked=0 blocking=2
+2026-11-19T03:10:24Z	apply-done	
+2026-11-19T03:10:36Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
