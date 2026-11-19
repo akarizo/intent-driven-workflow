@@ -85,3 +85,5 @@ test-audit.py verify --plan 整改稿JSON --base COMMIT [--openspec-root DIR] [-
 > 已合回核对：S1 `violations(ledger, budgets, scope_of, allow=None)`（test-ledger.py:394）、S4 `cmd_render(args)` / `main(argv=None)`（test-audit.py:152/206），与上文签名一致。
 
 > 已合回核对（wave 2）：S2 `AUDIT_RULES`（test-tiers.py:485）/ `audit_report(top, tiers, led, probes)`（:597）/ `cmd_audit(args)`（:701）/ `main(argv=None)`（:721）；S5 `ACTIONS`（test-audit.py:27）/ `cmd_verify(args)`（:313）/ `main(argv=None)`（:359），均与上文一致。
+
+> 已合回核对（wave 3）：S3 在 `test-tiers.py` 新增 `audit_unjudged(table, placed, scopes, scope_of, led, probes)`、`audit_compare(prev, plan_items, now)`、`load_compare(args)`、`emit_audit(args, rep, prev=None, plan_items=None)`、`print_audit(rep, shown, code)`；体检 JSON 的 `compare` 段与退出码口径与上文一致。S7 只改文档 / 计数测试，无代码符号。
