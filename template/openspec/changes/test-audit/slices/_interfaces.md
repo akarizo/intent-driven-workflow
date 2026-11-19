@@ -83,3 +83,5 @@ test-audit.py verify --plan 整改稿JSON --base COMMIT [--openspec-root DIR] [-
 - `template/.claude/flight-runner-contract.md` 新增「测试套件合规标准」一节；`template/.claude/commands/test-tiers.md` 加体检指针。无代码符号；测试从 `tests/test_audit_standard_docs.py` 的 `standard_section` / `TITLE` 取节。
 
 > 已合回核对：S1 `violations(ledger, budgets, scope_of, allow=None)`（test-ledger.py:394）、S4 `cmd_render(args)` / `main(argv=None)`（test-audit.py:152/206），与上文签名一致。
+
+> 已合回核对（wave 2）：S2 `AUDIT_RULES`（test-tiers.py:485）/ `audit_report(top, tiers, led, probes)`（:597）/ `cmd_audit(args)`（:701）/ `main(argv=None)`（:721）；S5 `ACTIONS`（test-audit.py:27）/ `cmd_verify(args)`（:313）/ `main(argv=None)`（:359），均与上文一致。
