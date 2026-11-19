@@ -136,7 +136,8 @@ timeline 追加 reap 事件；打印 JSON；exit 0
 **D8 · merged-cleanup 的两条新判据只对 `.claude/worktrees/` 下的 worktree 生效**
 - **landed**：
   - 条件：W 的 HEAD 在另一个本地分支 B 的历史里，且不在 B 的 first-parent 链上（即被 merge 进 B，而不是 B 从它派生）。B 不是 W 自己的分支。
-  - 结果：不再因相对 target 的 `unmerged` / `fresh` 进 keep，按现有的 dirty / submodule / locked / outside 规则分档，原因以 `landed:` 开头并写明 B。
+  - 结果：不再因相对 target 的 `unmerged` 进 keep，按现有的 dirty / submodule / locked / outside 规则分档，原因以 `landed:` 开头并写明 B。
+  - 只对 `unmerged` 生效，`fresh` 维持 keep（PR #25 评审 HIGH，2026-11-19）：`fresh` 的 HEAD 在 target 的 first-parent 链上、没有独有提交。某个本地分支预合并 target 后，这个 HEAD 会落进那个分支的历史，但合进去的是 target 的提交，不是 W 的工作。照判会把刚开、未改动的 `.claude/worktrees/` 会话目录误收。
   - 实现：`for-each-ref --contains <HEAD> refs/heads/` 一次取候选，每个分支的 first-parent 列表缓存一次。
   - *为什么排除 first-parent*：执行体从 change 分支的 tip 派生，所以 change 分支的 tip 落在执行体分支的 first-parent 链上。按「被包含」判，会把正在飞行的 change 家或同类 worktree 误判为已落地。
 - **dead-attempt**：

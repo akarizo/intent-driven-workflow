@@ -261,12 +261,12 @@ def worktree_item(ctx, wt):
     item["_args"] = rm[1:]
     if wt["locked"]:
         item["command"] = cmd_str(["git", "worktree", "unlock", name]) + " && " + item["command"]
-    if state in ("fresh", "unmerged") and under(path, os.path.join(root, ".claude", "worktrees")):
+    if state == "unmerged" and under(path, os.path.join(root, ".claude", "worktrees")):
         b = landed_into(ctx, wt)
         if b:
             item["merged"] = state = "branch"
             item["reasons"].append("landed: 已合进本地分支 %s" % b)
-        elif state == "unmerged":
+        else:
             c = attempt_change(path, changes)
             if c and c in ctx.landed():
                 state = "dead-attempt"

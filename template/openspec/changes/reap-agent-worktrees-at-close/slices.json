@@ -47,6 +47,7 @@
       "scenarios": [
         "merged-cleanup-agent-worktrees#cleanup-removes-worktree-merged-into-change-branch",
         "merged-cleanup-agent-worktrees#cleanup-keeps-worktree-only-forked-from",
+        "merged-cleanup-agent-worktrees#cleanup-keeps-fresh-worktree-after-branch-premerges-main",
         "merged-cleanup-agent-worktrees#cleanup-removes-dead-attempt-of-landed-change",
         "merged-cleanup-agent-worktrees#cleanup-defers-detached-dead-attempt",
         "merged-cleanup-agent-worktrees#cleanup-treats-archived-change-as-landed"
@@ -89,6 +90,7 @@
     "flight-close-reap#iron-rule-names-close-reap": "tests/test_close_reap_docs.py::test_iron_rule_names_close_reap",
     "merged-cleanup-agent-worktrees#cleanup-removes-worktree-merged-into-change-branch": "tests/test_merged_cleanup_landed.py::test_cleanup_removes_worktree_merged_into_change_branch",
     "merged-cleanup-agent-worktrees#cleanup-keeps-worktree-only-forked-from": "tests/test_merged_cleanup_landed.py::test_cleanup_keeps_worktree_only_forked_from",
+    "merged-cleanup-agent-worktrees#cleanup-keeps-fresh-worktree-after-branch-premerges-main": "tests/test_merged_cleanup_landed.py::test_cleanup_keeps_fresh_worktree_after_branch_premerges_main",
     "merged-cleanup-agent-worktrees#cleanup-removes-dead-attempt-of-landed-change": "tests/test_merged_cleanup_landed.py::test_cleanup_removes_dead_attempt_of_landed_change",
     "merged-cleanup-agent-worktrees#cleanup-defers-detached-dead-attempt": "tests/test_merged_cleanup_landed.py::test_cleanup_defers_detached_dead_attempt",
     "merged-cleanup-agent-worktrees#cleanup-treats-archived-change-as-landed": "tests/test_merged_cleanup_landed.py::test_cleanup_treats_archived_change_as_landed",

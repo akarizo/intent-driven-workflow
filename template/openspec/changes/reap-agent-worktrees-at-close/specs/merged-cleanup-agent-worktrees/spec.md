@@ -1,12 +1,12 @@
 ## ADDED Requirements
 
 ### Requirement: 已被合进其他分支的临时 worktree 不再因未合入 target 而保留
-对 `.claude/worktrees/` 下相对 target 为 `fresh` 或 `unmerged` 的 worktree，`merged-cleanup.py` SHALL 检查它的 HEAD 是否被 merge 进了另一个本地分支 B，判据是：
+对 `.claude/worktrees/` 下相对 target 为 `unmerged` 的 worktree，`merged-cleanup.py` SHALL 检查它的 HEAD 是否被 merge 进了另一个本地分支 B，判据是：
 - HEAD 在 B 的历史里；
 - 不在 B 的 first-parent 链上；
 - B 不是它自己的分支。
 
-命中时 MUST NOT 再因此落进 keep，SHALL 按现有的 dirty / submodule / locked / outside 规则分档，并加一条以 `landed:` 开头、写明 B 的原因。只在 B 的 first-parent 链上的（被派生，而不是被合入）MUST 维持原判。`.worktrees/` 下的 worktree 行为 MUST 不变。
+命中时 MUST NOT 再因此落进 keep，SHALL 按现有的 dirty / submodule / locked / outside 规则分档，并加一条以 `landed:` 开头、写明 B 的原因。只在 B 的 first-parent 链上的（被派生，而不是被合入）MUST 维持原判。相对 target 为 `fresh` 的 MUST 维持 keep，即使某个本地分支预合并 target 后包含了它的 HEAD。`.worktrees/` 下的 worktree 行为 MUST 不变。
 
 Feature: 合并后清理识别执行体临时 worktree
 Rule: `.claude/worktrees/` 下被 merge 进其他分支的 worktree 按现有规则分档，原因以 `landed:` 开头
@@ -24,6 +24,12 @@ Rule: `.claude/worktrees/` 下被 merge 进其他分支的 worktree 按现有规
 - **WHEN** 运行 `plan`
 - **THEN** `.claude/worktrees/wf_1` 的原因里有以 `landed:` 开头的一条
 - **AND** `.claude/worktrees/base` 仍落在 keep 档，原因不含 `landed:`（它只在 `worktree-c` 的 first-parent 链上，是被派生，不是被合入）
+
+#### Scenario: cleanup-keeps-fresh-worktree-after-branch-premerges-main
+- **GIVEN** change 分支 `worktree-c` 有自己的提交，main 随后前进了一个提交
+- **AND** 在 main tip 新开一间干净的 `.claude/worktrees/x`，之后 `worktree-c` 预合并了 main
+- **WHEN** 运行 `plan`
+- **THEN** `.claude/worktrees/x` 仍落在 keep 档，原因不含 `landed:`
 
 ### Requirement: 已落地 change 的作废尝试进入清理
 对 `.claude/worktrees/` 下未命中 landed、相对 target 为 `unmerged` 的 worktree，`merged-cleanup.py` SHALL 从切片标记（`change_dir` 的目录名）或飞行记录改动的路径认出它所属的 change C。认出 C 且 C 已落地时：

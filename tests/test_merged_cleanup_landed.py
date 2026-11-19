@@ -1,6 +1,7 @@
 """merged-cleanup.py 识别执行体临时 worktree：被合进其他分支（landed）与已落地 change 的作废尝试（dead-attempt）
 （scenario: merged-cleanup-agent-worktrees#cleanup-removes-worktree-merged-into-change-branch、#cleanup-keeps-worktree-only-forked-from、
-#cleanup-removes-dead-attempt-of-landed-change、#cleanup-defers-detached-dead-attempt、#cleanup-treats-archived-change-as-landed，共 5 条）。
+#cleanup-keeps-fresh-worktree-after-branch-premerges-main、
+#cleanup-removes-dead-attempt-of-landed-change、#cleanup-defers-detached-dead-attempt、#cleanup-treats-archived-change-as-landed，共 6 条）。
 切片 S2 已实现，骨架标记已去。"""
 import json
 
@@ -58,6 +59,24 @@ def test_cleanup_keeps_worktree_only_forked_from(w):
     # Then: wf_1 有 landed: 原因；base 只在 worktree-c 的 first-parent 链上，仍是 keep，原因不含 landed:
     assert reasons_with(item(out, "worktree", ".claude/worktrees/wf_1"), "landed:")
     it = item(out, "worktree", ".claude/worktrees/base")
+    assert it["tier"] == "keep", it
+    assert not reasons_with(it, "landed:"), it
+
+
+def test_cleanup_keeps_fresh_worktree_after_branch_premerges_main(w):
+    # Given: change 分支 worktree-c 从 main@init 派生并有自己的提交；main 前进一个提交；
+    #        在 main tip 新开一间干净的 .claude/worktrees/x；随后 worktree-c 按仓库规定预合并 main
+    feature(w, "c")
+    commit(w.main, {"m.py": "m = 1\n"}, "main advance")
+    g(w.main, "push", "-q", "origin", "main")
+    g(w.main, "worktree", "add", "-q", ".claude/worktrees/x", "-b", "worktree-x", "main")
+    g(w.main / ".worktrees" / "c", "merge", "-q", "--no-ff", "main", "-m", "pre-merge main")
+
+    # When: 运行 plan
+    out = plan(w)
+
+    # Then: x 相对 target 是 fresh，合进 worktree-c 的是 main 的提交而不是 x 的工作 → 仍落 keep，原因不含 landed:
+    it = item(out, "worktree", ".claude/worktrees/x")
     assert it["tier"] == "keep", it
     assert not reasons_with(it, "landed:"), it
 
