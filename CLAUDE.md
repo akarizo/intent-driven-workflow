@@ -15,7 +15,7 @@
 8. 度量必打印：每次 apply 收口打印飞行记录；无数据不得声称提速。
 9. 零 token 优先：能用脚本 / hook 判定的不交给模型。
 10. 回退必存在：新机制失效时回退路径语义一致（Workflow → Agent 派发；脚本渲染 → 保留占位）。
-11. 模型按角色显式路由：执行体 / 评审员 = 会话主模型 high，机械角色 = sonnet low；派发不留空 `model`、模板禁设 `_FORCE`；`<main>` 由 `.claude/hooks/session-model.py` 判定，**禁自述**（判不出停飞，人工 `--model=`）；收口 `--expect-models` 机械对账各角色实际模型。
+11. 模型按派发用途显式路由：执行层 model / effort 取自 `openspec/model-routing.json`（缺键走内建默认），只写模型名、禁 `main` / `inherit`；路由规划期钉进 `slices.json`，起飞 `resolve` 读取，**禁自述**；派发不留空 `model`、禁设 `_FORCE`；收口 `--expect-models` + `--expect-efforts` 对账。规划期产出只来自主会话或 fork。
 
 ## 本仓库开发纪律
 - 命令与同名 skill 同改，禁漂移；`python3 -m pytest -q tests` 全绿；`cd template && openspec schema validate intent-driven` 绿；`.claude/hooks/*.py` 可 compileall。

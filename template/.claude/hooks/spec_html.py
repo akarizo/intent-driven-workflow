@@ -701,6 +701,30 @@ def slice_turns(change_dir):
     return data if isinstance(data, dict) else {}
 
 
+ROUTING_KEYS = (("flight", ("executor", "executor-large", "fixer", "reviewer", "integrator")),
+                ("ship", ("reviewer", "followup")))
+
+
+def render_routing(data):
+    """模型路由小节（design D3）：有 routing → flight / ship 每键一行；没有 → 起飞会被拒的提示。"""
+    routing = data.get("routing")
+    if not isinstance(routing, dict):
+        return ('<h3>模型路由</h3><p class="placeholder">未钉住模型路由：起飞会被拒绝，先运行 '
+                '<code>python3 .claude/hooks/model-routing.py pin --change-dir &lt;change&gt;</code></p>')
+    rows = []
+    for group, keys in ROUTING_KEYS:
+        entries = routing.get(group) or {}
+        for key in keys:
+            entry = entries.get(key)
+            if not isinstance(entry, dict):
+                continue
+            rows.append('<tr><td class="mono">%s.%s</td><td>%s</td><td>%s</td></tr>'
+                        % (esc(group), esc(key), esc(entry.get("model", "")), esc(entry.get("effort", ""))))
+    return ('<h3>模型路由</h3><p>来源：<code>%s</code></p><table class="flight-table"><thead><tr><th>键</th>'
+            '<th>模型</th><th>effort</th></tr></thead><tbody>%s</tbody></table>'
+            % (esc(routing.get("source", "")), "".join(rows)))
+
+
 def render_flight(change_dir):
     text = read_text(os.path.join(change_dir, "slices.json"))
     if not text:
@@ -756,7 +780,7 @@ def render_flight(change_dir):
     else:
         timeline_html = '<h3>飞行记录</h3><p class="placeholder">尚无飞行记录事件。</p>'
 
-    return (
+    return render_routing(data) + (
         '<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th>'
         '<th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'

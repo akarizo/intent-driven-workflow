@@ -68,9 +68,42 @@ def test_docs_state_mechanical_resolution():
     # When: 检索模型路由与起飞批准相关段落
     routed = [docs["README.md"], docs["docs/WORKFLOW_zh.md"], docs["template/CLAUDE.md.snippet"], docs["CLAUDE.md"]]
 
-    # Then: 都声明主模型由 session-model.py 判定；铁律含"禁自述"与起飞批准的机械校验；无"看 /model"式措辞；install.sh 说明同步
-    assert all("session-model.py" in t for t in routed)
+    # Then: 都声明路由由 model-routing 机械解析；铁律含"禁自述"与起飞批准的机械校验；无"看 /model"式措辞；install.sh 说明同步
+    assert all("model-routing" in t for t in routed)
     assert all("看 `/model`" not in t for t in docs.values())
     assert "禁自述" in docs["CLAUDE.md"] and "禁自述" in docs["template/CLAUDE.md.snippet"]
     assert "takeoff-gate" in docs["CLAUDE.md"] and "takeoff-gate" in docs["install.sh"]
-    assert "session-model.py" in docs["install.sh"]
+    assert "model-routing" in docs["install.sh"]
+
+
+# ---------------------------------------------------------------- 配置驱动路由（scenario: iron-rule-routing#iron-rule-names-routing-config、
+# #readme-and-installer-describe-routing，共 2 条）。骨架：strict xfail，切片 S6 实现后去掉标记即解锁。
+import pytest  # noqa: E402
+
+
+def rule_11(text):
+    return next(line for line in text.splitlines() if re.match(r"^11\.\s", line))
+
+
+def test_iron_rule_names_routing_config():
+    # Given: 仓库根 CLAUDE.md 与 template/CLAUDE.md.snippet
+    lines = [rule_11(read("CLAUDE.md")), rule_11(read("template/CLAUDE.md.snippet"))]
+
+    # When: 取两者的铁律 11 一行
+    # Then: 都含 model-routing.json / slices.json / --expect-efforts / main / 「主会话或 fork」，都不含「会话主模型」
+    for line in lines:
+        for k in ("model-routing.json", "slices.json", "--expect-efforts", "main", "主会话或 fork"):
+            assert k in line, (k, line)
+        assert "会话主模型" not in line, line
+
+
+def test_readme_and_installer_describe_routing():
+    # Given: README.md、docs/WORKFLOW_zh.md 与 install.sh
+    docs = {rel: read(rel) for rel in ("README.md", "docs/WORKFLOW_zh.md", "install.sh")}
+
+    # When: 读三者全文
+    # Then: 都含 model-routing；不再把执行体与评审员写成「会话主模型（session-model.py 判定）」
+    for rel, t in docs.items():
+        assert "model-routing" in t, rel
+        assert "会话主模型（`session-model.py` 判定）" not in t and "会话主模型（session-model.py 判定）" not in t, rel
+    assert "会话主模型 `<main>`" not in docs["docs/WORKFLOW_zh.md"]
