@@ -14,7 +14,9 @@
 //                 blocked 只进 PR 正文作说明；draft / ready 由 slice-gate.py ship 按 gate-report.md 裁决，不看本列表。
 //   models        必填：{ executor, reviewer, integrator }，按角色显式路由（铁律：不得留空让 env 默认兜底）
 //                 executor / reviewer = 会话主模型别名（如 "opus" / "fable"）；integrator = 低档模型（"sonnet"）
-//   efforts       可选：{ executor: "high", reviewer: "high", integrator: "low" }
+//                 可选 executor-large（大片档执行体）/ fixer（批量修复与 wave 跨片修复），缺省取 executor 的值
+//   efforts       可选：{ executor: "high", reviewer: "high", integrator: "low" }；executor-large / fixer 缺省取 efforts.executor
+//                 每个角色的 effort 只能取 low / medium / high / xhigh / max，否则起飞前抛错
 //   landed        可选，{ S1: "<commit>", ... }（slice-gate.py landed 的输出）；上次飞行已合回的切片不再派执行体，评审照派，返回值标 landed
 // 结构：wave 内 parallel 派发切片（一律 isolation: worktree）→ 门禁红或执行体未返回 / 抛错重试一次 → 每个 wave 由 integrator 合回，
 //       合回后做集成检查（wave-check），红了当场派一个跨片修复执行体，绿了合回，仍红按红的种类定停飞范围 →
@@ -47,12 +49,23 @@ const tierOf = (s) => (turns[s] === 'large' ? 'large' : 'standard')
 const execDef = (s) => (tierOf(s) === 'large' ? 'slice-executor-large' : 'slice-executor')
 
 // ---- 模型路由（铁律：按角色显式声明，缺一即拒绝起飞）
-const models = args.models || {}
+// 5 个角色：executor-large（大片档执行体）与 fixer（批量修复 / wave 跨片修复）缺省取 executor 的值
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const ROLES = ['executor', 'executor-large', 'fixer', 'reviewer', 'integrator']
+const models = Object.assign({}, args.models || {})
 for (const role of ['executor', 'reviewer', 'integrator']) {
   if (!models[role]) throw new Error(`args.models.${role} 缺失：模型必须按角色显式路由（executor/reviewer = 会话主模型，integrator = sonnet），不能留空让 CLAUDE_CODE_SUBAGENT_MODEL 默认兜底`)
 }
 const efforts = Object.assign({ executor: 'high', reviewer: 'high', integrator: 'low' }, args.efforts || {})
-log(`模型路由：executor=${models.executor}/${efforts.executor} · reviewer=${models.reviewer}/${efforts.reviewer} · integrator=${models.integrator}/${efforts.integrator}`)
+for (const role of ['executor-large', 'fixer']) {
+  if (!models[role]) models[role] = models.executor
+  if (!efforts[role]) efforts[role] = efforts.executor
+}
+for (const role of ROLES) {
+  if (!EFFORTS.includes(efforts[role])) throw new Error(`args.efforts.${role} = ${efforts[role]} 不合法：effort 只能取 ${EFFORTS.join(' / ')}`)
+}
+const execRole = (s) => (tierOf(s) === 'large' ? 'executor-large' : 'executor')
+log(`模型路由：` + ROLES.map((r) => `${r}=${models[r]}/${efforts[r]}`).join(' · '))
 
 const typed = (name) => (useAgentTypes === false ? {} : { agentType: name })
 // agent 定义未注册（useAgentTypes=false）时，纪律仍以定义文件为准：让默认 subagent 先读它再干活
@@ -203,7 +216,7 @@ for (const [i, allWave] of waves.entries()) {
   const iso = 'worktree'
   // 执行体没交回结构化结果时 agent 调用会抛错（运行时实测），与返回空值同样按未返回处理
   const run = (s, retryOf) => agent(executorPrompt(s, retryOf),
-    { label: retryOf ? `${s}:retry` : s, isolation: iso, schema: GATE, model: models.executor, effort: efforts.executor, ...typed(execDef(s)) })
+    { label: retryOf ? `${s}:retry` : s, isolation: iso, schema: GATE, model: models[execRole(s)], effort: efforts[execRole(s)], ...typed(execDef(s)) })
     .catch(() => null)
   const done = await parallel(wave.map((s) => () =>
     run(s).then((r) => (!r || !r.ok) ? run(s, r || NO_RETURN) : r)))
@@ -260,7 +273,7 @@ for (const [i, allWave] of waves.entries()) {
         `失败项：${JSON.stringify(chk.failed)}。红的集成检查就是先失败的测试；缺陷需要新测试才能钉住时照 TDD 补。`,
         `逐条 commit（fix: 前缀），不 push，不提交 ${changeDir} 下的飞行记录文件。`,
         `收尾运行 \`${waveCmd(' --fix-base <base>')}\`，把它打印的 JSON 原样作为最终输出。`,
-      ].filter(Boolean).join('\n'), { label: `fix:w${i + 1}` + (retry ? ':retry' : ''), phase: 'Fix', isolation: 'worktree', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+      ].filter(Boolean).join('\n'), { label: `fix:w${i + 1}` + (retry ? ':retry' : ''), phase: 'Fix', isolation: 'worktree', schema: GATE, model: models.fixer, effort: efforts.fixer, ...typed('slice-executor') })
         .catch(() => null)
       let wf = await runWaveFix(false)
       if (!wf || baseRejected(wf)) wf = (await runWaveFix(true)) || wf
@@ -324,7 +337,7 @@ if (blocking.length) {
     `finding 清单：${JSON.stringify(blocking)}`,
     // fix 在临时 worktree 里跑，timeline 记录进不了分支：record fix 由 finalize 合回后写
     `每条修复都要有先失败的测试；修完运行 \`python3 ${hooksDir}/slice-gate.py final --change-dir ${changeDir}\`，把 JSON 原样返回。`,
-  ].filter(Boolean).join('\n'), { label: retry ? 'fix:retry' : 'fix', isolation: 'worktree', schema: GATE, model: models.executor, effort: efforts.executor, ...typed('slice-executor') })
+  ].filter(Boolean).join('\n'), { label: retry ? 'fix:retry' : 'fix', isolation: 'worktree', schema: GATE, model: models.fixer, effort: efforts.fixer, ...typed('slice-executor') })
     .catch(() => null)
   fix = await runFix(false)
   if (!fix || baseRejected(fix)) fix = (await runFix(true)) || fix

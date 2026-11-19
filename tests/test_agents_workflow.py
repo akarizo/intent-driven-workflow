@@ -51,13 +51,13 @@ def test_workflow_routes_models_explicitly():
 
     # When: 数 agent( 调用次数与带 model: 的调用次数，并找 models 必填校验
     calls = len(re.findall(r"\bagent\(", text))
-    with_model = len(re.findall(r"model:\s*models\.", text))
+    with_model = len(re.findall(r"model:\s*models[.\[]", text))
 
-    # Then: 脚本要求 args.models 含 executor / reviewer / integrator（缺则 throw）；每个 agent( 调用都显式带 model 与 effort；开头 log 路由表
+    # Then: 脚本要求 args.models 含 executor / reviewer / integrator（缺则 throw）；每个 agent( 调用都显式带 model 与 effort；修复走 fixer；开头 log 路由表
     assert "args.models" in text and "throw new Error" in text
-    assert all(("models.%s" % k) in text for k in ("executor", "reviewer", "integrator"))
+    assert all(("models.%s" % k) in text for k in ("executor", "reviewer", "integrator", "fixer"))
     assert calls >= 5 and with_model == calls, (calls, with_model)
-    assert len(re.findall(r"effort:\s*efforts\.", text)) == calls
+    assert len(re.findall(r"effort:\s*efforts[.\[]", text)) == calls
     assert "log(`模型路由" in text
 
 
