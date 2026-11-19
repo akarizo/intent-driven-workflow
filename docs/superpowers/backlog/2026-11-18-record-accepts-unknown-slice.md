@@ -6,6 +6,8 @@ change `tier-budgets` wave 2 的 integrator（sonnet）没有用门禁 JSON 原�
 
 证据：`template/openspec/changes/tier-budgets/gate-report.md` 11:56:24Z 三行（切片列带 sha、commit 列空）与 12:14:27Z 补记行；integrator 返回的 warnings 含「record 输出的 commit 字段为空串」。
 
+第 2 次（2026-11-18 `wave-integration-guard`）：另一会话的 wave 3 integrator 同样在 zsh 里手拼 `record --json`，gate-report.md 写进 `S3 b5d6709…` / `S5 d47925b…` / `S7 405bb6c…` 三行坏行（timeline 12:46:32Z），ship 判「切片 S3/S5/S7 无门禁记录」；主会话用留存的门禁 JSON（S5/S7）与在合回 commit 上重跑的门禁（S3）补录后转绿（`f15f07a`）。仍不入 CLAUDE.md：ship 会点名，不静默（准入闸门 Q3 ✗）。
+
 ## 防线（Q4 ✓：可机械判定）
 
 `cmd_record` 写行前校验：`slice` 必须是 `slices.json` 里的切片 id 或 `fix` / `final`，`commit` 必须是本地存在的 commit（`git cat-file -t`）；不满足 → 非 0 退出并点名字段。integrator 拿到非 0 就会原样上报，坏行不会进 gate-report.md。

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+wave-integration-guard · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+wave-integration-guard
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">tasks</span><span class="chip" data-state="done">specs/owns-tiers</span><span class="chip" data-state="done">specs/retakeoff-landed</span><span class="chip" data-state="done">specs/slice-guards</span><span class="chip" data-state="done">specs/wave-check</span><span class="chip" data-state="done">specs/wave-fix</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">切片门禁只看本片自己的 <code>verify</code>，合回之后没有任何一步检查「合在一起还对不对」。afa 的 <code>key-features-keyft</code> 飞行里这条缺口出了四件事（交接文档 F4 / F5 / F6 / F7）：</p><p class="why-body">- <strong>跨片问题拖到下游才爆，爆了没有修复通道</strong>。S8 新增了一个没声明的跨包 import，它自己的门禁是绿的（verify 不含分层测试），合回后把下一个 wave 的 S3、S7 拖红。工作流的 Fix 阶段只吃评审 finding，而且排在所有 wave 之后，只能人工手写一个「前置 fix」工作流。
+- <strong>全局守护不在每片门禁里</strong>。分层 / 依赖声明 / 组合根这类几秒就能跑完的检查，只出现在部分切片的 verify 里，引入新跨包依赖的切片照样绿。
+- <strong>owns 漏列靠连红两次才暴露</strong>。规划期预测不准哪个替身、哪个桩要跟着接口变，每漏一个就是一次停飞、改计划、重新批准；重新起飞时已经合回的切片还要再派一遍执行体。
+- <strong>owns 上限 12 条逼人放宽通配</strong>。回放本机 6 个仓库 805 个切片：大片档（现存文件多于 8 个）的切片有 28.7% 恰好写满 12 条，写满的切片里 48% 用了通配（其他切片是 7%–17%），门禁报「写了 owns 之外的文件」的比例是 19.2%（其他切片 2%–4%）。数据与脚本在 <code>calibration/</code>。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>全局守护</strong>：<code>gate.checks</code> 的每个检查新增可选的 <code>slice</code> 命令，与 <code>baseline</code> / <code>final</code> 并列。写了 <code>slice</code> 的检查在 baseline（证明起点是绿的）、每片门禁（新门禁项 <code>G15 guard</code>）与每次 wave 集成检查里运行。仓库默认清单 <code>gate-checks.json</code> 里声明了 <code>slice</code> 的检查，计划里的同名检查必须带上。</li><li><strong>wave 集成检查</strong>：新子命令 <code>slice-gate.py wave-check</code>，integrator 每个 wave 合回后运行：先跑全部守护，再按依赖图只重跑受影响的测试（与增量 final 同一选法）。没有可用锚点、估算耗时超过预算（缺省 120 秒，计划可调）、或仓库配了分层文件时，测试那一半跳过并在时间线写明原因，不退化成全量。结论记进 <code>gate-report.md</code> 的 <code>wave</code> 行与时间线的 <code>wave-check</code> 事件；<code>ship</code> 见到最新的 <code>wave</code> 行是红的就判 draft。</li><li><strong>跨片修复通道</strong>：集成检查红 → 工作流当场派一个不受 owns 限制的修复执行体，修完在它自己的 worktree 里重跑一次集成检查；绿了由 integrator 合回并把结论写回分支，修复提交照常进评审。仍红才记 blocked：守护红时后面的 wave 全部停下，只有测试红时只停依赖本 wave 的切片。修复改了哪些文件、哪些落在所有切片的 owns 之外，写进集成检查的输出并进 PR 正文。</li><li><strong>owns 上限按轮次档</strong>：标准档 12 条不变，大片档 30 条。单条通配展开出 20 个以上现存文件时，须在该片的 <code>owns_wide</code> 里写理由；lint 把每条通配展开的文件数打印出来。已经批准过的在途 change 不因这条新规则变红。</li><li><strong>重新起飞不重做已落地的切片</strong>：新子命令 <code>slice-gate.py landed</code> 列出「门禁绿、提交已在分支上、计划里本片没再改过」的切片；工作流收到后不再派它们的执行体，只照常派评审。补 owns 之后的重新起飞因此只花被改那一片的钱。</li><li>审批页显示哪些检查是全局守护、哪些通配写了理由；<code>flight-doctor.py cost</code> 多一行 wave 集成检查的次数与秒数；命令文档、同名 skill、运行器契约、README、schema 同步。</li></ul><div class="impact"><span class="tag"><code>template/.claude/hooks/slice-gate.py</code>：检查的 <code>slice</code> 字段（lint、<code>plan_sha</code>、baseline、<code>gate</code> 的 G15）；新子命令 <code>wave-check</code> 与 <code>landed</code>；<code>record</code> 认 <code>wave</code> 行；<code>ship</code> 读 <code>wave</code> 行；lint 的 owns 上限与 <code>owns_wide</code>。</span><span class="tag"><code>template/.claude/workflows/opsx-apply.js</code>：integrator 的合回派发带上集成检查；红时派跨片修复并合回；停飞范围；新参数 <code>args.landed</code>（可选）；返回值多 <code>waves</code>。</span><span class="tag"><code>template/.claude/agents/integrator.md</code>、<code>slice-executor.md</code>：各补一段。</span><span class="tag"><code>template/.claude/hooks/flight-doctor.py</code>（<code>cost</code> 多一行）、<code>spec_html.py</code>（审批页两处）。</span><span class="tag"><code>template/.claude/commands/opsx-apply.md</code> 与同名 skill、<code>pr-ship.md</code>、<code>opsx-propose.md</code> 与同名 skill、<code>template/.claude/flight-runner-contract.md</code>、<code>README.md</code>、<code>template/openspec/schemas/intent-driven/schema.yaml</code>。</span><span class="tag">运行契约：检查命令的 <code>GATE_PHASE</code> 多两个取值 <code>slice</code> 与 <code>wave</code>；<code>slice</code> 阶段会被同一 wave 的多个切片并行调用。</span><span class="tag">每个 wave 多一次集成检查的墙钟：守护是仓库自己声明的快检查；测试那一半有预算。本仓实测一次改到 <code>slice-gate.py</code> 的增量要 512–571 秒，会被预算挡下、留给 final。</span><span class="tag">与待飞的 <code>tier-budgets</code>（C5b）同改 <code>slice-gate.py</code>、<code>flight-doctor.py</code>、契约文档与 README，函数与段落不重叠，见 design 的风险一节。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4>slice-guards</h4><p>检查可以声明一条每片门禁与每个 wave 都运行的 <code>slice</code> 命令，基线先证明它是绿的。</p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4>wave-check</h4><p>每个 wave 合回后的集成检查（守护 + 受影响的测试），结论进飞行记录并参与 draft / ready 裁决。</p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4>wave-fix</h4><p>集成检查红时工作流内的跨片修复通道，以及修不好时的停飞范围。</p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4>owns-tiers</h4><p>owns 条数上限随轮次档变化，宽通配要写理由。</p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4>retakeoff-landed</h4><p>重新起飞时已落地的切片不再派执行体。</p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>owns-tiers <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: owns 条数上限随轮次档</p><p>计划校验（<code>lint</code>、<code>waves</code>、<code>turns</code>、<code>preflight</code>）SHALL 按切片的轮次档决定 owns 条数上限：标准档 1–12 条，大片档 1–30 条。档位与 <code>slice-gate.py turns</code> 的算法相同（计划写 <code>&quot;turns&quot;: &quot;large&quot;</code>，或 owns 展开后的现存文件数多于 8 个）；不在 git 仓库里时只认计划里的 <code>turns</code>。超限时 MUST 判计划不合法，点名该切片并写出两档的上限。
+Feature: 大切片可以把文件一条条写清楚
+Rule: 上限跟着切片的大小走，小切片想多写要先声明自己是大片</p><div class="scenario"><p class="scenario-name">Scenario: owns-cap-follows-turn-tier</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>切片 S1 的 13 条 owns 都是现存文件；切片 S2 的 13 条 owns 里只有 2 个现存文件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>waves</code>；给 S2 写上 <code>&quot;turns&quot;: &quot;large&quot;</code> 后再运行；再把 S1 的 owns 加到 31 条后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次以 2 退出，stderr 点名 S2 并含 12 与 30，不点名 S1</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第三次以 2 退出，stderr 点名 S1</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 宽通配要写理由</p><p>带通配符的 owns 条目在轮次档所用的那棵树上展开出多于 20 个现存文件时，该切片 MUST 在 <code>owns_wide</code>（对象，键是该片 owns 里的条目原文，值是非空理由）里为它写理由，否则计划不合法，stderr 点名该切片、该条目、展开的文件数与 <code>owns_wide</code>。<code>owns_wide</code> 的键不是该片的 owns 条目、或理由为空时同样不合法。计划合法时 stderr SHALL 为每个带通配的条目打印一行 <code>owns: &lt;切片&gt; &lt;条目&gt; → &lt;N&gt; 个文件</code>。change 的时间线已有 approve 事件时，缺理由 MUST NOT 判红，只打印提示。不在 git 仓库里时不做这项检查。
+Feature: 一条通配盖住很多文件时，批准的人看得到为什么
+Rule: 宽不是错，但要有一句话的理由</p><div class="scenario"><p class="scenario-name">Scenario: wide-glob-needs-reason</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>切片 S1 的 owns 是一条展开出 21 个现存文件的通配</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>waves</code>；在 <code>owns_wide</code> 里为它写了理由后再运行；再把理由改成空串后运行；再把 <code>owns_wide</code> 的键换成不在 owns 里的条目后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次以 2 退出，stderr 含该通配、21 与 <code>owns_wide</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>后两次都以 2 退出，stderr 含 <code>owns_wide</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-prints-glob-expansion</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>切片 S1 的 owns 有一条展开出 21 个现存文件的通配并写了理由，另有一条字面路径</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>waves</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stderr 有一行 <code>owns: S1 &lt;该通配&gt; → 21 个文件</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>字面路径不出现在这类行里</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: approved-change-not-reddened-by-wide-rule</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>切片 S1 的 owns 是一条展开出 21 个现存文件的通配，没有写理由；该 change 的时间线已有 approve 事件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>waves</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 仍有该通配的展开行，并提示 <code>owns_wide</code></span></li></ul></div></div></div><div class="spec-card"><h3>retakeoff-landed <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 脚本列出已落地的切片</p><p><code>slice-gate.py landed --change-dir DIR</code> SHALL 打印一个 JSON 对象，把每个已落地的切片 id 映射到它最新门禁行里的 commit，退出 0；计划不合法时与 <code>lint</code> 一样以 2 退出。一个切片已落地须同时满足：<code>gate-report.md</code> 里它的最新一行是绿的；那一行的 commit 能解析且是 HEAD 的祖先；从那个 commit 到当前工作树，该片的切片包与本 change 的 <code>specs/</code> 没有改动，且 <code>slices.json</code> 里该片的条目除 <code>owns</code> 与 <code>owns_wide</code> 外与那个 commit 上的相同。没有任何门禁行时输出空对象。
+Feature: 重新起飞时知道哪些切片不用再做
+Rule: 门禁绿、提交在分支上、计划里这一片没再改过，三条都满足才算</p><div class="scenario"><p class="scenario-name">Scenario: landed-lists-green-merged-slices</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>三个切片：S1 的最新门禁行是绿的且 commit 在分支历史里；S2 的最新门禁行是红的；S3 的门禁行是绿的但 commit 不在对象库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py landed</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出只有 S1，值是它门禁行里的 commit</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: landed-excludes-slice-whose-plan-changed</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>S1、S2 的门禁行都是绿的且 commit 在分支历史里</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>改了 S1 的切片包后运行 <code>landed</code>；还原后只改 S2 的 owns 再运行；再改 S2 的 verify 后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次输出没有 S1、有 S2</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次 S1、S2 都在</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第三次输出没有 S2</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 工作流不重做已落地的切片</p><p><code>opsx-apply</code> 工作流 SHALL 接受可选参数 <code>args.landed</code>（<code>landed</code> 子命令的输出）：其中的切片 MUST NOT 派执行体，返回值的 <code>slices</code> 里记 <code>{slice, ok: true, commit, landed: true}</code>；评审照派，审的是 <code>landed</code> 给出的 commit。一个 wave 只要有已落地或本次合回的切片就 SHALL 做集成检查；整个 wave 都已落地时 integrator 的派发 MUST NOT 含 <code>slice-gate.py merge</code>，只运行 <code>wave-check</code> 并带回 <code>check</code>。没传 <code>landed</code> 时行为与没有本功能时相同。
+Feature: 补完计划重新起飞，只花没落地那几片的钱
+Rule: 执行体不重派，评审与集成检查不省</p><div class="scenario"><p class="scenario-name">Scenario: workflow-skips-landed-slices</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>args.landed</code> 含 S1（commit 为 1…1）；另一次飞行的 <code>args.landed</code> 含第一个 wave 的全部切片</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>各跑一遍工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次没有 S1 的执行体派发，有 <code>review:S1</code> 且 prompt 含 1…1，返回值的 <code>slices</code> 里 S1 带 <code>landed: true</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次第一个 wave 的合回 prompt 含 <code>wave-check</code>、不含 <code>slice-gate.py merge</code>，第二个 wave 的切片照常派发</span></li></ul></div></div></div><div class="spec-card"><h3>slice-guards <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 检查可以声明每片门禁都运行的 slice 命令</p><p><code>gate.checks</code> 的每一项 MAY 带 <code>slice</code>（非空字符串；缺省或 <code>null</code> 表示不是全局守护）。<code>slice-gate.py lint</code> SHALL 接受它，<code>slice</code> 是空白串或非字符串时 MUST 判计划不合法并点名该检查与 <code>slice</code>。<code>&lt;openspec 根&gt;/gate-checks.json</code> 的某项带非空 <code>slice</code> 时，计划里的同名检查 MUST 也带非空 <code>slice</code>，否则计划不合法（点名该检查与 <code>slice</code>）；该检查写进 <code>gate.checks_skip</code> 时按跳过处理。任一检查带 <code>slice</code> 时 <code>plan_sha</code> SHALL 把各检查的 <code>[name, slice]</code> 计入；没有检查带 <code>slice</code>（含显式 <code>null</code>）时 <code>plan_sha</code> MUST 与不认识该字段时相同。
+Feature: 仓库把秒级的全局守护交给每一片的门禁
+Rule: 守护是检查的第三条命令，沿用检查已有的清单、跳过与超时</p><div class="scenario"><p class="scenario-name">Scenario: lint-accepts-slice-command</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划的检查 <code>layering</code> 带 <code>slice</code> 命令与 <code>final</code> 命令</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code>；再把 <code>slice</code> 改成空白串后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次以 2 退出，stderr 点名 <code>layering</code> 与 <code>slice</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: lint-requires-slice-declared-by-repo-default</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-checks.json</code> 里的检查 <code>layering</code> 带 <code>slice</code>；计划里的 <code>layering</code> 只有 <code>final</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py lint</code>；再把计划里的 <code>layering</code> 挪进 <code>gate.checks_skip</code> 并写理由后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次以 2 退出，stderr 点名 <code>layering</code> 与 <code>slice</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次退出 0</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: slice-command-is-part-of-plan-sha</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两份只差检查 <code>layering</code> 有没有 <code>slice</code> 命令的计划，以及一份把 <code>slice</code> 写成 <code>null</code> 的计划</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别计算 <code>plan_sha</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>带 <code>slice</code> 命令的那份与另外两份不同</span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有 <code>slice</code> 与 <code>slice</code> 为 <code>null</code> 的两份相同</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 基线先证明守护是绿的</p><p><code>slice-gate.py baseline</code> SHALL 对每个带 <code>slice</code> 的检查，在它的 <code>baseline</code> 命令之后运行 <code>slice</code> 命令，环境变量 <code>GATE_PHASE</code> 为 <code>slice</code>，其余与检查的运行契约相同；结果记在 <code>gate-baseline.json</code> 的 <code>checks.&lt;名&gt;.slice</code>（<code>exit</code>、<code>sec</code>、<code>cmd</code>）。<code>slice</code> 命令非 0 或超时时基线 MUST 为红，<code>reasons</code> 点名该检查与 <code>slice</code>。
+Feature: 守护在起点是红的就不起飞
+Rule: 守护红在基线上，比红在每一片的门禁里便宜</p><div class="scenario"><p class="scenario-name">Scenario: baseline-runs-and-records-slice-command</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>检查 <code>layering</code> 没有 <code>baseline</code> 命令，<code>slice</code> 命令把收到的环境变量写进共用目录</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>gate-baseline.json</code> 的 <code>checks.layering.slice.exit</code> 为 0、<code>cmd</code> 等于计划里的 <code>slice</code> 命令</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>slice</code> 命令运行过一次，收到的 <code>GATE_PHASE</code> 为 <code>slice</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: baseline-red-when-slice-command-fails</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>检查 <code>layering</code> 的 <code>slice</code> 命令以 3 退出</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py baseline</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出非 0，<code>ok</code> 为假</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>reasons</code> 有一条同时含 <code>layering</code> 与 <code>slice</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 切片门禁运行守护并以 G15 判定</p><p><code>slice-gate.py gate</code> SHALL 在本片 <code>verify</code> 与 <code>gate.lint</code> / <code>gate.typecheck</code> 之后、仍持全机测试锁时，按 <code>gate.checks</code> 的顺序运行每个带 <code>slice</code> 的检查：环境变量 <code>GATE_PHASE</code> 为 <code>slice</code>，共用目录与 baseline / final 相同，日志写在共用目录的 <code>.gate-slice-&lt;切片 id&gt;.log</code>。命令非 0 → <code>failed</code> 增加一项以 <code>G15 guard &lt;名&gt;</code> 开头、含退出码、日志路径与输出末尾；超时同样以 <code>G15 guard &lt;名&gt;</code> 开头并写明超时。基线没有该检查绿的 <code>slice</code> 记录、或记录的命令与计划不同时，MUST NOT 运行该命令，<code>failed</code> 增加一项以 <code>G15 guard &lt;名&gt;</code> 开头并提示重跑 baseline。计划里有守护时门禁 JSON SHALL 多一个 <code>guards</code>（<code>{名: {exit, sec}}</code>），时间线的 gate 备注多一段以「守护」开头的片段；计划里没有守护时 JSON 与备注 MUST 与没有本功能时相同。
+Feature: 引入问题的那一片自己就红
+Rule: 守护在每一片的门禁里跑，不靠规划的人记得把它写进 verify</p><div class="scenario"><p class="scenario-name">Scenario: gate-runs-guards-in-slice-phase</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>已开工的切片 S1，改动都在 owns 内；检查 <code>layering</code> 的 <code>slice</code> 命令在基线上是绿的</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>门禁通过，<code>guards.layering.exit</code> 为 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>slice</code> 命令收到的 <code>GATE_PHASE</code> 为 <code>slice</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线的 gate 备注含「守护 layering」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: gate-reds-g13-when-guard-fails</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>已开工的切片 S1；检查 <code>layering</code> 的 <code>slice</code> 命令打印 <code>boom</code> 后以 3 退出</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>门禁红，<code>failed</code> 有一项以 <code>G15 guard layering</code> 开头，含 <code>exit 3</code> 与 <code>boom</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>该项含日志路径 <code>.gate-slice-S1.log</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: gate-g13-needs-green-baseline-record</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>已开工的切片 S1；计划里的检查 <code>layering</code> 带 <code>slice</code> 命令，但没有基线；另一种情形是基线记录的 <code>slice</code> 命令与计划不同</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次都红，<code>failed</code> 有一项以 <code>G15 guard layering</code> 开头并含「重跑 baseline」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>两次 <code>slice</code> 命令都没有被运行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: gate-without-guards-unchanged</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>已开工的切片 S1；计划里没有任何检查带 <code>slice</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py gate S1</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>门禁 JSON 没有 <code>guards</code>，<code>failed</code> 没有 <code>G15</code> 开头的项</span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线的 gate 备注不含「守护」</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 审批页与文档说明全局守护</p><p><code>spec_html.py</code> 渲染的审批页 SHALL 列出计划里带 <code>slice</code> 的检查（名字与命令）并标明它们是全局守护；计划写了 <code>gate.wave_test_budget_sec</code> 时显示它；切片写了 <code>owns_wide</code> 时显示通配与理由。<code>template/.claude/flight-runner-contract.md</code> SHALL 新增一节说明：检查的 <code>slice</code> 字段、<code>GATE_PHASE</code> 的 <code>slice</code> 与 <code>wave</code> 两个取值、<code>slice</code> 命令会被并行调用且对共用目录只读、日志名 <code>.gate-slice-&lt;切片 id&gt;.log</code>、<code>G15</code> 与 <code>G16</code>、<code>gate.wave_test_budget_sec</code>；原有各节的标题 MUST 保留。<code>template/.claude/commands/opsx-propose.md</code>、同名 skill 与 <code>template/openspec/schemas/intent-driven/schema.yaml</code> SHALL 说明 <code>slice</code>、<code>owns_wide</code>、<code>gate.wave_test_budget_sec</code> 与 owns 条数上限随轮次档变化。
+Feature: 批准的人看得到每片都会跑什么
+Rule: 新字段在审批页与契约里各有一处说明</p><div class="scenario"><p class="scenario-name">Scenario: spec-html-shows-guards-and-wide-owns</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>计划的检查 <code>layering</code> 带 <code>slice</code> 命令，<code>gate.wave_test_budget_sec</code> 为 300，切片 S1 的 <code>owns_wide</code> 为某条通配写了理由</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>渲染审批页</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>页面含「全局守护」与该 <code>slice</code> 命令原文</span></li><li><span class="step-key" data-kw="AND">AND</span><span>页面含 300 与该通配的理由</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: contract-describes-guards-and-wave-check</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/flight-runner-contract.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读全文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>有一节含「全局守护」，写明 <code>slice</code>、<code>GATE_PHASE</code> 的两个新取值、并行与只读、<code>.gate-slice-</code>、<code>G15</code>、<code>G16</code>、<code>gate.wave_test_budget_sec</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>原有九节的标题都还在</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: propose-docs-describe-guards-and-owns-tiers</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>opsx-propose.md</code>、同名 skill 与 <code>schema.yaml</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读这三份文档</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>每一份都提到「全局守护」、<code>owns_wide</code> 与 <code>wave_test_budget_sec</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>每一份都写明 owns 条数上限按轮次档（标准档 12、大片档 30）</span></li></ul></div></div></div><div class="spec-card"><h3>wave-check <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: wave 集成检查运行守护与受影响的测试</p><p><code>slice-gate.py wave-check --change-dir DIR [--wave N] [--of M]</code> SHALL 在所在工作树的 git 顶层依次运行：计划里每个带 <code>slice</code> 的检查（环境变量 <code>GATE_PHASE</code> 为 <code>wave</code>，日志 <code>.gate-wave.log</code>，基线记录的核对与切片门禁相同，红或超时记 <code>G15 guard &lt;名&gt;</code>）；然后是受影响的测试——按与增量 final 相同的步骤取锚点与选中集合（锚点到当前树的全部改动），只重跑选中的测试文件，失败或出错的用例里去掉基线预存红与锚点失败清单后还有剩余时记 <code>G16 wave test</code> 并点名用例，超时或异常退出同样记 <code>G16 wave test</code>。stdout SHALL 打印一个 JSON：<code>slice</code> 恒为 <code>&quot;wave&quot;</code>，另有 <code>ok</code>、<code>commit</code>、<code>failed</code>、<code>warnings</code>、<code>summary</code>、<code>wave</code>、<code>of</code>、<code>guards</code>、<code>tests</code>（<code>mode</code> 为 <code>impacted</code> / <code>skipped</code> / <code>none</code>，以及 <code>why</code>、<code>files</code>、<code>rerun_tests</code>、<code>est_sec</code>、<code>sec</code>、<code>budget_sec</code>）、<code>lock</code>；退出码按 <code>ok</code>。它 SHALL 向 <code>gate-report.md</code> 追加切片列为 <code>wave</code> 的一行，并在时间线记一条 <code>wave-check</code> 事件，备注以 <code>wave N/M</code> 开头、含守护与测试各自的秒数、结论词在末尾。
+Feature: 每个 wave 合回后检查合在一起还对不对
+Rule: 守护全跑，测试只跑受影响的</p><div class="scenario"><p class="scenario-name">Scenario: wave-check-runs-guards-and-impacted-tests</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>依赖图已测的仓库，检查 <code>layering</code> 带 <code>slice</code> 命令，基线已绿；之后提交了一处只被 <code>tests/test_a.py</code> 依赖的源码改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py wave-check --wave 1 --of 2</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，JSON 的 <code>slice</code> 为 <code>wave</code>、<code>wave</code> 为 1，<code>guards.layering.exit</code> 为 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>slice</code> 命令这次收到的 <code>GATE_PHASE</code> 为 <code>wave</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>tests.mode</code> 为 <code>impacted</code>，<code>tests.files</code> 只有 <code>tests/test_a.py</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-report.md</code> 多了一行 <code>wave</code>，时间线的 <code>wave-check</code> 备注以 <code>wave 1/2</code> 开头、含「测试 」、以 <code>ok</code> 结尾</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: wave-check-reds-on-new-test-failure</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>依赖图已测的仓库，基线已绿；之后提交的源码改动让 <code>tests/test_a.py::test_a</code> 失败</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py wave-check</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 1，<code>failed</code> 有一项以 <code>G16 wave test</code> 开头并点名 <code>tests/test_a.py::test_a</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线的 <code>wave-check</code> 备注以 <code>red</code> 结尾</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: wave-check-reds-on-guard</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>检查 <code>layering</code> 的 <code>slice</code> 命令在基线上是绿的；之后提交的改动让它以非 0 退出</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py wave-check</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 1，<code>failed</code> 有一项以 <code>G15 guard layering</code> 开头</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>gate-report.md</code> 里 <code>wave</code> 的最新一行是红的</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 测试那一半有界且不退化成全量</p><p>出现下列任一情形时，<code>wave-check</code> MUST NOT 运行测试，<code>tests.mode</code> 为 <code>skipped</code>、<code>tests.why</code> 写明原因，且不因此判红：openspec 根有 <code>test-tiers.json</code>；计划配了 <code>gate.impacted</code>；取不到可用锚点或改动命中全量触发项（原因取自与 final 预告相同的判定）；锚点带逐用例耗时且选中文件的耗时之和超过预算。预算 SHALL 取计划的 <code>gate.wave_test_budget_sec</code>（正数，其他取值 lint 判计划不合法），缺省 120 秒；锚点没有逐用例耗时时不估算、照常运行。时间线备注在跳过时 SHALL 含「测试跳过」与原因。<code>wave-check</code> MUST NOT 写锚点、MUST NOT 写测试账本。它 SHALL 持一把全机测试锁：会运行测试且选中集合非空时为独占，否则为共享。
+Feature: 集成检查的成本有上限
+Rule: 选不出受影响的测试、或估算太贵时，把测试留给 final 并说清楚</p><div class="scenario"><p class="scenario-name">Scenario: wave-check-skips-tests-without-anchor</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>依赖图测不到的仓库（<code>gate.test</code> 是丢掉插件参数的包装脚本），基线已绿；之后提交了一处源码改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py wave-check</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>tests.mode</code> 为 <code>skipped</code>，<code>tests.why</code> 非空，<code>tests.files</code> 为空</span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线的 <code>wave-check</code> 备注含「测试跳过」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: wave-check-skips-tests-over-budget</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>依赖图已测的仓库，基线已绿，锚点里 <code>tests/test_a.py::test_a</code> 的耗时被记为 500 秒；之后提交了一处只影响 <code>tests/test_a.py</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py wave-check</code>；再把计划的 <code>gate.wave_test_budget_sec</code> 设为 1000 后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次 <code>tests.mode</code> 为 <code>skipped</code>，<code>tests.est_sec</code> 为 500，<code>tests.why</code> 含「预算」，退出 0</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次 <code>tests.mode</code> 为 <code>impacted</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: wave-check-leaves-anchors-and-ledger-alone</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>依赖图已测的仓库，基线已绿</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>先在没有任何改动时运行 <code>wave-check</code>，再提交一处源码改动后运行一次</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次之后锚点池的条目数与基线刚跑完时相同，测试账本目录里没有 <code>final.json</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第一次 <code>tests.mode</code> 为 <code>none</code>、锁的方式是共享；第二次锁的方式是独占</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 跨片修复的收尾复查列出改动范围</p><p><code>wave-check</code> 带 <code>--fix-base SHA</code> 时 SHALL 取 <code>SHA..HEAD</code> 的改动文件，在 JSON 里给出 <code>fix</code>（<code>base</code>、<code>files</code>、<code>outside_owns</code>，后者是不被计划里任何切片的 owns 匹配的文件），时间线备注多一段写明跨片修复改了几个文件、其中 owns 外几个。改动里有本 change 的飞行记录文件时 <code>failed</code> MUST 增加一项以 <code>G6 flight-record</code> 开头。<code>SHA</code> 不在对象库或不是 HEAD 的祖先时 MUST 以 <code>G0 base</code> 判红且不运行守护与测试。
+Feature: 不受 owns 限制的修复，改了什么由脚本算
+Rule: 所有权不放宽，越界的范围单列出来给人看</p><div class="scenario"><p class="scenario-name">Scenario: wave-check-fix-base-lists-files-outside-owns</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>切片 S1 的 owns 是 <code>src/**</code>；从某个 commit 起先后提交了 <code>src/a.py</code> 与 <code>data/b.json</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>以该 commit 为 <code>--fix-base</code> 运行 <code>wave-check</code>；再提交一处时间线文件的改动后运行；再以对象库里没有的 sha 运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次的 <code>fix.files</code> 是这两个文件，<code>fix.outside_owns</code> 只有 <code>data/b.json</code>，时间线备注含「跨片修复 2 个文件（owns 外 1 个）」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次的 <code>failed</code> 有一项以 <code>G6 flight-record</code> 开头</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第三次的 <code>failed</code> 有一项以 <code>G0 base</code> 开头</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: wave 行可写回并参与收口裁决</p><p><code>slice-gate.py record --json</code> 收到 <code>slice</code> 为 <code>wave</code> 的 JSON 时 SHALL 幂等地写一行 <code>wave</code> 进 <code>gate-report.md</code>，并在时间线记 <code>wave-check</code> 事件（备注由 JSON 的 <code>wave</code> / <code>of</code> / <code>guards</code> / <code>tests</code> / <code>fix</code> 拼出），MUST NOT 另记 <code>gate</code> 事件。<code>slice-gate.py ship</code> SHALL 在 <code>gate-report.md</code> 里 <code>wave</code> 的最新一行为红时把一条以「wave 集成检查红」开头的理由加进 <code>reasons</code>（判 draft）；没有 <code>wave</code> 行或最新一行为绿时不产生该理由。<code>ship</code> 的输出键 MUST 不变。
+Feature: 在临时 worktree 里复查出的结论能回到分支，红着就不收口
+Rule: 门禁红不收口同样适用于集成检查</p><div class="scenario"><p class="scenario-name">Scenario: record-writes-back-wave-row</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份 <code>slice</code> 为 <code>wave</code> 的 JSON：wave 2/3，守护 <code>layering</code> 1.2 秒，测试跳过并带原因</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py record --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>gate-report.md</code> 有一行 <code>wave</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线多一条 <code>wave-check</code> 事件，备注以 <code>wave 2/3</code> 开头、含「守护 layering 1.2s」与「测试跳过」、以 <code>ok</code> 结尾</span></li><li><span class="step-key" data-kw="AND">AND</span><span>时间线没有备注以 <code>wave</code> 开头的 <code>gate</code> 事件</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: ship-drafts-on-red-wave-row</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>gate-report.md</code> 里 <code>wave</code> 的最新一行是红的，失败项是 <code>G15 guard layering</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>slice-gate.py ship</code>；再写回一行绿的 <code>wave</code> 后运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次 <code>ready</code> 为假，<code>reasons</code> 有一条以「wave 集成检查红」开头并含 <code>G15</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二次的 <code>reasons</code> 没有以「wave 集成检查红」开头的项</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 成本归因列出 wave 集成检查</p><p><code>flight-doctor.py cost</code> SHALL 从时间线的 <code>wave-check</code> 事件汇总：JSON 输出多一个 <code>wave</code>（<code>count</code>、<code>guard_sec</code>、<code>test_sec</code>、<code>skipped</code>），文本输出在有 <code>wave-check</code> 事件时多一行含「wave 集成检查」与次数。没有该事件时 <code>wave.count</code> 为 0、文本不多这一行；其余键与行 MUST 不变。
+Feature: 集成检查花的时间看得见
+Rule: 度量必打印</p><div class="scenario"><p class="scenario-name">Scenario: cost-reports-wave-checks</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>时间线有两条 <code>wave-check</code> 事件：一条守护 1.2 秒、测试 12.3 秒，一条守护 0.4 秒、测试跳过</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>flight-doctor.py cost --json</code> 与不带 <code>--json</code> 的 <code>cost</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>JSON 的 <code>wave</code> 为 count 2、guard_sec 1.6、test_sec 12.3、skipped 1</span></li><li><span class="step-key" data-kw="AND">AND</span><span>文本输出有一行含「wave 集成检查 2 次」</span></li></ul></div></div></div><div class="spec-card"><h3>wave-fix <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 工作流在每个 wave 合回后要一次集成检查</p><p><code>opsx-apply</code> 工作流 SHALL 在 integrator 的 wave 合回派发里，把运行 <code>slice-gate.py wave-check --change-dir &lt;dir&gt; --wave &lt;i&gt; --of &lt;n&gt;</code> 作为合回、记录、接口摘要与 <code>integrate</code> 事件之后的一步，并要求把它打印的 JSON 原样放进返回值的 <code>check</code> 字段；prompt SHALL 写明子命令不存在（<code>invalid choice</code>）时 <code>check</code> 给 <code>null</code>。合回失败时 MUST NOT 要求集成检查的结论。返回值没有 <code>check</code> 或为 <code>null</code> 时工作流 MUST NOT 派修复、MUST NOT 记 blocked，只在返回值的 <code>waves</code> 里记一条带 <code>skipped</code> 的条目。工作流的返回值 SHALL 多一个 <code>waves</code> 数组，每个做过或跳过集成检查的 wave 一条（<code>wave</code>、<code>ok</code>、<code>failed</code>、<code>fix</code>、<code>skipped</code>）。<code>template/.claude/agents/integrator.md</code> SHALL 说明：集成检查仅当 prompt 点名时运行；子命令不存在时返回里的 <code>check</code> 为 <code>null</code>；integrator 不自己修红。
+Feature: 合回的同一次派发里顺带检查
+Rule: 检查由脚本做，integrator 只负责运行并带回结论</p><div class="scenario"><p class="scenario-name">Scenario: workflow-asks-integrator-for-wave-check</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两个 wave 的飞行，全部切片门禁绿，integrator 带回的 <code>check</code> 是绿的</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一个 wave 的合回 prompt 含 <code>slice-gate.py wave-check --change-dir openspec/changes/c --wave 1 --of 2</code>，且它出现在 <code>slice-gate.py merge</code> 之后</span></li><li><span class="step-key" data-kw="AND">AND</span><span>prompt 提到 <code>check</code> 与 <code>invalid choice</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有派任何跨片修复；返回值的 <code>waves</code> 第一条是 wave 1、<code>ok</code> 为真</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-skips-when-integrator-has-no-check</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>integrator 的返回值没有 <code>check</code>（hooks 未升级）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>没有派跨片修复，<code>blocked</code> 为空</span></li><li><span class="step-key" data-kw="AND">AND</span><span>返回值的 <code>waves</code> 每条都带非空的 <code>skipped</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: integrator-contract-describes-wave-check</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/agents/integrator.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读正文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>写明 <code>wave-check</code> 仅当 prompt 点名时运行、子命令不存在（<code>invalid choice</code>）时 <code>check</code> 为 <code>null</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>仍然写着合回 commit、<code>_interfaces.md</code> 与 <code>slice-gate.py final</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 集成检查红时当场派一次跨片修复</p><p><code>check.ok</code> 为假时，工作流 SHALL 在进入下一个 wave 之前派一个修复执行体：<code>label</code> 为 <code>fix:w&lt;i&gt;</code>，带 <code>isolation: worktree</code>，用执行体的模型与 <code>slice-executor</code> 定义。prompt SHALL 包含：这是跨片修复、不运行 <code>start</code> 与 <code>gate</code>、不受任何切片的 owns 限制；与批量修复相同的基点校验与 <code>sub-sync</code>；<code>check.failed</code> 的原文；不提交飞行记录；收尾运行带 <code>--fix-base &lt;开工时的 HEAD&gt;</code> 的 <code>wave-check</code> 并把 JSON 原样返回。修复执行体未返回、抛错或以 <code>G0</code> 被拒时 SHALL 重派一次（<code>label</code> 为 <code>fix:w&lt;i&gt;:retry</code>）。修复返回 <code>ok</code> 为真且带 commit 时，工作流 SHALL 派 integrator（<code>label</code> 为 <code>integrate:w&lt;i&gt;:fix</code>）用 <code>slice-gate.py merge wavefix&lt;i&gt;=&lt;commit&gt;</code> 合回、用 <code>record --json</code> 把修复返回的 JSON 写回、记 <code>wave-fix</code> 事件；随后 SHALL 为该 commit 派一个评审（<code>label</code> 为 <code>review:wavefix&lt;i&gt;</code>），其 finding 与切片评审一并汇总。<code>template/.claude/agents/slice-executor.md</code> SHALL 有一段说明跨片修复这种派发：不走 <code>start</code> / <code>gate</code>、收尾跑带 <code>--fix-base</code> 的 <code>wave-check</code>。
+Feature: 跨片问题在下一个 wave 之前修掉
+Rule: 修复不受 owns 限制，但只修红的那几项，并且绿了才合回</p><div class="scenario"><p class="scenario-name">Scenario: workflow-dispatches-cross-slice-fix-on-red</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>第一个 wave 的 <code>check</code> 是红的（<code>G15 guard layering</code>）；修复执行体返回绿的 JSON，commit 为 9…9，<code>fix.outside_owns</code> 有一个文件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>有一次 <code>label</code> 为 <code>fix:w1</code> 的派发，带 <code>isolation: worktree</code>、执行体模型与 <code>slice-executor</code> 类型，prompt 含 <code>G15 guard layering</code>、「不受」、<code>--fix-base</code>、<code>wave-check</code> 与基点校验命令</span></li><li><span class="step-key" data-kw="AND">AND</span><span>有一次 <code>label</code> 为 <code>integrate:w1:fix</code> 的派发，integrator 类型，prompt 含 <code>merge wavefix1=9…9</code> 与 <code>record --change-dir</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>有一次 <code>label</code> 为 <code>review:wavefix1</code> 的评审派发</span></li><li><span class="step-key" data-kw="AND">AND</span><span>第二个 wave 的切片照常派发，<code>blocked</code> 里没有 <code>wave1</code>；返回值 <code>waves</code> 第一条的 <code>fix.commit</code> 是 9…9</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: executor-contract-describes-cross-slice-fix</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/agents/slice-executor.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读正文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>有一段写明「跨片修复」：不运行 <code>start</code> 与 <code>gate</code>，收尾运行带 <code>--fix-base</code> 的 <code>wave-check</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>frontmatter 的 <code>maxTurns</code> 仍是 40</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 修不好时按红的种类定停飞范围</p><p>修复返回 <code>ok</code> 为假、重派后仍未返回、或修复的合回失败时，工作流 MUST NOT 合回修复的提交，SHALL 记一条 <code>blocked</code>（<code>slice</code> 为 <code>wave&lt;i&gt;</code>；修复交回了红结论或合回失败时 <code>kind</code> 为 <code>gate</code>，未返回时为 <code>infra</code>），理由带修复的 commit（有的话）。最后一次集成检查的 <code>failed</code> 里有以 <code>G15</code> 开头的项时，后面所有 wave 的切片 SHALL 全部记 blocked（<code>infra</code>，理由点名该 wave）且不派发；否则只有依赖本 wave 任一已合回切片的下游切片记 blocked，其余切片照常派发。无论哪种情形，评审汇总、批量修复与全量门禁照常进行。
+Feature: 红着的分支上不白跑
+Rule: 守护红全停，测试红只停下游</p><div class="scenario"><p class="scenario-name">Scenario: workflow-stops-all-when-guard-still-red</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>第一个 wave 的 <code>check</code> 因 <code>G15</code> 红；修复执行体返回的 JSON 仍因 <code>G15</code> 红</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>没有 <code>integrate:w1:fix</code> 的派发，第二个 wave 的切片没有被派发</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>blocked</code> 有 <code>wave1</code>（<code>kind</code> 为 <code>gate</code>）与第二个 wave 的切片（<code>kind</code> 为 <code>infra</code>，理由含 <code>wave 1</code>）</span></li><li><span class="step-key" data-kw="AND">AND</span><span>全量门禁的派发仍然发生</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-stops-only-dependents-when-tests-red</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>第二个 wave 有依赖 S1 的 S3 与没有依赖的 S4；第一个 wave 的 <code>check</code> 只因 <code>G16</code> 红，修复后仍红</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>S3 记 blocked 且没有被派发</span></li><li><span class="step-key" data-kw="AND">AND</span><span>S4 照常派发</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-retries-fix-noreturn-then-blocks</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>第一个 wave 的 <code>check</code> 是红的；修复执行体两次都没有交回结构化结果</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>跑完整个工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>有 <code>fix:w1</code> 与 <code>fix:w1:retry</code> 两次派发</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>blocked</code> 有 <code>wave1</code>，<code>kind</code> 为 <code>infra</code>，理由含「未返回」</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 文档镜像集成检查与跨片修复</p><p><code>template/.claude/commands/opsx-apply.md</code> 与 <code>template/.claude/skills/openspec-apply-change/SKILL.md</code> SHALL 在起飞步骤里写明运行 <code>slice-gate.py landed</code> 并把输出作为 <code>landed</code> 传给工作流，在回退路径里写明每个 wave 合回后运行 <code>slice-gate.py wave-check</code>、红时派一次跨片修复（收尾带 <code>--fix-base</code>）、绿了用 <code>merge wavefix&lt;i&gt;=&lt;commit&gt;</code> 合回、仍红时的停飞范围（<code>G15</code> 全停），并在收口步骤里写明把工作流返回的 <code>waves</code> 写进 <code>review-findings.json</code>。<code>template/.claude/commands/pr-ship.md</code> SHALL 写明 PR 正文列出 <code>review-findings.json</code> 的 <code>waves</code> 里的跨片修复（commit 与 owns 外的文件），以及 <code>ship</code> 的理由出现「wave 集成检查红」时修复后重跑 <code>slice-gate.py wave-check</code>。<code>README.md</code> SHALL 有说明全局守护、wave 集成检查、<code>owns_wide</code> 与 <code>landed</code> 的条目。
+Feature: 两条派发路径语义一致
+Rule: 命令与同名 skill 同改</p><div class="scenario"><p class="scenario-name">Scenario: apply-docs-mirror-wave-check-and-fix</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>opsx-apply.md</code> 与同名 skill</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读这两份文档</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两份都含 <code>slice-gate.py landed</code>、<code>slice-gate.py wave-check</code>、「跨片修复」、<code>--fix-base</code>、<code>wavefix</code>、<code>G15</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>两份都写明把 <code>waves</code> 写进 <code>review-findings.json</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: pr-ship-doc-lists-cross-slice-fixes</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>pr-ship.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读全文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>写明正文列出 <code>waves</code> 里的「跨片修复」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>写明理由出现「wave 集成检查红」时重跑 <code>slice-gate.py wave-check</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: readme-describes-wave-guard</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>README.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>阅读全文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>提到「全局守护」「wave 集成检查」<code>owns_wide</code> 与 <code>slice-gate.py landed</code></span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p>飞行模式里，「合在一起还对不对」只在 final 才第一次被检查。现状（读 main <code>2cc6167</code> 的代码，已含 plan-hygiene、machine-test-lock、ship-rerun-hardening、test-ledger、slice-resume-deterministic）：</p><p>| 环节 | 现状 | 出过的事 | |---|---|---| | 切片门禁 <code>cmd_gate</code> | 跑本片 <code>verify</code>、<code>gate.lint</code> / <code>gate.typecheck</code>、G3–G8、G12；<code>gate.checks</code> 只在 baseline 与 final 运行（<code>CHECK_FIELDS = name / baseline / final / timeout_sec</code>） | 引入未声明跨包依赖的切片门禁照绿（F5） | | wave 合回 | integrator 运行 <code>merge</code>、逐片 <code>record</code>、刷新接口摘要、记 <code>integrate</code> 事件；<code>integrator.md</code> 明文禁止此时跑 final | 合回后的树没人检查，下一个 wave 的切片被上一个 wave 拖红（F4） | | 修复通道 | <code>opsx-apply.js</code> 的 Fix 阶段只收评审的 CRITICAL / HIGH，排在全部 wave 之后 | 只能人工手写前置 fix 工作流（F4） | | owns 条数 | <code>MAX_OWNS = 12</code>，不分大小 | 写满 12 条的切片改用宽通配（F7） | | owns 漏列 | 门禁 <code>G6 ownership</code> / 下游 <code>G1 verify</code> 红了才知道；改计划后重新批准、重新起飞，工作流从头跑 | 每漏一个文件一次停飞（F6） |</p><p>约束：</p><ul><li>Workflow 脚本不碰文件系统，状态只能经 args 进、经 agent 的返回值出；<code>agent()</code> 的并发位与缓存按调用顺序定位。</li><li>自举飞行（本仓自己飞）时，工作流脚本用 <code>scriptPath</code> 指向 change worktree 里的 <code>template/.claude/workflows/opsx-apply.js</code>，在起飞那一刻载入，整趟飞行用的是起飞时的版本（等于拉分支时 main 的版本）；agent 定义与 hooks 由各 agent 在运行时从所在工作树读，随合回逐步变新（查实：记忆 <code>self-hosting-workflow-args</code>、<code>self-hosting-slice-deps</code>，<code>slice-resume-deterministic</code> design D9）。</li><li>现行 ADR：<code>DRAFT-measurements-stay-out-of-plan-files</code>（脚本不写计划文件）、<code>DRAFT-gate-evidence-not-self-reported</code>（判据不由被门禁方提供）、<code>DRAFT-final-incremental-by-dependency-anchor</code>（锚点是可沿用的测试结论）、<code>DRAFT-executor-turn-tiers-by-owned-files</code>（档位按现存文件数、由脚本现算）、<code>DRAFT-test-ledger-outside-repo-follows-anchors</code>（锚点带逐用例耗时 <code>secs</code>）。</li><li>方案页第 07 节 Q6 已定：不放宽所有权，只把发现提前、把重新批准做便宜。</li></ul><p>### 调查一：owns 上限与宽通配的数据</p><p>脚本 <code>calibration/replay-owns.py</code>（借用 <code>slice-resume-deterministic/calibration/replay-turns.py</code> 定位计划与展开 owns 的方法），结果存 <code>calibration/replay-owns-20261118.txt</code>。样本：本机 6 个仓库、188 个 change、805 个切片（能找到计划的），「现存文件数」在计划入库的那个 commit 上数。</p><ul><li><strong>12 条上限只压大片档</strong>：标准档（现存文件 ≤ 8）624 片，owns 条数 P99 = 9，最多 11 条，没有一片写满；大片档 181 片，28.7% 恰为 12 条，59.1% 在 10–12 条。</li><li><strong>写满的切片用通配顶替</strong>：恰为 12 条的 52 片里 48% 含通配，其余各组是 7%（1–4 条）、17%（5–8 条）、17%（9–11 条）。</li><li><strong>写满的切片更容易越权写</strong>：门禁报过 <code>G6 ownership … 不在 owns 内</code> 的切片占比，12 条组是 19.2%（10/52），其余各组 2.3%–4.2%。</li><li><strong>放到多少条</strong>：恰为 12 条的 52 片里，现存文件数不超过 16 / 20 / 30 / 40 的各占 65% / 69% / 75% / 77%。30 之后几乎不再增加（剩下的是几十到几百个文件的机械迁移，本来就该用通配）。取 <strong>30</strong>，与方案页草案一致；上限被 12 截断，看不到「不设限时人会写多少条」，所以仍标草案。</li><li><strong>宽通配的线</strong>：259 条带通配的 owns，展开数 P50 = 10、P90 = 123；展开超过 20 的占 30.9%，涉及 5.7% 的切片。最宽通配超过 20 的切片报过 G6 的占 14.3%（6/42），不超过的占 3.2%（24/745）。这个差异混着规模的影响，不能说明宽通配导致越权，只能说明这些切片值得审批的人多看一眼。取 <strong>20</strong>，草案。</li></ul><p>### 调查二：wave 里重跑受影响测试要花多少</p><p>同一份脚本的 D 段统计各仓时间线里「增量」运行的测试秒数（wave 集成检查的测试那一半与增量 final 用同一选法）。43 次增量运行：74% 不超过 60 秒，77% 不超过 120 秒，其余全部在 500 秒以上，120–300 秒之间一次都没有。分布是两头的：要么只动了几个叶子文件，要么动到被几乎所有测试依赖的文件（本仓的 <code>slice-gate.py</code>：512–571 秒）。预算取 <strong>120 秒</strong>，落在两头之间的空档里。样本小（本仓带秒数的增量 final 只有 7 次，其他仓库的增量运行都不超过 37 秒），草案。</p><p>### 调查三：补 owns 之后「回一句起飞加续跑」现在通不通</p><p>结论：<strong>起飞通，续跑没有</strong>。</p><ul><li>通的部分（C1 <code>plan-hygiene</code> 修掉的）：改 <code>slices.json</code> 让批准过期，人类回一句「起飞」重新批准；<code>plan_sha</code> 只含 gate 命令与各片 <code>verify</code>，只改 owns 不会让基线过期；已有 approve 事件的 change，preflight 不再按内容判基线过期。</li><li>差的部分：<code>/opsx-apply</code> 每次都用完整的 waves 重新启动工作流，没有任何「已落地」的概念。已合回的切片会再派一遍执行体：新开的临时 worktree 里实现已经在了，执行体读切片包、跑 verify、过门禁、交回一个与分支相同的 commit，<code>merge</code> 是空操作。结果是对的，但每个已落地的切片白花一个主模型 high 的执行体。Workflow 运行时的 <code>resumeFromRunId</code> 帮不上：它按调用顺序回放缓存，上次交回红结论的那一片会原样回放成红。</li><li>本 change 补上这一截（D8）。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong></p><ul><li>仓库声明的全局守护在每片门禁里运行，引入问题的那一片自己就红。</li><li>每个 wave 合回后有一次集成检查，红了能在下一个 wave 之前修。</li><li>集成检查的成本有上限、进时间线、进成本归因。</li><li>owns 条数不再逼大切片放宽通配；宽通配有理由可审。</li><li>补计划后的重新起飞只花没落地那几片的钱。</li></ul><p><strong>Non-Goals:</strong></p><ul><li>不做 owns 的静态预测（按接口扫描替身与桩）。Q6 已定：不靠预测更准。</li><li>不放宽所有权：跨片修复是集成检查红了之后的专用通道，切片执行体写 owns 之外的文件仍然是 <code>G6</code>。</li><li>集成检查的测试那一半不支持配了分层文件的仓库（两种形态都不支持），也不支持 <code>gate.impacted</code>：前者要处理探针与区域，部件形态的 final 本来就恒全量；后者的选测只有仓库自己的命令知道。这些仓库的集成检查只跑守护。</li><li>集成检查不写锚点、不落测试账本（D5）。</li><li>final 红之后的修复通道不在本 change 里（final 之后仍是评审修复与人工）。</li><li>不改 <code>MAX_SLICES</code> / <code>MAX_DEPTH</code>。</li><li>跨片修复执行体仍用标准档定义，不走 <code>start</code> / <code>gate</code>（与现有 Fix 阶段相同）。</li></ul></div><div class="design-block"><h3>Decisions</h3><details><summary><strong>仓库默认清单</strong></summary><p><code>&lt;openspec 根&gt;/gate-checks.json</code> 的某项是对象且带非空 <code>slice</code> 时，计划里的同名检查必须也带非空 <code>slice</code>，否则 lint 红（<code>checks: 仓库默认检查 &lt;名&gt; 是全局守护（声明了 slice），计划里的同名检查须带 slice</code>）。只核对「有没有」，不核对命令文本是否相同（与现有对 <code>baseline</code> / <code>final</code> 的做法一致）。写进 <code>gate.checks_skip</code> 的仍按跳过处理。</p></details><details><summary><strong><code>plan_sha</code></strong></summary><p>任一检查带 <code>slice</code> 时，在现有键之后追加 <code>[&quot;slice&quot;, [[name, slice], …]]</code>。没有检查带 <code>slice</code> 的计划，<code>plan_sha</code> 与今天逐字节相同（在途 change 的基线不过期）。</p></details><details><summary><strong>baseline</strong></summary><p>每个带 <code>slice</code> 的检查，在它的 <code>baseline</code> 命令之后运行 <code>slice</code> 命令（<code>GATE_PHASE=slice</code>），结果记在 <code>gate-baseline.json</code> 的 <code>checks.&lt;名&gt;.slice = {exit, sec, cmd[, reused][, timed_out]}</code>；红或超时 → 基线红（<code>check &lt;名&gt; 的 slice 命令在基线上红（exit N）</code>）。沿用条件与该检查的 <code>baseline</code> 命令相同。只有 <code>slice</code>、没有 <code>baseline</code> 的检查，<code>checks.&lt;名&gt;</code> 只有 <code>slice</code> 一段。</p></details><details><summary><strong>切片门禁</strong></summary><p><code>cmd_gate</code> 在 <code>gate.lint</code> / <code>gate.typecheck</code> 之后、仍持共享锁时，按 <code>gate.checks</code> 的顺序运行每个带 <code>slice</code> 的检查：</p></details><details><summary>基线没有该检查的 <code>slice</code> 记录、记录不绿、或记录的 <code>cmd</code> 与计划不同 → `G15 guard &lt;名&gt;</summary><p>基线缺记录或与计划不符，重跑 baseline`，不运行；</p></details><details><summary>运行</summary><p>环境 <code>GATE_PHASE=slice</code>、<code>GATE_CHANGE</code>、<code>GATE_BASE_COMMIT</code>（基线 commit）、<code>GATE_CHECK_DIR</code>（与 baseline / final 同一个共用目录）；日志写 <code>&lt;共用目录&gt;/.gate-slice-&lt;切片 id&gt;.log</code>（同一 wave 的切片并行过门禁，不能共用一个日志名）；</p></details><details><summary>非 0 → `G15 guard &lt;名&gt;</summary><p>exit N；日志 …<code> 加输出末尾 20 行；超时 → </code>G15 guard &lt;名&gt;：超时 N 秒`。</p></details><details><summary>门禁 JSON 在计划里有守护时多一个 <code>guards: {名: {exit, sec}}</code>，时间线的 gate 备注多一段 <code>守护 a 1.2s / b 0.4s</code>；没有守护时两处都不出现。</summary></details><details><summary><strong>运行契约的新增条款</strong></summary><p><code>slice</code> 命令会被同一 wave 的多个切片同时调用，而且它们共用 <code>GATE_CHECK_DIR</code>，所以 <code>slice</code> 命令对共用目录只读（或自己保证并发安全）；它应当是秒级的。</p></details><details><summary>openspec 根有 <code>test-tiers.json</code>（`分层仓库</summary><p>受影响测试留给 final`）；</p></details><details><summary>计划配了 <code>gate.impacted</code>（<code>gate.impacted 选测留给 final</code>）；</summary></details><details><summary>取不到可用锚点或命中全量触发项</summary><p>用 <code>final_forecast</code> 同一套步骤（内容快照 → <code>_pick_anchor</code> → <code>_full_why</code>），它给出全量原因时原样作为 <code>why</code>（如 <code>没有可用锚点</code>、<code>依赖图未测（…）</code>、全局文件触发项）；</p></details><details><summary>估算耗时超过预算（下一条）。</summary></details><details><summary>取 <code>SHA..HEAD</code> 的改动文件；其中有本 change 的飞行记录文件 → <code>G6 flight-record</code>（与切片门禁同一条规则，修复执行体不得提交飞行记录）；</summary></details><details><summary>输出多一个 <code>fix: {&quot;base&quot;: SHA, &quot;files&quot;: […], &quot;outside_owns&quot;: […]}</code>，<code>outside_owns</code> = 不被计划里任何切片的 owns 匹配的文件；时间线备注多一段 <code>跨片修复 N 个文件（owns 外 K 个）</code>；</summary></details><details><summary>SHA 不在对象库或不是 HEAD 的祖先 → <code>G0 base</code>，不运行检查。</summary></details><details><summary><strong>wave 集成检查直接跑一次 final</strong></summary><p>后面的 wave 还没解锁骨架，G7 必红；写锚点、落账、同树沿用这些 final 的副作用也都不该在半成品上发生。</p></details><details><summary><strong>没有锚点时跑全量</strong></summary><p>每个 wave 一次全量，正是方案页点名要避免的退化；afa 一次全量 20 分钟以上。</p></details><details><summary><strong>只按本 wave 的改动选测</strong></summary><p>见上面第 2 条，不成立。</p></details><details><summary>不另开一个 agent</summary><p>少一次派发；<code>label</code> 仍是 <code>integrate:w&lt;i&gt;</code>，模型对账与既有测试的 mock 都不用改。</p></details><details><summary><code>slice-gate.py wave-check</code> 报 <code>invalid choice</code>（hooks 未升级）→ <code>check</code> 写 <code>null</code>。工作流见到 <code>check</code> 缺失或为 <code>null</code></summary><p>不派修复、不记 blocked，只在返回值的 <code>waves</code> 里记一条 <code>{wave, skipped: &quot;integrator 未带回集成检查结果&quot;}</code>。final 仍然兜底。</p></details><details><summary><code>merge</code> 失败（<code>ok: false</code>）时不运行集成检查（现有的 blocked 逻辑不变）。</summary></details><details><summary>返回形状 <code>MERGE</code> 加可选的 <code>check</code>（对象或 <code>null</code>）。</summary></details><details><summary>这是跨片修复，不是切片</summary><p>不运行 <code>start</code> / <code>gate</code>，不受任何切片的 owns 限制，但只改让下列失败项变绿所必需的文件；</p></details><details><summary>第一步基点校验（<code>git merge-base --is-ancestor $(git rev-parse &lt;branch&gt;) HEAD</code>）与 <code>sub-sync</code>，与现有 Fix 阶段逐字相同；失败 → 原样返回 <code>G0</code> JSON；</summary></details><details><summary>记下开工时的 <code>git rev-parse HEAD</code> 作为 <code>&lt;base&gt;</code>；</summary></details><details><summary>失败项清单 = <code>check.failed</code>；红的集成检查本身就是「先失败的测试」，不必再造一条；需要新测试才能钉住的缺陷照 TDD 写；</summary></details><details><summary>逐条 commit（<code>fix:</code> 前缀），不 push，不提交飞行记录；</summary></details><details><summary>收尾运行 <code>slice-gate.py wave-check --change-dir … --wave &lt;i&gt; --of &lt;n&gt; --fix-base &lt;base&gt;</code>，把 JSON 原样返回。</summary></details><details><summary>未返回 / 抛错 / <code>G0</code> 拒绝 → 重派一次（从头来，与 Fix 阶段相同）。</summary></details><details><summary>最后一次检查的 <code>failed</code> 里有 <code>G15</code> 开头的项（守护红）→ 后面所有 wave 的切片全部记 blocked（infra，<code>wave &lt;i&gt; 集成检查红（守护）</code>）。守护是全局的，分支红着，后面每一片的门禁都会被它拖红，派了也是白跑。</summary></details><details><summary>只有 <code>G16</code>（测试红）→ 只停依赖本 wave 任一已合回切片的下游切片（把这些切片加进依赖判断用的 blocked 集合，沿用现有「依赖已 blocked 就跳过」的逻辑）；与本 wave 无依赖的切片照常派。</summary></details><details><summary><strong>先意图后代码</strong></summary><p>修复通道只在一次已批准的飞行内、由一条红的机械检查触发，修的是让这条检查变绿，不是新需求；计划工件不变。</p></details><details><summary><strong>所有权</strong></summary><p>切片执行体的 <code>G6</code> 不放宽。修复执行体不受 owns 限制，但它改了什么由脚本算（<code>--fix-base</code>），<code>outside_owns</code> 单列，进时间线、<code>gate-report.md</code>、<code>review-findings.json</code> 与 PR 正文。</p></details><details><summary><strong>TDD 与留痕</strong></summary><p>红在先（home 里那次红的 <code>wave</code> 行与 <code>wave-check</code> 事件）、绿在后（修复的 <code>wave</code> 行经 <code>record</code> 写回），两行都是脚本写的。</p></details><details><summary><strong>独立评审</strong></summary><p>修复提交有自己的一次评审；PR 评审兜底。</p></details><details><summary><strong>修复在 change 家里直接改</strong></summary><p>与正在合回的 integrator、与下一个 wave 的派发抢工作树；现有的隔离 + 合回机制白白不用。</p></details><details><summary><strong>红了就把修复提交也合回、让后面接着修</strong></summary><p>没证明过的修复进分支，下一个 wave 在更不确定的树上开工。</p></details><details><summary><strong>修复重试到绿为止</strong></summary><p>没有上限的循环；方案页定的是「复查一次，仍红才 blocked」。</p></details><details><summary><strong>让 <code>start</code> 认一个保留的修复 id，从而复用 <code>--continue</code> 与快照恢复</strong>（方案页写的是「复用 C3 的接续逻辑」）</summary><p><code>start</code> 的接续、快照、留痕都以「计划里有这一片、有它的 owns」为前提（快照只存 owns 内的改动，标记驱动所有权拦截），给一个没有 owns 的保留 id 要在这三处各开一个口子。修复只尝试一次、未交回就从头重派一次，用不上接续；现有的批量修复阶段也是这样做的。真出现修复执行体经常撞轮次上限时再做。</p></details><details><summary><strong>锚点</strong></summary><p>锚点是「这棵树上整套测试的结论」，半成品树（骨架还是 xfail、后面的 wave 没合回）不是一个该被别的 change 沿用的结论；写了还要处理逐用例结局前移、依赖图合并，等于在 wave 里做一遍增量 final。</p></details><details><summary><strong>测试账本</strong></summary><p><code>test-ledger</code> 的账本只有 <code>baseline</code> 与 <code>final</code> 两份，对账回答「这个 change 给测试套件带来了什么」。wave 里落账会覆盖 <code>final.json</code>，而无图退路正拿它当来源。<code>_pytest_outcomes</code> 照常往进程内观测表上报，没有人读（与切片门禁相同，<code>test-ledger</code> design D9）。</p></details><details><summary>集成检查花的秒数在时间线与 <code>flight-doctor.py cost</code> 里（D9）。</summary></details><details><summary><code>OWNS_CAP = {&quot;standard&quot;: 12, &quot;large&quot;: 30}</code>。切片的档位与 <code>slice_turns</code> 同一算法</summary><p>计划写 <code>&quot;turns&quot;: &quot;large&quot;</code> → 大片档；否则现存文件数（基线 commit 的树，取不到用 HEAD）多于 <code>TURN_LARGE_FILES</code> → 大片档；不在 git 仓库里 → 只认计划里的 <code>turns</code>。</p></details><details><summary>超限的报错写明两档的数字与出路</summary><p><code>owns: S3 的 owns 有 14 条，标准档须在 1–12 内（大片档 1–30；这一片要更多条目先写 &quot;turns&quot;: &quot;large&quot;）</code>。</p></details><details><summary>只有 owns 多于 12 条的切片才需要数文件，其余切片不增加 git 调用。</summary></details><details><summary><strong>列表语法（花括号、一行多文件）</strong></summary><p>owns 的匹配函数被门禁、选测、hook 共用，加语法要同改四处，还要定义与重叠检查的交互。</p></details><details><summary><strong><code>owns_amend</code> 不占上限</strong></summary><p>等于没有上限。</p></details><details><summary>带通配符（<code>*</code> <code>?</code> <code>[</code>）的 owns 条目，在与 D6 同一棵树上展开出的现存文件数多于 <code>OWNS_WIDE_FILES = 20</code> 时，该片须有 <code>owns_wide: {&quot;&lt;该条目原文&gt;&quot;: &quot;&lt;理由&gt;&quot;}</code>，否则 lint 红</summary><p><code>owns: S3 的 src/abc/* 展开出 37 个现存文件（&gt; 20），须在该片的 owns_wide 里为它写理由</code>。</p></details><details><summary><code>owns_wide</code> 形状</summary><p>对象，键必须是该片 owns 里的条目，值是非空字符串；多余的键、空理由都红。</p></details><details><summary>lint 通过时在 stderr 为每个带通配的条目打一行 <code>owns: S3 src/abc/* → 37 个文件</code>（与现有的范围摘要一样只在没有错误时打印）。</summary></details><details><summary><strong>已批准的 change 不追溯</strong></summary><p>change 的时间线已有 approve 事件时，缺理由只打印不判红（它是在旧规则下批准的；<code>waves</code> / <code>turns</code> / <code>preflight</code> 在飞行中都会调 lint，追溯会把在途飞行拦死）。超出条数上限不受这条豁免影响（上限只放宽、没有收紧）。</p></details><details><summary>不在 git 仓库里时不做这项检查。</summary></details><details><summary>每个 wave 里已落地的切片不派执行体，<code>results</code> 里记 <code>{slice, ok: true, commit, landed: true}</code>；</summary></details><details><summary>评审照派（门禁 JSON 给 <code>{slice, ok: true, commit, failed: []}</code>）</summary><p>上一次飞行的评审结论在重新起飞时会被新的 <code>review-findings.json</code> 覆盖，不重审就丢了；</p></details><details><summary>一个 wave 只要有已落地或本次合回的切片，就做集成检查。整个 wave 都已落地时 integrator 的派发不含 <code>merge</code> / <code>record</code>，只跑 <code>wave-check</code> 并返回 <code>{ok: true, merged: [], failed: [], warnings: [], check}</code>。这保证了上一次飞行停在「集成检查红」时，重新起飞不会在红的分支上接着派。</summary></details><details><summary><code>/opsx-apply</code> 在取 <code>turns</code> 之后运行 <code>landed</code>，把输出作为 <code>args.landed</code>；报 <code>invalid choice</code> 时不传。</summary></details><details><summary><strong>审批页</strong>（<code>spec_html.py</code>）</summary><p>测试成本那一块列出带 <code>slice</code> 的检查（名字与命令，标题点明「全局守护：每片门禁与每个 wave 合回后都运行」）与 <code>gate.wave_test_budget_sec</code>（写了才显示）；切片表里写了 <code>owns_wide</code> 的切片，把通配与理由显示出来。两处都直接读 <code>slices.json</code>，不调 <code>slice-gate.py</code>。</p></details><details><summary><strong>成本归因</strong>（<code>flight-doctor.py cost</code>）</summary><p>从时间线的 <code>wave-check</code> 事件汇总，文本多一行 <code>wave 集成检查 N 次：守护 Xs · 测试 Ys · 跳过测试 K 次</code>，JSON 多一个 <code>wave: {count, guard_sec, test_sec, skipped}</code>；没有 <code>wave-check</code> 事件时文本不多这一行，JSON 的 <code>wave.count</code> 为 0。</p></details><details><summary>工作流脚本是起飞时载入的旧版，整趟飞行没有集成检查与跨片修复；本 change 的计划也不使用任何新字段（起飞时的 lint 不认识它们）。</summary></details><details><summary><code>integrator.md</code> 随 S4 合回立刻被后续 wave 的 integrator 读到。新加的一项写成「仅当 prompt 点名时才运行 <code>wave-check</code>；子命令不存在就在返回里给 <code>check: null</code>」，旧 prompt 不点名，所以不受影响。</summary></details><details><summary>切片依赖按「引用新子命令的片依赖提供它的片」排，或在定义里写明子命令不存在时的回退</summary><p>S4（工作流与 agent 定义）不依赖 S2（<code>wave-check</code>），靠上一条的回退句；S5（命令文档）依赖 S2、S4；S7（成本归因解析 <code>wave-check</code> 事件的备注格式）依赖 S2。</p></details><details><summary>三个改 <code>slice-gate.py</code> 的片（S1 → S2 → S3）各占一个 wave。</summary></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary>[每个 wave 多一次集成检查的墙钟] → 守护是仓库声明的快检查；测试那一半有 120 秒预算、没有锚点时不跑；耗时进时间线与 <code>cost</code>。本仓实测</summary><p>改到 <code>slice-gate.py</code> 的增量要 512–571 秒，会被预算挡下。</p></details><details><summary>[预算挡下之后，集成检查在本仓基本只剩守护] → 如实写进 README；本仓的守护目前只有 <code>schema-validate</code> 可以声明 <code>slice</code>（另一个 change 的事）。调高预算是计划里一个字段。</summary></details><details><summary>[<code>slice</code> 命令并行运行时互相踩共用目录] → 契约写明对共用目录只读；日志按切片分名。</summary></details><details><summary>[守护不够快，每片门禁都被拖慢] → <code>timeout_sec</code> 照常生效；<code>cost</code> 里能看到守护秒数；整个检查可用 <code>checks_skip</code> 带理由跳过。</summary></details><details><summary>[跨片修复改了大量 owns 外的文件] → 不拦（修复本来就是 owns 之外的事），但 <code>outside_owns</code> 单列进 PR 正文，修复提交单独评审。</summary></details><details><summary>[integrator（低档模型）转写 <code>check</code> JSON 出错] → 工作流只用 <code>ok</code> 与 <code>failed</code> 两个字段做决定；真值在分支上的 <code>gate-report.md</code> 与时间线里，<code>ship</code> 读的是那里。</summary></details><details><summary>[<code>landed</code> 误判一片已落地] → 条件 3 把计划里与该片相关的改动都算上了；final 的 G7 仍然验全部 scenario，真漏了会红在 final。</summary></details><details><summary>[<code>ship</code> 因为一条旧的红 <code>wave</code> 行一直判 draft] → 理由里写了做法</summary><p>修复后重跑 <code>slice-gate.py wave-check</code>，新的一行会盖过旧的。</p></details><details><summary>[门禁编号] → <code>tier-budgets</code>（C5b，已起飞）占用 G13（集成层新增用例超线）与 G14（层总量超预算）；本 change 的守护红与 wave 测试红因此取 G15 / G16。</summary></details><details><summary>[与在飞的 <code>tier-budgets</code>（C5b）同改 <code>slice-gate.py</code>、<code>flight-doctor.py</code>、<code>flight-runner-contract.md</code>、<code>README.md</code>] → 它动分层耗时判定（G10 / G11 / G12 一带）、<code>test-tiers.py</code>、<code>test-ledger.py</code>；本 change 动检查（<code>CHECK_FIELDS</code> 一带）、<code>cmd_gate</code> 里 lint 之后的一段、lint 的 owns 循环、<code>cmd_record</code> / <code>cmd_ship</code> 各一处与三个新函数。<code>cmd_gate</code> 与 <code>flight-doctor.py</code> 的 <code>cost</code> 是两边都可能碰的地方，后合的那个预合并 main。契约文档两边都可能新增一节，节号以后合的为准（本 change 的测试按节标题断言，不按节号）。</summary></details><details><summary>[集成检查的测试那一半不支持分层仓库] → afa 是部件形态，final 本来就恒全量，选不出「受影响的测试」；它从本 change 得到的是守护与跨片修复通道，这正是 F4 / F5 的现场。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><p>无数据迁移。升级后：</p><ul><li>在途 change 的计划不用改；已批准的 change 不因宽通配规则变红。</li><li>仓库想启用守护：在 <code>gate-checks.json</code> 的检查上加 <code>slice</code>，之后新建的计划照抄；已有计划加了 <code>slice</code> 要重跑 baseline（<code>plan_sha</code> 变了）。</li><li>回滚：还原本 change 的提交；<code>gate-report.md</code> 里的 <code>wave</code> 行与时间线里的 <code>wave-check</code> 事件对旧脚本无害（按切片名与事件名被忽略）。</li></ul></div><div class="design-block"><h3>Open Questions</h3><p>1. <strong>测试那一半的预算缺省 120 秒是否合适？</strong> 依据见调查二，样本小。它决定本仓的集成检查几乎只跑守护。 2. <strong>修不好时的停飞范围</strong>：本设计按红的种类分（守护红全停，测试红只停下游）。方案页写的是「让依赖它的下游切片停下」一种。守护红时不全停的话，后面每片的门禁都会因 G15 白跑一轮再红。 3. <strong><code>ship</code> 是否该因为红的 <code>wave</code> 行判 draft？</strong> 本设计判（铁律 5）。代价是多一种要人处理的 draft 原因。 4. <strong>已落地的切片重新起飞时是否重审？</strong> 本设计重审（不重审会丢上一次飞行的评审结论）。更省的做法是把上一次的 <code>review-findings.json</code> 合并进来，那要改收口步骤，留作后续。 5. <strong>大片档 owns 上限 30、宽通配 20</strong> 都是草案，依据见调查一。 6. <strong>本仓要不要给 <code>schema-validate</code> 加 <code>slice</code>？</strong> 不在本 change 里做（它要改 <code>template/openspec/</code> 下的仓库声明并重跑所有在途基线）。</p></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-executor-turn-tiers-by-owned-files.md">DRAFT. 执行体的轮次上限按切片的现存文件数分两档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-tests-only-rerun-without-graph.md">DRAFT. 没有依赖图时，只改了测试文件的 final 只重跑这些文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-inert-paths-declared-and-reconciled.md">DRAFT. 与测试无关的路径由仓库声明，并与依赖图对账</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-measurements-stay-out-of-plan-files.md">DRAFT. 脚本测出来的东西不写进计划文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-owns-cap-follows-turn-tier.md">DRAFT. owns 条数上限随轮次档，宽通配要写理由</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-retakeoff-skips-landed-slices.md">DRAFT. 重新起飞时已落地的切片不再派执行体</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-evidence-in-git-common-dir.md">DRAFT. 切片的测试留痕写在 git 共用目录，记录门禁结论时并回分支</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-worktrees-reaped-after-merge.md">DRAFT. 切片临时 worktree 在提交合回后由合回脚本回收</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-ledger-outside-repo-follows-anchors.md">DRAFT. 测试账本：逐用例数据放 git common dir，耗时跟着锚点沿用，入库的只有摘要</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-unmeasured-deps-need-plan-statement.md">DRAFT. 基线的依赖图未测时计划须表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-wave-integration-check-and-cross-slice-fix.md">DRAFT. 每个 wave 合回后做集成检查，红了走工作流内的跨片修复</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody><tr><td class="mono">S1</td><td>slice-gate.py：检查的 slice 命令（全局守护）——lint 与仓库默认清单对账、plan_sha、baseline 记录、切片门禁的 G15</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_guard_slice.py</td><td><code>python3 -m pytest -q tests/test_guard_slice.py tests/test_gate_checks_lint.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_slice_gate.py tests/test_gate_lock.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_shared_gate.py tests/test_plan_hygiene_baseline.py tests/test_tiers_gate.py</code></td><td>标准档</td></tr><tr><td class="mono">S2</td><td>slice-gate.py：wave-check 子命令（守护 + 受影响的测试、预算与跳过、--fix-base）、record 认 wave 行、ship 读 wave 行</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_wave_check.py</td><td><code>python3 -m pytest -q tests/test_wave_check.py tests/test_guard_slice.py tests/test_ship_verdict.py tests/test_ship_forecast.py tests/test_final_incremental.py tests/test_final_tests_only.py tests/test_gate_checks_final.py tests/test_gate_lock.py tests/test_ledger_final.py tests/test_evidence_shared_gate.py tests/test_slice_gate.py tests/test_flight_doctor.py</code></td><td>标准档</td></tr><tr><td class="mono">S3</td><td>slice-gate.py：owns 条数上限随轮次档、宽通配须写理由并打印展开数；landed 子命令列出已落地的切片</td><td>wave 3</td><td>S2</td><td>template/.claude/hooks/slice-gate.py<br>tests/test_owns_tiers.py<br>tests/test_landed.py</td><td><code>python3 -m pytest -q tests/test_owns_tiers.py tests/test_landed.py tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_spec_html_turns.py tests/test_wave_check.py</code></td><td>标准档</td></tr><tr><td class="mono">S4</td><td>工作流与 agent 定义：合回派发带 wave 集成检查、红时派跨片修复并合回、停飞范围、已落地切片不重派；integrator 与执行体定义各补一段</td><td>wave 1</td><td>-</td><td>template/.claude/workflows/opsx-apply.js<br>template/.claude/agents/integrator.md<br>template/.claude/agents/slice-executor.md<br>tests/test_wave_workflow.py<br>tests/test_agents_workflow.py<br>tests/test_workflow_resume.py</td><td><code>python3 -m pytest -q tests/test_wave_workflow.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_template_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py</code></td><td>标准档</td></tr><tr><td class="mono">S5</td><td>文档（起飞侧）：opsx-apply 命令与同名 skill 镜像集成检查、跨片修复与 landed；pr-ship 列出跨片修复；README</td><td>wave 3</td><td>S2, S4</td><td>template/.claude/commands/opsx-apply.md<br>template/.claude/skills/openspec-apply-change/SKILL.md<br>template/.claude/commands/pr-ship.md<br>README.md<br>tests/test_wave_docs.py<br>tests/test_agents_workflow.py</td><td><code>python3 -m pytest -q tests/test_wave_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_resume_docs.py tests/test_template_docs.py tests/test_incremental_final_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_verdict.py tests/test_submodule_docs.py tests/test_ledger_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_plan_hygiene_docs.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_glossary_docs.py tests/test_install.py</code></td><td>标准档</td></tr><tr><td class="mono">S6</td><td>文档（规划侧）：运行器契约新增「全局守护与 wave 集成检查」一节；opsx-propose 命令与同名 skill、schema 说明 slice、owns_wide、预算与 owns 分档</td><td>wave 1</td><td>-</td><td>template/.claude/flight-runner-contract.md<br>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>template/openspec/schemas/intent-driven/schema.yaml<br>tests/test_guard_docs.py</td><td><code>python3 -m pytest -q tests/test_guard_docs.py tests/test_gate_checks_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_ledger_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_incremental_final_docs.py tests/test_glossary_docs.py tests/test_install.py tests/test_flight_doctor.py tests/test_runner_statement.py</code></td><td>标准档</td></tr><tr><td class="mono">S7</td><td>看得见：spec_html.py 审批页标出全局守护、预算与宽通配理由；flight-doctor.py cost 汇总 wave 集成检查</td><td>wave 3</td><td>S2</td><td>template/.claude/hooks/flight-doctor.py<br>template/.claude/hooks/spec_html.py<br>tests/test_wave_surfaces.py</td><td><code>python3 -m pytest -q tests/test_wave_surfaces.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_surfaces.py tests/test_flight_doctor_tests.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_turns.py tests/test_spec_html_glossary.py tests/test_scope_contract_v2.py tests/test_ship_forecast.py tests/test_inert_reconcile.py</code></td><td>标准档</td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>slice-guards#lint-accepts-slice-command</td><td><code>tests/test_guard_slice.py::test_lint_accepts_slice_command</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#lint-requires-slice-declared-by-repo-default</td><td><code>tests/test_guard_slice.py::test_lint_requires_slice_declared_by_repo_default</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#slice-command-is-part-of-plan-sha</td><td><code>tests/test_guard_slice.py::test_slice_command_is_part_of_plan_sha</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#baseline-runs-and-records-slice-command</td><td><code>tests/test_guard_slice.py::test_baseline_runs_and_records_slice_command</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#baseline-red-when-slice-command-fails</td><td><code>tests/test_guard_slice.py::test_baseline_red_when_slice_command_fails</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#gate-runs-guards-in-slice-phase</td><td><code>tests/test_guard_slice.py::test_gate_runs_guards_in_slice_phase</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#gate-reds-g13-when-guard-fails</td><td><code>tests/test_guard_slice.py::test_gate_reds_g13_when_guard_fails</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#gate-g13-needs-green-baseline-record</td><td><code>tests/test_guard_slice.py::test_gate_g13_needs_green_baseline_record</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#gate-without-guards-unchanged</td><td><code>tests/test_guard_slice.py::test_gate_without_guards_unchanged</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-runs-guards-and-impacted-tests</td><td><code>tests/test_wave_check.py::test_wave_check_runs_guards_and_impacted_tests</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-reds-on-new-test-failure</td><td><code>tests/test_wave_check.py::test_wave_check_reds_on_new_test_failure</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-reds-on-guard</td><td><code>tests/test_wave_check.py::test_wave_check_reds_on_guard</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-skips-tests-without-anchor</td><td><code>tests/test_wave_check.py::test_wave_check_skips_tests_without_anchor</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-skips-tests-over-budget</td><td><code>tests/test_wave_check.py::test_wave_check_skips_tests_over_budget</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-leaves-anchors-and-ledger-alone</td><td><code>tests/test_wave_check.py::test_wave_check_leaves_anchors_and_ledger_alone</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#wave-check-fix-base-lists-files-outside-owns</td><td><code>tests/test_wave_check.py::test_wave_check_fix_base_lists_files_outside_owns</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#record-writes-back-wave-row</td><td><code>tests/test_wave_check.py::test_record_writes_back_wave_row</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#ship-drafts-on-red-wave-row</td><td><code>tests/test_wave_check.py::test_ship_drafts_on_red_wave_row</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>owns-tiers#owns-cap-follows-turn-tier</td><td><code>tests/test_owns_tiers.py::test_owns_cap_follows_turn_tier</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>owns-tiers#wide-glob-needs-reason</td><td><code>tests/test_owns_tiers.py::test_wide_glob_needs_reason</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>owns-tiers#lint-prints-glob-expansion</td><td><code>tests/test_owns_tiers.py::test_lint_prints_glob_expansion</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>owns-tiers#approved-change-not-reddened-by-wide-rule</td><td><code>tests/test_owns_tiers.py::test_approved_change_not_reddened_by_wide_rule</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>retakeoff-landed#landed-lists-green-merged-slices</td><td><code>tests/test_landed.py::test_landed_lists_green_merged_slices</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>retakeoff-landed#landed-excludes-slice-whose-plan-changed</td><td><code>tests/test_landed.py::test_landed_excludes_slice_whose_plan_changed</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-asks-integrator-for-wave-check</td><td><code>tests/test_wave_workflow.py::test_workflow_asks_integrator_for_wave_check</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-skips-when-integrator-has-no-check</td><td><code>tests/test_wave_workflow.py::test_workflow_skips_when_integrator_has_no_check</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#integrator-contract-describes-wave-check</td><td><code>tests/test_wave_workflow.py::test_integrator_contract_describes_wave_check</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-dispatches-cross-slice-fix-on-red</td><td><code>tests/test_wave_workflow.py::test_workflow_dispatches_cross_slice_fix_on_red</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#executor-contract-describes-cross-slice-fix</td><td><code>tests/test_wave_workflow.py::test_executor_contract_describes_cross_slice_fix</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-stops-all-when-guard-still-red</td><td><code>tests/test_wave_workflow.py::test_workflow_stops_all_when_guard_still_red</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-stops-only-dependents-when-tests-red</td><td><code>tests/test_wave_workflow.py::test_workflow_stops_only_dependents_when_tests_red</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#workflow-retries-fix-noreturn-then-blocks</td><td><code>tests/test_wave_workflow.py::test_workflow_retries_fix_noreturn_then_blocks</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>retakeoff-landed#workflow-skips-landed-slices</td><td><code>tests/test_wave_workflow.py::test_workflow_skips_landed_slices</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#apply-docs-mirror-wave-check-and-fix</td><td><code>tests/test_wave_docs.py::test_apply_docs_mirror_wave_check_and_fix</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#pr-ship-doc-lists-cross-slice-fixes</td><td><code>tests/test_wave_docs.py::test_pr_ship_doc_lists_cross_slice_fixes</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-fix#readme-describes-wave-guard</td><td><code>tests/test_wave_docs.py::test_readme_describes_wave_guard</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#contract-describes-guards-and-wave-check</td><td><code>tests/test_guard_docs.py::test_contract_describes_guards_and_wave_check</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#propose-docs-describe-guards-and-owns-tiers</td><td><code>tests/test_guard_docs.py::test_propose_docs_describe_guards_and_owns_tiers</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>slice-guards#spec-html-shows-guards-and-wide-owns</td><td><code>tests/test_wave_surfaces.py::test_spec_html_shows_guards_and_wide_owns</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr><tr><td>wave-check#cost-reports-wave-checks</td><td><code>tests/test_wave_surfaces.py::test_cost_reports_wave_checks</code></td><td><span class="chip" data-state="unlocked">unlocked</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>incremental</code></td><td>-</td><td>37.1</td></tr><tr><td>final</td><td><code>incremental</code></td><td>锚点 2cc616742f，Δ 0 个文件</td><td>-</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><table class="flight-table"><thead><tr><th>时间</th><th>事件</th><th>备注</th></tr></thead><tbody><tr><td class="mono">2026-11-18T11:28:34Z</td><td>baseline</td><td>增量（经锚点 tier-budgets@2cc616742f，补跑 9 个测试文件 44.3s） ok；排队 0.0s · 负载 4.9→3.2/18</td></tr><tr><td class="mono">2026-11-18T11:37:52Z</td><td>baseline</td><td>增量（经锚点 wave-integration-guard@2cc616742f，补跑 6 个测试文件 37.1s） ok；排队 0.0s · 负载 2.9→5.5/18</td></tr></tbody></table>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 slice-gate.py：检查的 slice 命令（全局守护）——lint 与仓库默认清单对账、plan_sha、baseline 记录、切片门禁的 G15 （deps: - · verify: <code>python3 -m pytest -q tests/test_guard_slice.py tests/test_gate_checks_lint.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_slice_gate.py tests/test_gate_lock.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_shared_gate.py tests/test_plan_hygiene_baseline.py tests/test_tiers_gate.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 slice-gate.py：wave-check 子命令（守护 + 受影响的测试、预算与跳过、--fix-base）、record 认 wave 行、ship 读 wave 行 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_wave_check.py tests/test_guard_slice.py tests/test_ship_verdict.py tests/test_ship_forecast.py tests/test_final_incremental.py tests/test_final_tests_only.py tests/test_gate_checks_final.py tests/test_gate_lock.py tests/test_ledger_final.py tests/test_evidence_shared_gate.py tests/test_slice_gate.py tests/test_flight_doctor.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 slice-gate.py：owns 条数上限随轮次档、宽通配须写理由并打印展开数；landed 子命令列出已落地的切片 （deps: S2 · verify: <code>python3 -m pytest -q tests/test_owns_tiers.py tests/test_landed.py tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_spec_html_turns.py tests/test_wave_check.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 工作流与 agent 定义：合回派发带 wave 集成检查、红时派跨片修复并合回、停飞范围、已落地切片不重派；integrator 与执行体定义各补一段 （deps: - · verify: <code>python3 -m pytest -q tests/test_wave_workflow.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_template_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S5 文档（起飞侧）：opsx-apply 命令与同名 skill 镜像集成检查、跨片修复与 landed；pr-ship 列出跨片修复；README （deps: S2, S4 · verify: <code>python3 -m pytest -q tests/test_wave_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_resume_docs.py tests/test_template_docs.py tests/test_incremental_final_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_verdict.py tests/test_submodule_docs.py tests/test_ledger_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_plan_hygiene_docs.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_glossary_docs.py tests/test_install.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S6 文档（规划侧）：运行器契约新增「全局守护与 wave 集成检查」一节；opsx-propose 命令与同名 skill、schema 说明 slice、owns_wide、预算与 owns 分档 （deps: - · verify: <code>python3 -m pytest -q tests/test_guard_docs.py tests/test_gate_checks_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_ledger_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_incremental_final_docs.py tests/test_glossary_docs.py tests/test_install.py tests/test_flight_doctor.py tests/test_runner_statement.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S7 看得见：spec_html.py 审批页标出全局守护、预算与宽通配理由；flight-doctor.py cost 汇总 wave 集成检查 （deps: S2 · verify: <code>python3 -m pytest -q tests/test_wave_surfaces.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_surfaces.py tests/test_flight_doctor_tests.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_turns.py tests/test_spec_html_glossary.py tests/test_scope_contract_v2.py tests/test_ship_forecast.py tests/test_inert_reconcile.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-18 11:37 · 章节 8 · 图示 0 · 任务 7
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>

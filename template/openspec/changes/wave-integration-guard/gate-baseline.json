@@ -1,0 +1,131 @@
+{
+  "commit": "2cc616742fa6ceadf8422c139f13dbe92b247417",
+  "at": "2026-11-18T11:31:15Z",
+  "plan_sha": "c2c8ff64632981b1aa955969be4725350d431163",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "failed": null,
+    "failed_nodes": [],
+    "failed_form": "nodes",
+    "sec": 37.1
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_guard_slice.py tests/test_gate_checks_lint.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_slice_gate.py tests/test_gate_lock.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_shared_gate.py tests/test_plan_hygiene_baseline.py tests/test_tiers_gate.py"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_wave_check.py tests/test_guard_slice.py tests/test_ship_verdict.py tests/test_ship_forecast.py tests/test_final_incremental.py tests/test_final_tests_only.py tests/test_gate_checks_final.py tests/test_gate_lock.py tests/test_ledger_final.py tests/test_evidence_shared_gate.py tests/test_slice_gate.py tests/test_flight_doctor.py"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_owns_tiers.py tests/test_landed.py tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_spec_html_turns.py tests/test_wave_check.py"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_wave_workflow.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_template_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py"
+    },
+    "S5": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_wave_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_resume_docs.py tests/test_template_docs.py tests/test_incremental_final_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_verdict.py tests/test_submodule_docs.py tests/test_ledger_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_plan_hygiene_docs.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_glossary_docs.py tests/test_install.py"
+    },
+    "S6": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_guard_docs.py tests/test_gate_checks_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_ledger_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_incremental_final_docs.py tests/test_glossary_docs.py tests/test_install.py tests/test_flight_doctor.py tests/test_runner_statement.py"
+    },
+    "S7": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_wave_surfaces.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_surfaces.py tests/test_flight_doctor_tests.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_turns.py tests/test_spec_html_glossary.py tests/test_scope_contract_v2.py tests/test_ship_forecast.py tests/test_inert_reconcile.py"
+    }
+  },
+  "checks": {
+    "schema-validate": {
+      "exit": 0,
+      "sec": 1.3,
+      "cmd": "cd template && openspec schema validate intent-driven",
+      "key": "651acf9f2926d57f3b4c560b571724707ee3d73c"
+    }
+  },
+  "lock": {
+    "mode": "exclusive",
+    "state": "held",
+    "waited": 0.0,
+    "why": "",
+    "load": [
+      2.9,
+      5.5
+    ],
+    "cores": 18
+  },
+  "full_suite_sec": null,
+  "test_ok": true,
+  "ledger": {
+    "cases": 756,
+    "measured": 55,
+    "inherited": 701,
+    "no_sec": 0,
+    "id_form": "nodeid",
+    "complete": true,
+    "tiers": {
+      "-": {
+        "cases": 756,
+        "sec": 543.5
+      }
+    }
+  },
+  "change": "wave-integration-guard",
+  "mode": "incremental",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-owns-cap-follows-turn-tier.md": "02a57a3983f44bb4d166f342e5d4ac47e2529c18",
+    "template/openspec/adr/DRAFT-retakeoff-skips-landed-slices.md": "bb4bcd187ea6f9ce1dadecb671333d2e14dd8c76",
+    "template/openspec/adr/DRAFT-wave-integration-check-and-cross-slice-fix.md": "c562374235e13ee39e5fdef13ff02127f2271f4c",
+    "template/openspec/changes/wave-integration-guard/calibration/replay-owns-20261118.txt": "d0b835880ebc4736d2200a785cc188b938cf6743",
+    "template/openspec/changes/wave-integration-guard/calibration/replay-owns.py": "4432dc2101e6be93d87d8a508f1bb90caa192f01",
+    "tests/test_guard_docs.py": "0e3d82d9fad4add2b8d227fd7c0af880087e4073",
+    "tests/test_guard_slice.py": "c7679256a6022ff212c877b3ffb6616b24f741af",
+    "tests/test_landed.py": "a8a5d09173f2668ba653fa88e9790891efe7bb0e",
+    "tests/test_owns_tiers.py": "925d0e1ede2ed69f3ae5e05c2f4d71dd9ba392c0",
+    "tests/test_wave_check.py": "b03af684dceb931de94eeeda50b108248b19a9f5",
+    "tests/test_wave_docs.py": "f77fa07c41558e44d5ddd9bddb77a870e711fc02",
+    "tests/test_wave_surfaces.py": "d62d2ca7262d270ec978c8122f36da15accb03e1",
+    "tests/test_wave_workflow.py": "076c8008bb62efd4c30f6d43d9a8a7384e489f4c"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "incremental": {
+    "source": "anchor",
+    "from": {
+      "change": "wave-integration-guard",
+      "commit": "2cc616742fa6ceadf8422c139f13dbe92b247417",
+      "at": "2026-11-18T11:28:34Z"
+    },
+    "rerun_files": [
+      "tests/test_guard_docs.py",
+      "tests/test_guard_slice.py",
+      "tests/test_install.py",
+      "tests/test_wave_check.py",
+      "tests/test_wave_docs.py",
+      "tests/test_wave_workflow.py"
+    ],
+    "hops": 2,
+    "files": [
+      "template/openspec/adr/DRAFT-wave-integration-check-and-cross-slice-fix.md",
+      "tests/test_guard_docs.py",
+      "tests/test_guard_slice.py",
+      "tests/test_wave_check.py",
+      "tests/test_wave_docs.py",
+      "tests/test_wave_workflow.py"
+    ],
+    "sec": 37.1
+  }
+}

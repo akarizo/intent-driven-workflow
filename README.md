@@ -265,6 +265,10 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **共用目录**：`<git common dir>/flight-gate-checks/<change>/<name>/`，各 worktree 是同一处，baseline 与 final 借它交接；baseline 实跑前清空重建，final 不清空
 - **`timeout_sec`**：可选；到时结束检查所在的整个进程组并判红；不配置不设超时
 - **仓库默认检查**：openspec 根目录下的 `gate-checks.json` 列出的每个检查，须抄进本 change 的 `gate.checks`，或在 `gate.checks_skip` 写明理由，由 `slice-gate.py lint` 校验
+- **全局守护**：检查可带 `slice` 命令，baseline、每片门禁（`G15 guard`）与每个 wave 合回后都运行，尽早发现切片把全局不变量弄红；细则见契约文档 `.claude/flight-runner-contract.md` 的「全局守护与 wave 集成检查」一节
+- **wave 集成检查**：`slice-gate.py wave-check`，每个 wave 合回后跑守护 + 受影响的测试（`G16 wave test`）；没有锚点、估算超过 `gate.wave_test_budget_sec`（缺省 120 秒）或配了分层文件时测试那一半跳过并写明原因；红了工作流当场派跨片修复，修好合回、修不好按红的种类停飞（守护红停后面全部 wave，测试红只停下游）。如实说明：改动波及面大的仓库（例如几乎所有测试都依赖的文件被改）测试那一半会被预算挡下，集成检查只剩守护
+- **owns 上限与 `owns_wide`**：每片 `owns` 标准档至多 12 条、大片档至多 30 条；单条通配展开超过 20 个现存文件，要在切片的 `owns_wide` 里为该条写理由
+- **重新起飞**：`slice-gate.py landed` 列出已落地的切片（切片 → 门禁行里的 commit），补计划后重新起飞时不再派它们的执行体，评审与集成检查照做
 
 **测试分层（`openspec/test-tiers.json`，可选）**：把测试分成单元层与按模块划分的集成区域，由 `/test-tiers` 实测并经人类批准后生成。
 - **形状**：`{"unit": {paths, cmd}, "regions": {NAME: {paths, covers, cmd}}, "slow_allow": {NODEID: {reason, approved}}}`；路径 glob 与 `owns` 同语义，`covers` 写区域测试覆盖的被测源码
