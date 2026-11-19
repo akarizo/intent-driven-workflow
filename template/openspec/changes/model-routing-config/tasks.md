@@ -1,0 +1,10 @@
+<!-- 本文件由 slices.json 生成，不要手写编辑；改动请改 slices.json 后重新生成。 -->
+
+## 切片
+
+- [ ] S1 model-routing.py：路由配置校验、内建默认、pin 钉进 slices.json、resolve 起飞解析（含环境覆盖停飞）、get 单键查询；本仓库 model-routing.json （deps: - · verify: `python3 -m pytest -q tests/test_model_routing.py`）
+- [ ] S2 opsx-apply.js 按 5 个角色派发（大片档 executor-large、修复 fixer，缺省同 executor）与 effort 校验 （deps: - · verify: `python3 -m pytest -q tests/test_workflow_routing_roles.py tests/test_agents_workflow.py tests/test_workflow_resume.py`）
+- [ ] S3 session-decompose.py：--expect-efforts 对账 effort、fix 标签判 fixer、--turns 判 executor-large、可选角色不算零覆盖 （deps: - · verify: `python3 -m pytest -q tests/test_route_audit_efforts.py tests/test_evidence_timeline.py`）
+- [ ] S4 spec_html.py：飞行区块显示钉住的模型路由表，缺 routing 时提示 pin （deps: - · verify: `python3 -m pytest -q tests/test_spec_html_routing.py tests/test_spec_html.py tests/test_spec_html_turns.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py`）
+- [ ] S5 命令与 skill：apply 用 resolve 起飞、propose 运行 pin、pr-ship / archive / claudemd-standardize / bulk-apply / legacy 用 get 取值；规划期不变式测试 （deps: S1, S2, S3 · verify: `python3 -m pytest -q tests/test_routing_docs.py tests/test_template_docs.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py`）
+- [ ] S6 铁律 11 改写（根 CLAUDE.md 与 snippet）、README / WORKFLOW_zh / install.sh 路由说明 （deps: S1 · verify: `python3 -m pytest -q tests/test_docs_iron_rules.py tests/test_close_reap_docs.py tests/test_goal_takeoff_docs.py tests/test_ship_memory_docs.py tests/test_template_docs.py`）

@@ -1,0 +1,105 @@
+{
+  "commit": "dc6c26a128d36880d89496e09eec3ce9757637a9",
+  "at": "2026-11-19T13:05:40Z",
+  "plan_sha": "50f689e00976bbd790e88e1ee6453b77bb28dc14",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "sec": 464.1
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_model_routing.py",
+      "derived": "full"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_workflow_routing_roles.py tests/test_agents_workflow.py tests/test_workflow_resume.py",
+      "derived": "full"
+    },
+    "S3": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_route_audit_efforts.py tests/test_evidence_timeline.py",
+      "derived": "full"
+    },
+    "S4": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_spec_html_routing.py tests/test_spec_html.py tests/test_spec_html_turns.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py",
+      "derived": "full"
+    },
+    "S5": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_routing_docs.py tests/test_template_docs.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py",
+      "derived": "full"
+    },
+    "S6": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_docs_iron_rules.py tests/test_close_reap_docs.py tests/test_goal_takeoff_docs.py tests/test_ship_memory_docs.py tests/test_template_docs.py",
+      "derived": "full"
+    }
+  },
+  "checks": {
+    "schema-validate": {
+      "exit": 0,
+      "sec": 1.5,
+      "cmd": "cd template && openspec schema validate intent-driven",
+      "key": "651acf9f2926d57f3b4c560b571724707ee3d73c"
+    }
+  },
+  "lock": {
+    "mode": "exclusive",
+    "state": "held",
+    "waited": 0.0,
+    "why": "",
+    "load": [
+      7.7,
+      3.8
+    ],
+    "cores": 18
+  },
+  "full_suite_sec": 464.1,
+  "test_ok": true,
+  "ledger": {
+    "cases": 875,
+    "measured": 875,
+    "inherited": 0,
+    "no_sec": 0,
+    "id_form": "nodeid",
+    "complete": true,
+    "tiers": {
+      "-": {
+        "cases": 875,
+        "sec": 462.2
+      }
+    }
+  },
+  "change": "model-routing-config",
+  "mode": "full",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-execution-routing-by-config.md": "93b3b9638ee1f34270528138ce179048cfd98087",
+    "tests/test_docs_iron_rules.py": "dc91bf1499e9d2d407fc4e177e8cff0aaa01353e",
+    "tests/test_model_routing.py": "73ffcbe5281375018199905715d7a1c35b5106ee",
+    "tests/test_route_audit_efforts.py": "6d5b69fd133f9b3bad0b8bb379990a32559ae021",
+    "tests/test_routing_docs.py": "d420ef7b37f479c5ad5ca78d5110622db0298204",
+    "tests/test_spec_html_routing.py": "a9a0fdb599c24db126357befc39da3e6f61a45de",
+    "tests/test_workflow_routing_roles.py": "ec7792f5c8c91ede4c1bfe29954586f7df465dda"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "reuse_skipped": [
+    {
+      "change": "reap-agent-worktrees-at-close",
+      "commit": "100e0151887e",
+      "reason": "经锚点补跑超时"
+    }
+  ]
+}

@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+model-routing-config · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+model-routing-config
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">tasks</span><span class="chip" data-state="done">specs/execution-model-routing</span><span class="chip" data-state="done">specs/flight-role-routing</span><span class="chip" data-state="done">specs/iron-rule-routing</span><span class="chip" data-state="done">specs/route-audit-efforts</span><span class="chip" data-state="done">specs/routing-docs</span><span class="chip" data-state="done">specs/spec-html-routing</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">执行层的模型是写死的：执行体与评审员 = 会话主模型 · high，integrator = sonnet · low（铁律 11，<code>opsx-apply.md</code> 路由表）。这带来三个问题：</p><p class="why-body">- 用户要执行体用 opus · medium、评审保留 high，现在做不到：执行体与评审员共用 <code>&lt;main&gt;</code>，effort 写死在文档和 agent frontmatter 里；
+- 仓库之间没法各配各的：路由只存在于模板文本，没有一份按仓库生效的配置；
+- 起飞前没有一处让人类看见并确认本次飞行用什么模型；收口只对账模型，不对账 effort。</p><p class="why-body">另外有两处派发漏写了 <code>model</code>，实际落到 <code>CLAUDE_CODE_SUBAGENT_MODEL</code> 的默认值 sonnet：bulk-apply 派发的子 agent，以及 legacy 逐 task 模式的实现 / 修复派发。</p><p class="why-body">意图访谈以四轮审批页代替：<code>docs/flight-routing-config.html</code> v1–v4（主仓库工作区，未入库）。用户 2026-11-19 回复「全按推荐」，C1 相关：Q1-A 无配置文件走内建默认、Q3-A 一个派发用途一个键共 10 个、Q4-A 规划期确认后钉进 slices.json、Q5-A 旧 change 缺 routing 停飞并提示 pin、Q6-A 本仓库按第 05 节取值、Q7-A 评审类不设下限、Q13-A 修复不属于规划期。另有两条用户原话约束：「不写 main，必须是直接模型名称」；「最终的解决方案和规划还是要继承主会话」。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>新增路由配置 <code>openspec/model-routing.json</code></strong>：只写模型名（<code>opus | sonnet | haiku | fable</code>）与 effort（<code>low | medium | high | xhigh | max</code>），<code>main</code> / <code>inherit</code> 判红。按派发用途登记 10 个键：</li><li><code>flight</code>：<code>executor</code> / <code>executor-large</code> / <code>fixer</code> / <code>reviewer</code> / <code>integrator</code>；</li><li><code>ship</code>：<code>reviewer</code> / <code>followup</code>；</li><li><code>archive.sync</code> · <code>claudemd.evidence</code> · <code>bulk.apply</code>。</li><li><strong>新增 <code>.claude/hooks/model-routing.py</code></strong>，四个子命令：</li><li><code>show</code>：打印生效的路由表及每个键的来源；</li><li><code>pin --change-dir</code>：把 flight 与 ship 两组键钉进 <code>slices.json.routing</code>；</li><li><code>resolve --change-dir</code>：起飞时读钉住的路由，输出工作流用的 <code>models</code> / <code>efforts</code>；缺 routing 时停飞并提示 pin；设了 <code>CLAUDE_CODE_EFFORT_LEVEL</code> 或 <code>CLAUDE_CODE_SUBAGENT_MODEL_FORCE</code> 时停飞；</li><li><code>get &lt;组.键&gt;</code>：其他派发点取单个键，change 钉过的优先。</li><li><strong><code>opsx-apply.js</code> 按 5 个角色派发</strong>：大片档执行体走 <code>executor-large</code>，批量修复与 wave 跨片修复走 <code>fixer</code>；两者缺省时同 <code>executor</code>，兼容旧调用；effort 值不在允许集合内时拒绝起飞。</li><li><strong>收口对账加 effort</strong>：<code>session-decompose.py</code> 新增 <code>--expect-efforts</code>，读子 agent 转录 assistant 行的 <code>effort</code> 字段对账；<code>fix</code> 开头的标签判为 <code>fixer</code>；<code>--turns</code> 把大片档切片判为 <code>executor-large</code>；<code>fixer</code> 与 <code>executor-large</code> 没派发时不算零覆盖。</li><li><strong>spec.html 显示钉住的路由表</strong>；缺 routing 时显示「起飞会被拒绝」的提示。</li><li><strong>文档（命令与 skill 同改）</strong>：</li><li><code>/opsx-apply</code>：step 4 改为 <code>model-routing.py resolve</code>，打印路由表；回退路径的 Agent 派发显式传 <code>model</code> 与 <code>effort</code>；收口加 <code>--expect-efforts</code>；去掉 <code>&lt;main&gt;</code> / <code>--model=</code>。</li><li><code>/opsx-propose</code>：tasks 阶段运行 <code>pin</code>。</li><li><code>/pr-ship</code>、<code>/opsx-archive</code>、<code>/claudemd-standardize</code>、<code>/opsx-bulk-apply</code>、legacy 逐 task 模式：派发都改用 <code>model-routing.py get &lt;键&gt;</code>，补上 bulk 与 legacy 漏写的 <code>model</code>。</li><li><strong>铁律 11 改写</strong>（根 <code>CLAUDE.md</code> 与 <code>template/CLAUDE.md.snippet</code>）：执行层按派发用途从配置显式路由，只写模型名；规划期产出只来自主会话或 fork，不进路由配置，规划类命令与 skill 不写 <code>model</code> / <code>effort</code>。README、<code>docs/WORKFLOW_zh.md</code>、<code>install.sh</code> 说明同步。</li><li><strong>新 ADR</strong>：取代 <code>DRAFT-model-routing-defaults-for-template</code> 决策第 2 条中的「需推理的 subagent 保留 inherit」。</li><li><strong>BREAKING（下游行为）</strong>：没有配置文件的下游仓库，执行体与评审员从「随会话主模型」改为固定 opus · high（Q1-A）。旧 change 起飞前要先 <code>pin</code>，并重新批准一次（Q5-A）。</li></ul><div class="impact"><span class="tag"><strong>新增</strong>：<code>template/.claude/hooks/model-routing.py</code>、<code>template/openspec/model-routing.json</code>（本仓库配置）、<code>tests/test_model_routing.py</code>、<code>tests/test_workflow_routing_roles.py</code>、<code>tests/test_route_audit_efforts.py</code>、<code>tests/test_spec_html_routing.py</code>、<code>tests/test_routing_docs.py</code>。</span><span class="tag"><strong>修改</strong>：</span><span class="tag">代码：<code>template/.claude/workflows/opsx-apply.js</code>、<code>template/.claude/hooks/session-decompose.py</code>、<code>template/.claude/hooks/spec_html.py</code>；</span><span class="tag">命令与 skill：apply、propose、pr-ship、archive、claudemd-standardize、bulk-apply、legacy；</span><span class="tag">文档与安装：根 <code>CLAUDE.md</code>、<code>template/CLAUDE.md.snippet</code>、README、<code>docs/WORKFLOW_zh.md</code>、<code>install.sh</code>；</span><span class="tag">钉住旧措辞的测试：<code>tests/test_template_docs.py</code>、<code>tests/test_docs_iron_rules.py</code>、<code>tests/test_agents_workflow.py</code>。</span><span class="tag"><strong>不变</strong>：</span><span class="tag"><code>session-model.py</code> 保留，<code>session-decompose</code> 仍用它的 <code>alias_of</code> 把模型 id 归一成别名；</span><span class="tag">agent frontmatter 不改，派发时显式传的 <code>model</code> / <code>effort</code> 优先于 frontmatter；</span><span class="tag">takeoff-gate 的新鲜度规则不改：<code>slices.json</code> 本来就是计划工件，pin 改了它，批准自然过期。</span><span class="tag"><strong>下游</strong>：install 不种配置文件，下游缺省走内建默认；升级后在途的 change 起飞前要先 pin。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>execution-model-routing</code>：路由配置的形状与校验、内建默认、钉进 slices.json、起飞解析与环境覆盖检查、单键查询。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>flight-role-routing</code>：飞行工作流按 5 个角色派发（大片档执行体、修复执行体单独路由），以及 effort 校验。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>route-audit-efforts</code>：收口对账覆盖 effort 与新增的两个角色。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>spec-html-routing</code>：审批面板显示钉住的路由。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>routing-docs</code>：apply / propose / ship / archive / claudemd / bulk / legacy 各派发点从配置取值；规划期不变式由测试机械检查。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>iron-rule-routing</code>：铁律 11 与对外文档的措辞。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>execution-model-routing <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 路由配置只登记执行层的 10 个键，只写模型名</p><p><code>.claude/hooks/model-routing.py</code> SHALL 读取 openspec 根下的 <code>model-routing.json</code>。注册表固定为 10 个键：<code>flight.executor</code> / <code>flight.executor-large</code> / <code>flight.fixer</code> / <code>flight.reviewer</code> / <code>flight.integrator</code> / <code>ship.reviewer</code> / <code>ship.followup</code> / <code>archive.sync</code> / <code>claudemd.evidence</code> / <code>bulk.apply</code>。</p><p>每个写出的键 MUST 同时有 <code>model</code> 与 <code>effort</code>：
+- <code>model</code> ∈ <code>opus | sonnet | haiku | fable</code>；
+- <code>effort</code> ∈ <code>low | medium | high | xhigh | max</code>。</p><p>出现以下任一情况时，<code>show</code> / <code>pin</code> / <code>get</code> MUST 以 exit 2 退出，并在 stderr 点名出错的键：
+- 未登记的组或键；
+- 组名是 <code>propose</code> / <code>explore</code> / <code>new</code> / <code>continue</code> / <code>mini</code>，提示「规划期不进路由配置」；
+- 模型写成 <code>main</code> / <code>inherit</code> 等非模型名，提示「只写模型名」；
+- effort 不在允许集合内。</p><p>没有配置文件或缺某个键时，SHALL 取内建默认：<code>flight.integrator</code> / <code>archive.sync</code> / <code>claudemd.evidence</code> 为 sonnet · low，<code>bulk.apply</code> 为 opus · medium，其余为 opus · high。</p><p>Feature: 执行层路由配置
+Rule: 只收执行层的键与模型名，缺省走内建默认</p><div class="scenario"><p class="scenario-name">Scenario: routing-builtin-defaults-without-config</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 openspec 根下没有 <code>model-routing.json</code> 的仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>model-routing.py show --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出 10 个键</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>flight.executor</code> 是 opus · high，<code>flight.integrator</code> 是 sonnet · low，<code>bulk.apply</code> 是 opus · medium，每个键的来源都是 <code>builtin</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-config-overrides-per-key</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.json</code> 只写了 <code>flight.executor</code> 为 opus · medium</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>show --json</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>flight.executor</code> 是 opus · medium，来源为 <code>repo</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>flight.reviewer</code> 仍是 opus · high，来源为 <code>builtin</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-rejects-planning-keys</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.json</code> 含组 <code>propose</code>（如 <code>propose.skeleton</code>）</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>show</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 2，stderr 含「规划期不进路由配置」并点名 <code>propose.skeleton</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-rejects-non-model-names</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.json</code> 里 <code>flight.reviewer</code> 的 model 写成 <code>main</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>show</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 2，stderr 含「只写模型名」并点名 <code>flight.reviewer</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 规划期把 flight 与 ship 两组钉进 slices.json，起飞只认钉住的值</p><p><code>model-routing.py pin --change-dir D</code> SHALL 把生效配置里 flight 组的 5 个键与 ship 组的 2 个键，写进 <code>D/slices.json</code> 顶层的 <code>routing</code>，形如 <code>{source, flight, ship}</code>；其余顶层键 MUST 原样保留。</p><p><code>resolve --change-dir D</code> SHALL 只读钉住的 <code>routing.flight</code>，stdout 输出 <code>{&quot;models&quot;: {5 个角色}, &quot;efforts&quot;: {5 个角色}}</code>。以下情况 MUST 以 exit 3 退出：
+- <code>routing</code> 缺失或不合法：stderr 给出 <code>model-routing.py pin --change-dir D</code> 的命令，并说明 pin 之后要重新批准；
+- 环境变量 <code>CLAUDE_CODE_EFFORT_LEVEL</code> 或 <code>CLAUDE_CODE_SUBAGENT_MODEL_FORCE</code> 非空：stderr 点名该变量。</p><p>Feature: 钉住与解析
+Rule: 起飞用的路由来自计划工件，环境覆盖时停飞</p><div class="scenario"><p class="scenario-name">Scenario: routing-pin-writes-flight-and-ship</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 change 的 <code>slices.json</code>（含 gate 与 slices），仓库配置把 <code>flight.executor</code> 设为 opus · medium</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>pin --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span><code>slices.json</code> 多出 <code>routing</code>，其中 <code>flight</code> 有 5 个键、<code>flight.executor</code> 为 opus · medium，<code>ship</code> 有 2 个键</span></li><li><span class="step-key" data-kw="AND">AND</span><span>原有的 <code>gate</code> 与 <code>slices</code> 不变</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-resolve-requires-pin</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个没有 <code>routing</code> 的 <code>slices.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>resolve --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 3，stderr 含 <code>model-routing.py pin --change-dir</code> 与「重新批准」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-resolve-outputs-workflow-args</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个已 pin 的 change</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>resolve --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 的 JSON 有 <code>models</code> 与 <code>efforts</code>，各含 executor / executor-large / fixer / reviewer / integrator 5 个角色，取值等于钉住的值</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: routing-resolve-refuses-env-override</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个已 pin 的 change，环境变量 <code>CLAUDE_CODE_EFFORT_LEVEL=high</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>resolve --change-dir</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 3，stderr 点名 <code>CLAUDE_CODE_EFFORT_LEVEL</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 其他派发点按键取值，钉住的优先</p><p><code>model-routing.py get &lt;组.键&gt; [--change-dir D]</code> SHALL 在 stdout 输出 <code>{&quot;model&quot;, &quot;effort&quot;, &quot;source&quot;}</code>。取值顺序：
+1. D 的 <code>slices.json.routing</code> 里钉住的值（<code>source</code> 为 <code>pinned</code>）；
+2. 仓库配置（<code>repo</code>）；
+3. 内建默认（<code>builtin</code>）。</p><p>未登记的键 MUST 以 exit 2 退出。</p><p>Feature: 单键查询
+Rule: 钉住 &gt; 仓库配置 &gt; 内建默认</p><div class="scenario"><p class="scenario-name">Scenario: routing-get-prefers-pinned</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>仓库配置把 <code>ship.reviewer</code> 设为 sonnet · medium，而 change 钉住的 <code>ship.reviewer</code> 是 opus · high</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>分别运行 <code>get ship.reviewer --change-dir D</code> 与不带 <code>--change-dir</code> 的 <code>get ship.reviewer</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>前者输出 opus · high、来源为 <code>pinned</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>后者输出 sonnet · medium、来源为 <code>repo</code></span></li></ul></div></div></div><div class="spec-card"><h3>flight-role-routing <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 飞行工作流按 5 个角色派发</p><p><code>template/.claude/workflows/opsx-apply.js</code> SHALL 按以下角色派发：
+- 轮次档为 <code>large</code> 的切片执行体：<code>models[&#x27;executor-large&#x27;]</code> / <code>efforts[&#x27;executor-large&#x27;]</code>；
+- 批量修复（label <code>fix</code>）与 wave 跨片修复（label <code>fix:w&lt;i&gt;</code>）：<code>models.fixer</code> / <code>efforts.fixer</code>；
+- 其余切片执行体、评审、integrator：仍按原来的 <code>executor</code> / <code>reviewer</code> / <code>integrator</code>。</p><p><code>executor-large</code> 与 <code>fixer</code> 缺省时 SHALL 取 <code>executor</code> 的值（model 与 effort 分别回落），只传 3 个角色的旧调用行为不变。任一角色的 effort 不在 <code>low | medium | high | xhigh | max</code> 之内时，MUST 抛错拒绝起飞。返回值里的 <code>models</code> 与 <code>efforts</code> SHALL 含全部 5 个角色。</p><p>Feature: 飞行角色路由
+Rule: 大片档与修复各有路由，缺省同执行体</p><div class="scenario"><p class="scenario-name">Scenario: workflow-routes-large-slice-to-executor-large</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>两片计划：S1 的 turns 为 <code>large</code>，S2 为标准档</span></li><li><span class="step-key" data-kw="AND">AND</span><span>args 的 <code>models[&#x27;executor-large&#x27;]</code> 为 <code>fable</code>、<code>efforts[&#x27;executor-large&#x27;]</code> 为 <code>high</code>，<code>models.executor</code> 为 <code>opus</code>、<code>efforts.executor</code> 为 <code>medium</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>S1 的执行体派发带 model <code>fable</code>、effort <code>high</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>S2 的执行体派发带 model <code>opus</code>、effort <code>medium</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-routes-fixes-to-fixer</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一片计划，评审返回一条 HIGH finding；args 的 <code>models.fixer</code> 为 <code>fable</code>、<code>efforts.fixer</code> 为 <code>high</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>label 为 <code>fix</code> 的派发带 model <code>fable</code>、effort <code>high</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-defaults-new-roles-to-executor</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>args 只有 executor / reviewer / integrator 三个角色，<code>efforts.executor</code> 为 <code>medium</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行工作流（含一片大片档与一次批量修复）</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>大片档执行体与 <code>fix</code> 的派发都带 <code>models.executor</code> 与 effort <code>medium</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>返回值的 <code>models</code> 与 <code>efforts</code> 含 5 个角色</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: workflow-rejects-unknown-effort</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>args 的 <code>efforts.reviewer</code> 为 <code>huge</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行工作流</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>工作流抛错，错误信息点名 <code>reviewer</code> 与允许的 effort 集合，且没有派发任何 agent</span></li></ul></div></div></div><div class="spec-card"><h3>iron-rule-routing <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 铁律 11 写明配置驱动的执行层路由与规划期不变式</p><p>仓库根 <code>CLAUDE.md</code> 与 <code>template/CLAUDE.md.snippet</code> 的铁律 11 SHALL 同时写明以下几点：
+- 执行层路由取自 <code>model-routing.json</code>；
+- 只写模型名，禁 <code>main</code> / <code>inherit</code>；
+- 路由在规划期钉进 <code>slices.json</code>；
+- 收口时带 <code>--expect-efforts</code> 对账；
+- 规划期产出只来自主会话或 fork。</p><p>两者 MUST NOT 再写「会话主模型 high」，也 MUST NOT 再要求用 <code>session-model.py</code> 判定路由。</p><p>README、<code>docs/WORKFLOW_zh.md</code> 与 <code>install.sh</code> 的路由说明 SHALL 指向 <code>model-routing.py</code> / <code>model-routing.json</code>，MUST NOT 再把执行体与评审员描述为「会话主模型」。</p><p>Feature: 铁律与对外文档
+Rule: 铁律 11 与说明文档同步为配置驱动</p><div class="scenario"><p class="scenario-name">Scenario: iron-rule-names-routing-config</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>仓库根 <code>CLAUDE.md</code> 与 <code>template/CLAUDE.md.snippet</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>取两者的铁律 11 一行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两行都含 <code>model-routing.json</code>、<code>slices.json</code>、<code>--expect-efforts</code>、<code>main</code> 与「主会话或 fork」</span></li><li><span class="step-key" data-kw="AND">AND</span><span>都不含「会话主模型」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: readme-and-installer-describe-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>README.md</code>、<code>docs/WORKFLOW_zh.md</code> 与 <code>install.sh</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读三者全文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>三者都含 <code>model-routing</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>都不含「会话主模型（<code>session-model.py</code> 判定）」或「会话主模型（session-model.py 判定）」，<code>docs/WORKFLOW_zh.md</code> 不含「会话主模型 <code>&lt;main&gt;</code>」</span></li></ul></div></div></div><div class="spec-card"><h3>route-audit-efforts <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 收口对账覆盖 effort 与新角色</p><p><code>session-decompose.py</code> SHALL 新增两个参数：
+- <code>--expect-efforts &#x27;&lt;JSON&gt;&#x27;</code>：角色 → effort，与 <code>--expect-models</code> 一样需要 <code>--workflow</code>；
+- <code>--turns &#x27;&lt;JSON&gt;&#x27;</code>：<code>slice-gate.py turns</code> 的输出。</p><p><strong>effort 取值</strong>：每个 agent 的实际 effort 取它转录里第一条带 <code>effort</code> 字段的 assistant 行。
+- 所有 agent 都没有该字段时，SHALL 打印「转录无 effort 字段，effort 对账跳过」，effort 对账不判红；
+- 有字段且与期望不符时，MUST 列出不符项（标签 · 期望 · 实际），并以 exit 3 退出。</p><p><strong>角色判定</strong>按以下顺序：
+1. label 去掉 <code>:retry</code> 后等于 <code>fix</code> 或以 <code>fix:</code> 开头 → <code>fixer</code>；
+2. label 在 <code>--turns</code> 里为 <code>large</code> → <code>executor-large</code>；
+3. 其余沿用 agentType → label 前缀 → 阶段；agentType <code>slice-executor-large</code> 判为 <code>executor-large</code>。</p><p><strong>回落</strong>：期望表里没有 <code>fixer</code> / <code>executor-large</code> 时，这两个角色按 <code>executor</code> 对账。</p><p><strong>零覆盖</strong>：<code>fixer</code> 与 <code>executor-large</code> 没有被采样到时 MUST NOT 判为零覆盖。核心三角色的零覆盖规则不变。</p><p>Feature: 收口路由对账
+Rule: model 与 effort 都机械对账，可选角色未派发不算缺</p><div class="scenario"><p class="scenario-name">Scenario: audit-flags-effort-mismatch</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 workflow 目录：S1（Implement）实际 opus、effort <code>high</code>，review:S1 实际 opus、effort <code>high</code>，integrate:w1 实际 sonnet、effort <code>low</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>带 <code>--expect-models</code>（executor / reviewer = opus，integrator = sonnet）与 <code>--expect-efforts</code>（executor 为 <code>medium</code>，其余与实际相同）运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>exit 3，输出含 S1、期望 <code>medium</code> 与实际 <code>high</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: audit-maps-fix-labels-to-fixer</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 workflow 目录：S1 实际 opus · medium，<code>fix:w1</code> 实际 fable · high，review 与 integrate 与期望一致</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>期望表 executor = opus · medium、fixer = fable · high，运行对账</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，路由对账一致，且列出 <code>fixer=fable</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: audit-maps-large-slices-by-turns</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 workflow 目录：S2（Implement，meta 的 agentType 为 <code>workflow-subagent</code>）实际 fable，其余与期望一致</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>期望表 executor = opus、executor-large = fable，并传 <code>--turns &#x27;{&quot;S2&quot;: &quot;large&quot;}&#x27;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，S2 按 <code>executor-large</code> 对账通过</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: audit-skips-undispatched-optional-roles</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个只有执行体、评审、integrator 的 workflow 目录，取值都与期望一致</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>期望表含全部 5 个角色</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出不含 <code>fixer</code> 或 <code>executor-large</code> 的「未采样到角色」</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: audit-warns-when-effort-unrecorded</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 workflow 目录，所有 assistant 行都没有 <code>effort</code> 字段，模型与期望一致</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>带 <code>--expect-efforts</code> 运行</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出含「转录无 effort 字段，effort 对账跳过」</span></li></ul></div></div></div><div class="spec-card"><h3>routing-docs <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 飞行文档从钉住的路由起飞</p><p><code>/opsx-apply</code> 命令与 <code>openspec-apply-change</code> skill（同改）SHALL 做到：
+- 起飞前运行 <code>python3 .claude/hooks/model-routing.py resolve --change-dir …</code>，非 0 即停下报告；
+- 把 stdout 的 <code>models</code> / <code>efforts</code> 原样作为 Workflow args，并在起飞时打印路由表；
+- 回退路径的 Agent 派发显式传 <code>model</code> 与 <code>effort</code>；
+- 收口时 <code>session-decompose.py</code> 带 <code>--expect-models</code>、<code>--expect-efforts</code> 与 <code>--turns</code>。</p><p>两者 MUST NOT 再出现 <code>&lt;main&gt;</code>、<code>--model=</code> 或用 <code>session-model.py</code> 判定路由。</p><p><code>/opsx-propose</code> 命令与 <code>openspec-propose</code> skill（同改）SHALL 在 tasks 阶段 lint 绿之后运行 <code>model-routing.py pin --change-dir …</code>。</p><p>Feature: 飞行文档的路由
+Rule: 起飞用 resolve，规划用 pin</p><div class="scenario"><p class="scenario-name">Scenario: apply-docs-resolve-routing-from-pin</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/commands/opsx-apply.md</code> 与 <code>template/.claude/skills/openspec-apply-change/SKILL.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读两者全文与回退路径段</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两者都含 <code>model-routing.py resolve</code>、<code>--expect-efforts</code> 与 <code>--turns</code>，都不含 <code>&lt;main&gt;</code>、<code>--model=</code> 与 <code>session-model.py</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>两者的回退路径段都写明 Agent 派发传 <code>effort</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: propose-docs-pin-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>template/.claude/commands/opsx-propose.md</code> 与 <code>template/.claude/skills/openspec-propose/SKILL.md</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读两者全文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两者都含 <code>model-routing.py pin --change-dir</code>，且出现在 <code>slice-gate.py lint</code> 之后</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 辅助派发点按键取值</p><p>下列派发点 SHALL 先运行 <code>model-routing.py get &lt;键&gt;</code>，再按其 <code>model</code> 与 <code>effort</code> 派发：</p><p>| 派发点 | 键 |
+|---|---|
+| <code>/pr-ship</code> 的评审与复核 | <code>ship.reviewer</code> / <code>ship.followup</code> |
+| <code>/opsx-archive</code> 命令与 <code>openspec-archive-change</code> skill 的 sync | <code>archive.sync</code> |
+| <code>/claudemd-standardize</code> 的证据调查 | <code>claudemd.evidence</code> |
+| <code>/opsx-bulk-apply</code> 命令与 <code>openspec-bulk-apply-change</code> skill 的子 agent | <code>bulk.apply</code> |
+| legacy 逐 task 模式的实现 / 修复 / 评审 | <code>flight.executor</code> / <code>flight.fixer</code> / <code>flight.reviewer</code> |</p><p>这些文件 MUST NOT 再出现 <code>&lt;main&gt;</code> 或写死的 <code>model: &quot;sonnet&quot;</code> / <code>model: sonnet</code>。</p><p>Feature: 辅助派发点
+Rule: 每个执行层派发都从配置取值</p><div class="scenario"><p class="scenario-name">Scenario: auxiliary-dispatches-read-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>上表列出的 7 个文件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>逐个读取</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>每个文件都含 <code>model-routing.py get</code> 与它对应的键</span></li><li><span class="step-key" data-kw="AND">AND</span><span>都不含 <code>&lt;main&gt;</code>、<code>model: &quot;sonnet&quot;</code> 与 <code>model: sonnet</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 规划期不进路由（机械检查）</p><p><code>model-routing.py</code> 拒收的规划期组名（propose / explore / new / continue / mini）与扫描范围 MUST 是同一份清单：每个组名 <code>&lt;g&gt;</code> 都有命令 <code>opsx-&lt;g&gt;.md</code>。</p><p>扫描范围是这 5 个命令，加上 4 个规划类 skill（<code>openspec-explore</code> / <code>openspec-new-change</code> / <code>openspec-continue-change</code> / <code>openspec-propose</code>），要求：
+- frontmatter MUST NOT 含 <code>model:</code> 或 <code>effort:</code>；
+- 正文 MUST NOT 含 <code>subagent_type</code> 或 <code>model: &quot;</code> 形式的派发。</p><p>Feature: 规划期不变式
+Rule: 规划期产出只来自主会话或 fork</p><div class="scenario"><p class="scenario-name">Scenario: planning-docs-carry-no-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.py</code> 登记的规划期组名，以及由它们得到的 5 个命令和 4 个规划类 skill</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读取这些文件的 frontmatter 与正文</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>规划期组名正好是 propose / explore / new / continue / mini，且每个组名都有对应的命令文件</span></li><li><span class="step-key" data-kw="AND">AND</span><span>没有一个文件的 frontmatter 含 <code>model:</code> 或 <code>effort:</code>，正文也不含 <code>subagent_type</code> 或 <code>model: &quot;</code></span></li></ul></div></div></div><div class="spec-card"><h3>spec-html-routing <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 审批面板显示钉住的路由</p><p><code>spec_html.py</code> 渲染飞行区块时 SHALL 按 <code>routing</code> 是否存在分两种输出：
+- <code>slices.json</code> 有 <code>routing</code> → SHALL 输出一张「模型路由」表，flight 组与 ship 组的每个键各占一行，列出键、模型、effort，并写明来源；
+- 没有 <code>routing</code> → SHALL 显示一条提示：起飞会被拒绝，需先运行 <code>model-routing.py pin --change-dir</code>。</p><p>Feature: 审批面板路由表
+Rule: 人类在批准前看见本次飞行用什么模型</p><div class="scenario"><p class="scenario-name">Scenario: spec-html-shows-pinned-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个 <code>slices.json</code> 含 <code>routing</code>，其中 <code>flight.executor</code> 为 opus · medium、<code>flight.integrator</code> 为 sonnet · low</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>渲染 spec.html</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>页面有「模型路由」标题，表里有 <code>flight.executor</code> 一行写着 opus 与 medium，<code>flight.integrator</code> 一行写着 sonnet 与 low</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: spec-html-warns-missing-routing</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个没有 <code>routing</code> 的 <code>slices.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>渲染 spec.html</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>页面含 <code>model-routing.py pin</code> 的提示</span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p>现状（main @ dc6c26a）：</p><ul><li><code>opsx-apply.js</code> 只认 3 个角色：<code>args.models</code> 必须有 <code>executor</code> / <code>reviewer</code> / <code>integrator</code>，否则抛错；<code>efforts</code> 缺省为 <code>{executor: high, reviewer: high, integrator: low}</code>。大片档执行体、批量修复、wave 跨片修复都用 <code>models.executor</code>。</li><li><code>/opsx-apply</code> 起飞时用 <code>session-model.py</code> 判定会话主模型 <code>&lt;main&gt;</code>，然后传入 <code>models: {executor: &lt;main&gt;, reviewer: &lt;main&gt;, integrator: &quot;sonnet&quot;}</code>。</li><li>收口时运行 <code>session-decompose.py --expect-models</code>，只对账模型，不对账 effort。角色判定的顺序是 agentType → label 前缀 → 阶段。</li><li>回退路径的文档写着「Agent 工具没有 effort 参数，effort 由 agent frontmatter 决定」。本会话的 Agent 工具定义已有 <code>effort</code> 参数（<code>low | medium | high | xhigh | max</code>），这句话已过时。</li><li>其他派发点：</li><li><code>/pr-ship</code> 评审与复核：<code>model: &quot;&lt;main&gt;&quot;</code>；</li><li>archive 的 sync：<code>model: &quot;sonnet&quot;</code>；</li><li>claudemd-standardize 的证据调查：<code>model: sonnet</code>；</li><li>bulk-apply 的子 agent：没写 <code>model</code>；</li><li>legacy 的实现 / 修复：没写 <code>model</code>；legacy 的评审：<code>&lt;main&gt;</code>。</li></ul><p>已核实的事实：</p><ul><li><strong>转录里有实际 effort</strong>：Workflow 子 agent 的转录，assistant 行顶层有 <code>effort</code> 字段（另有 <code>perTurnEffort</code>，以及 api-request 里的 <code>output_config.effort</code>）。本仓库上一次飞行（wf_8435375a）实测：integrator 为 <code>low</code>，review 与切片为 <code>high</code>，与当时传入的 efforts 一致。</li><li><strong>meta 里看不出大片档</strong>：<code>useAgentTypes: false</code> 时，meta 的 <code>agentType</code> 是 <code>workflow-subagent</code>。大片档执行体的 label 就是切片 id，单看 meta 区分不出。</li><li><strong>环境变量会覆盖 effort</strong>（code.claude.com/docs/en/model-config，2026-11-19 读取）：「A subagent&#x27;s <code>effort</code> applies while the subagent runs … If <code>CLAUDE_CODE_EFFORT_LEVEL</code> is set, that level applies instead」；<code>maxEffortLevel</code> 或组织上限同样会压低子 agent 的 effort。</li></ul><p>在役 ADR：</p><ul><li><code>DRAFT-model-routing-defaults-for-template</code>：第 2 条「需推理的 subagent 保留 inherit」与本 change 冲突，由新 ADR 取代这一条；第 1、3、4 条仍在役（<code>CLAUDE_CODE_SUBAGENT_MODEL=sonnet</code> 兜底、主会话低推理命令只做软引导、纪律下发到 snippet）。</li><li><code>DRAFT-apply-as-flight</code> 等 ADR 不涉及模型取值，不冲突。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals</strong></p><ul><li>执行层每个派发用途的 model 与 effort 都来自按仓库生效的配置，只写模型名。</li><li>人类在审批 spec.html 时看到本次飞行的路由；它被钉进计划工件，改动会让批准过期。</li><li>收口时机械对账 model 与 effort。</li><li>规划期不变式变成机械检查：配置里出现规划期的组名即判红；测试扫描规划类命令与 skill。</li></ul><p><strong>Non-Goals</strong></p><ul><li>主会话的模型与 effort（规划期一律继承主会话；机械命令的主会话层由 C3 处理）。</li><li>agent frontmatter 的取值（派发时显式参数优先，frontmatter 只在参数缺失时兜底）。</li><li>评审类的下限（Q7-A：不设）。</li><li>自动迁移在途 change：由人运行 <code>pin</code>，并重新批准。</li></ul></div><div class="design-block"><h3>Decisions</h3><details><summary>组或键不在注册表里 → 「未登记的键」；</summary></details><details><summary>组名是 propose / explore / new / continue / mini → 「规划期不进路由配置」；</summary></details><details><summary><code>model</code> 不是 <code>opus | sonnet | haiku | fable</code>，包括 <code>main</code> / <code>inherit</code> → 「只写模型名」；</summary></details><details><summary><code>effort</code> 不是 <code>low | medium | high | xhigh | max</code>；</summary></details><details><summary>值缺 <code>model</code> 或缺 <code>effort</code>。</summary></details><details><summary>propose 在 tasks 阶段运行 <code>model-routing.py pin --change-dir</code>，把 flight 与 ship 两组共 7 个键写进 <code>slices.json</code> 顶层的 <code>routing</code></summary></details><details><summary>spec.html 渲染这张表；人类发出 <code>/opsx-apply</code> 即确认。</summary></details><details><summary><code>slices.json</code> 本来就在 takeoff-gate 的 <code>PLAN_FILES</code> 里，pin 之后再改，批准自动过期，不需要改 takeoff-gate。</summary></details><details><summary>archive / claudemd / bulk 三组不钉，它们不属于某一次飞行，用的时候用 <code>get</code> 现取。</summary></details><details><summary><strong>放进 <code>slice-gate.py lint</code>（否决）</strong></summary><p>51 个测试文件的计划夹具都没有 routing，放进 lint 会让这些夹具全部判红，owns 会扩散到几十个无关测试。</p></details><details><summary><strong>放在 <code>resolve</code>（采用）</strong></summary><p>它在 apply 的 step 2 紧跟 lint 和 preflight 运行，非 0 就停下报告。效果与 lint 判红相同：在派发任何 agent 之前停飞，并给出 pin 的命令。</p></details><details><summary><code>opsx-apply.js</code> 用 <code>execRole(s)</code> 选角色</summary><p>大片档 → <code>executor-large</code>，其余 → <code>executor</code>；<code>fix</code> / <code>fix:w&lt;i&gt;</code> 的派发用 <code>fixer</code>。</p></details><details><summary><code>models[&#x27;executor-large&#x27;]</code> 与 <code>models.fixer</code> 缺省取 <code>models.executor</code>；effort 同理。这样旧的 3 角色 args（测试夹具、未升级的命令文档）行为不变。</summary></details><details><summary>每个 effort 必须在 <code>low | medium | high | xhigh | max</code> 之内，否则抛错拒绝起飞。</summary></details><details><summary>开头的路由日志打印 5 个角色；返回值里的 <code>models</code> / <code>efforts</code> 也是 5 个角色。</summary></details><details><summary><strong>effort 来源</strong></summary><p>每个 agent 取第一条带 <code>effort</code> 字段的 assistant 行。所有 agent 都没有这个字段时（旧版 Claude Code），打印「转录无 effort 字段，effort 对账跳过」并跳过 effort 对账，不判红。部分 agent 有而对不上 → exit 3。</p></details><details><summary><strong>角色判定顺序</strong></summary></details><details><summary><strong>期望表没有新角色时</strong></summary><p><code>fixer</code> / <code>executor-large</code> 回落到 <code>executor</code>，旧的 3 角色 <code>--expect-models</code> 行为不变。</p></details><details><summary><strong>零覆盖</strong></summary><p><code>fixer</code> 与 <code>executor-large</code> 没有派发是常态，不算零覆盖。核心三角色的零覆盖规则不变。</p></details><details><summary><strong>apply 回退路径</strong></summary><p>Agent 派发显式传 <code>model</code> 与 <code>effort</code>，取值来自 resolve。如果 Agent 工具没有 <code>effort</code> 参数（旧版本），由 agent frontmatter 决定，与路由不一定一致；回退路径不经 Workflow，收口不对账（与现状一致）。</p></details><details><summary><strong>其他派发点</strong></summary><p>一律先运行 <code>python3 .claude/hooks/model-routing.py get &lt;组.键&gt; [--change-dir …]</code>，再按 stdout 的 <code>{model, effort}</code> 派发：</p></details><details><summary><code>/pr-ship</code></summary><p><code>ship.reviewer</code> / <code>ship.followup</code>；</p></details><details><summary>archive</summary><p><code>archive.sync</code>；</p></details><details><summary>claudemd-standardize</summary><p><code>claudemd.evidence</code>；</p></details><details><summary>bulk-apply</summary><p><code>bulk.apply</code>；</p></details><details><summary>legacy</summary><p>实现 <code>flight.executor</code>、修复 <code>flight.fixer</code>、评审 <code>flight.reviewer</code>。</p></details><details><summary><strong><code>get</code> 的取值顺序</strong></summary><p>钉住的值 → 仓库配置 → 内建默认。stdout 带 <code>source</code>。设了覆盖环境变量时，<code>get</code> 只往 stderr 打警告，不阻断：这些派发点不属于飞行，停下的代价大于收益。</p></details><details><summary>apply、pr-ship、legacy 不再判定 <code>&lt;main&gt;</code>；<code>--model=</code> 旗标删除；<code>.flight</code> 的 <code>raw</code> 字段删除，<code>source</code> 改记路由来源。</summary></details><details><summary><code>session-model.py</code> 保留</summary><p><code>session-decompose</code> 仍用它的 <code>alias_of</code> 把模型 id 归一成别名，它自己的测试也不动。</p></details><details><summary><strong>配置侧</strong></summary><p>注册表拒收规划期组名（D1）。</p></details><details><summary><strong>文档侧</strong></summary><p><code>tests/test_routing_docs.py</code> 扫描 5 个规划类命令（opsx-explore / new / continue / propose / mini）和 4 个规划类 skill（openspec-explore / new-change / continue-change / propose）：</p></details><details><summary>frontmatter 不得有 <code>model:</code> / <code>effort:</code>；</summary></details><details><summary>正文不得出现 <code>subagent_type</code> 或 <code>model: &quot;</code> 形式的派发。</summary></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>执行体降到 medium，一次做对的比例可能下降</strong>（风险） → 先跑 2–3 次飞行，用 timeline 与 flight-doctor 看重派与修复次数，再决定是否调回；调回只需改一行配置并重新 pin。</summary></details><details><summary><strong>下游从「随主会话」变为固定 opus</strong>（风险） → proposal 标为 BREAKING；README 写明可以用 <code>model-routing.json</code> 改回。</summary></details><details><summary><strong>D4 偏离审批页的「lint 判红」措辞</strong>（取舍） → 停飞效果等价，在 spec.html 写明，由人类审批。</summary></details><details><summary><strong>Workflow 是否真按 <code>effort: &quot;medium&quot;</code> 运行未实测</strong>（未验证） → 本 change 合入后的第一次飞行由 <code>--expect-efforts</code> 机械验证；对不上即 HIGH，PR 判 draft。</summary></details><details><summary><strong><code>maxEffortLevel</code> 或组织上限会压低 effort</strong>（风险） → <code>resolve</code> 不读 settings，由收口的 effort 对账发现。</summary></details><details><summary><strong>回退路径不对账 effort</strong>（取舍） → 与现状一致，回退本身就是降级路径。</summary></details></div><div class="design-block"><h3>Migration Plan</h3><p>1. 合入后，本仓库的在途 change 起飞前运行 <code>python3 .claude/hooks/model-routing.py pin --change-dir &lt;dir&gt;</code>，然后重新批准。 2. 下游 <code>install.sh --upgrade</code> 拿到新的 hooks 和文档；不写配置时走内建默认；在途 change 同上先 pin。 3. 回滚：revert 本 change 即可。<code>slices.json.routing</code> 是新增的顶层键，旧脚本会忽略它。</p></div><div class="design-block"><h3>Open Questions</h3><ul><li>无阻断项。是否把 <code>executor</code> 调回 high，等 2–3 次飞行的数据再定（不在本 change 内）。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-execution-routing-by-config.md">DRAFT. 执行层模型按派发用途由仓库配置显式路由，规划期继承主会话</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-executor-turn-tiers-by-owned-files.md">DRAFT. 执行体的轮次上限按切片的现存文件数分两档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-tests-only-rerun-without-graph.md">DRAFT. 没有依赖图时，只改了测试文件的 final 只重跑这些文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-flight-close-reaps-slice-worktrees.md">DRAFT. 飞行收口回收全部临时 worktree，作废尝试先归档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-inert-paths-declared-and-reconciled.md">DRAFT. 与测试无关的路径由仓库声明，并与依赖图对账</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-measurements-stay-out-of-plan-files.md">DRAFT. 脚本测出来的东西不写进计划文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-owns-cap-follows-turn-tier.md">DRAFT. owns 条数上限随轮次档，宽通配要写理由</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-retakeoff-skips-landed-slices.md">DRAFT. 重新起飞时已落地的切片不再派执行体</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-evidence-in-git-common-dir.md">DRAFT. 切片的测试留痕写在 git 共用目录，记录门禁结论时并回分支</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-worktrees-reaped-after-merge.md">DRAFT. 切片临时 worktree 在提交合回后由合回脚本回收</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-ledger-outside-repo-follows-anchors.md">DRAFT. 测试账本：逐用例数据放 git common dir，耗时跟着锚点沿用，入库的只有摘要</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-remediation-tracks.md">DRAFT. 测试整改按去向分三条轨道：机械处置命令内做，放行归人，改用例实现另立 change</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-suite-standard-audited-outside-gates.md">DRAFT. 测试套件的合规标准写成明文规则表，由门禁之外的只读体检来量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-time-budgets-ratchet-on-ledger.md">DRAFT. 时间预算写在分层文件里，集成层按账本做棘轮</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-unmeasured-deps-need-plan-statement.md">DRAFT. 基线的依赖图未测时计划须表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-wave-integration-check-and-cross-slice-fix.md">DRAFT. 每个 wave 合回后做集成检查，红了走工作流内的跨片修复</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody><tr><td class="mono">S1</td><td>model-routing.py：路由配置校验、内建默认、pin 钉进 slices.json、resolve 起飞解析（含环境覆盖停飞）、get 单键查询；本仓库 model-routing.json</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/model-routing.py<br>template/openspec/model-routing.json<br>tests/test_model_routing.py</td><td><code>python3 -m pytest -q tests/test_model_routing.py</code></td><td>标准档</td></tr><tr><td class="mono">S2</td><td>opsx-apply.js 按 5 个角色派发（大片档 executor-large、修复 fixer，缺省同 executor）与 effort 校验</td><td>wave 1</td><td>-</td><td>template/.claude/workflows/opsx-apply.js<br>tests/test_workflow_routing_roles.py<br>tests/test_agents_workflow.py</td><td><code>python3 -m pytest -q tests/test_workflow_routing_roles.py tests/test_agents_workflow.py tests/test_workflow_resume.py</code></td><td>标准档</td></tr><tr><td class="mono">S3</td><td>session-decompose.py：--expect-efforts 对账 effort、fix 标签判 fixer、--turns 判 executor-large、可选角色不算零覆盖</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/session-decompose.py<br>tests/test_route_audit_efforts.py</td><td><code>python3 -m pytest -q tests/test_route_audit_efforts.py tests/test_evidence_timeline.py</code></td><td>标准档</td></tr><tr><td class="mono">S4</td><td>spec_html.py：飞行区块显示钉住的模型路由表，缺 routing 时提示 pin</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/spec_html.py<br>tests/test_spec_html_routing.py</td><td><code>python3 -m pytest -q tests/test_spec_html_routing.py tests/test_spec_html.py tests/test_spec_html_turns.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py</code></td><td>标准档</td></tr><tr><td class="mono">S5</td><td>命令与 skill：apply 用 resolve 起飞、propose 运行 pin、pr-ship / archive / claudemd-standardize / bulk-apply / legacy 用 get 取值；规划期不变式测试</td><td>wave 2</td><td>S1, S2, S3</td><td>template/.claude/commands/opsx-apply.md<br>template/.claude/skills/openspec-apply-change/SKILL.md<br>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>template/.claude/commands/pr-ship.md<br>template/.claude/commands/opsx-archive.md<br>template/.claude/skills/openspec-archive-change/SKILL.md<br>template/.claude/commands/claudemd-standardize.md<br>template/.claude/commands/opsx-bulk-apply.md<br>template/.claude/skills/openspec-bulk-apply-change/SKILL.md<br>template/.claude/skills/legacy/openspec-subagent-apply-change/SKILL.md<br>tests/test_template_docs.py<br>tests/test_routing_docs.py</td><td><code>python3 -m pytest -q tests/test_routing_docs.py tests/test_template_docs.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py</code></td><td>大片档</td></tr><tr><td class="mono">S6</td><td>铁律 11 改写（根 CLAUDE.md 与 snippet）、README / WORKFLOW_zh / install.sh 路由说明</td><td>wave 2</td><td>S1</td><td>CLAUDE.md<br>template/CLAUDE.md.snippet<br>README.md<br>docs/WORKFLOW_zh.md<br>install.sh<br>tests/test_docs_iron_rules.py</td><td><code>python3 -m pytest -q tests/test_docs_iron_rules.py tests/test_close_reap_docs.py tests/test_goal_takeoff_docs.py tests/test_ship_memory_docs.py tests/test_template_docs.py</code></td><td>标准档</td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>execution-model-routing#routing-builtin-defaults-without-config</td><td><code>tests/test_model_routing.py::test_routing_builtin_defaults_without_config</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-config-overrides-per-key</td><td><code>tests/test_model_routing.py::test_routing_config_overrides_per_key</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-rejects-planning-keys</td><td><code>tests/test_model_routing.py::test_routing_rejects_planning_keys</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-rejects-non-model-names</td><td><code>tests/test_model_routing.py::test_routing_rejects_non_model_names</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-pin-writes-flight-and-ship</td><td><code>tests/test_model_routing.py::test_routing_pin_writes_flight_and_ship</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-resolve-requires-pin</td><td><code>tests/test_model_routing.py::test_routing_resolve_requires_pin</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-resolve-outputs-workflow-args</td><td><code>tests/test_model_routing.py::test_routing_resolve_outputs_workflow_args</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-resolve-refuses-env-override</td><td><code>tests/test_model_routing.py::test_routing_resolve_refuses_env_override</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>execution-model-routing#routing-get-prefers-pinned</td><td><code>tests/test_model_routing.py::test_routing_get_prefers_pinned</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>flight-role-routing#workflow-routes-large-slice-to-executor-large</td><td><code>tests/test_workflow_routing_roles.py::test_workflow_routes_large_slice_to_executor_large</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>flight-role-routing#workflow-routes-fixes-to-fixer</td><td><code>tests/test_workflow_routing_roles.py::test_workflow_routes_fixes_to_fixer</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>flight-role-routing#workflow-defaults-new-roles-to-executor</td><td><code>tests/test_workflow_routing_roles.py::test_workflow_defaults_new_roles_to_executor</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>flight-role-routing#workflow-rejects-unknown-effort</td><td><code>tests/test_workflow_routing_roles.py::test_workflow_rejects_unknown_effort</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>route-audit-efforts#audit-flags-effort-mismatch</td><td><code>tests/test_route_audit_efforts.py::test_audit_flags_effort_mismatch</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>route-audit-efforts#audit-maps-fix-labels-to-fixer</td><td><code>tests/test_route_audit_efforts.py::test_audit_maps_fix_labels_to_fixer</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>route-audit-efforts#audit-maps-large-slices-by-turns</td><td><code>tests/test_route_audit_efforts.py::test_audit_maps_large_slices_by_turns</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>route-audit-efforts#audit-skips-undispatched-optional-roles</td><td><code>tests/test_route_audit_efforts.py::test_audit_skips_undispatched_optional_roles</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>route-audit-efforts#audit-warns-when-effort-unrecorded</td><td><code>tests/test_route_audit_efforts.py::test_audit_warns_when_effort_unrecorded</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>spec-html-routing#spec-html-shows-pinned-routing</td><td><code>tests/test_spec_html_routing.py::test_spec_html_shows_pinned_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>spec-html-routing#spec-html-warns-missing-routing</td><td><code>tests/test_spec_html_routing.py::test_spec_html_warns_missing_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>routing-docs#apply-docs-resolve-routing-from-pin</td><td><code>tests/test_routing_docs.py::test_apply_docs_resolve_routing_from_pin</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>routing-docs#propose-docs-pin-routing</td><td><code>tests/test_routing_docs.py::test_propose_docs_pin_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>routing-docs#auxiliary-dispatches-read-routing</td><td><code>tests/test_routing_docs.py::test_auxiliary_dispatches_read_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>routing-docs#planning-docs-carry-no-routing</td><td><code>tests/test_routing_docs.py::test_planning_docs_carry_no_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>iron-rule-routing#iron-rule-names-routing-config</td><td><code>tests/test_docs_iron_rules.py::test_iron_rule_names_routing_config</code></td><td><span class="chip" data-state="pending">pending</span></td></tr><tr><td>iron-rule-routing#readme-and-installer-describe-routing</td><td><code>tests/test_docs_iron_rules.py::test_readme_and_installer_describe_routing</code></td><td><span class="chip" data-state="pending">pending</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>missing</code></td><td>未跑 baseline</td><td>-</td></tr><tr><td>final</td><td><code>incremental</code></td><td>锚点 100e015188，Δ 18 个文件</td><td>-</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><p class="placeholder">尚无飞行记录事件。</p>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 model-routing.py：路由配置校验、内建默认、pin 钉进 slices.json、resolve 起飞解析（含环境覆盖停飞）、get 单键查询；本仓库 model-routing.json （deps: - · verify: <code>python3 -m pytest -q tests/test_model_routing.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 opsx-apply.js 按 5 个角色派发（大片档 executor-large、修复 fixer，缺省同 executor）与 effort 校验 （deps: - · verify: <code>python3 -m pytest -q tests/test_workflow_routing_roles.py tests/test_agents_workflow.py tests/test_workflow_resume.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 session-decompose.py：--expect-efforts 对账 effort、fix 标签判 fixer、--turns 判 executor-large、可选角色不算零覆盖 （deps: - · verify: <code>python3 -m pytest -q tests/test_route_audit_efforts.py tests/test_evidence_timeline.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S4 spec_html.py：飞行区块显示钉住的模型路由表，缺 routing 时提示 pin （deps: - · verify: <code>python3 -m pytest -q tests/test_spec_html_routing.py tests/test_spec_html.py tests/test_spec_html_turns.py tests/test_spec_html_scope.py tests/test_spec_html_glossary.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S5 命令与 skill：apply 用 resolve 起飞、propose 运行 pin、pr-ship / archive / claudemd-standardize / bulk-apply / legacy 用 get 取值；规划期不变式测试 （deps: S1, S2, S3 · verify: <code>python3 -m pytest -q tests/test_routing_docs.py tests/test_template_docs.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S6 铁律 11 改写（根 CLAUDE.md 与 snippet）、README / WORKFLOW_zh / install.sh 路由说明 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_docs_iron_rules.py tests/test_close_reap_docs.py tests/test_goal_takeoff_docs.py tests/test_ship_memory_docs.py tests/test_template_docs.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-19 12:55 · 章节 8 · 图示 0 · 任务 6
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
