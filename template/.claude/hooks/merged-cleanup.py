@@ -14,6 +14,7 @@ import sys
 
 FLIGHT_RE = re.compile(r"(^|.*/)openspec/changes/[^/]+/(timeline\.md|gate-report\.md|evidence\.log)$")
 CHANGE_RE = re.compile(r"(?:^|/)openspec/changes/([^/]+)/")
+ARCHIVE_RE = re.compile(r"(?:^|/)openspec/changes/archive/\d{4}-\d{2}-\d{2}-([^/]+)/")
 HOME_DIRS = (".worktrees", os.path.join(".claude", "worktrees"))
 
 
@@ -86,6 +87,19 @@ class Ctx:
         self.tgt_sha = out(root, "rev-parse", target_ref)
         self.tgt_tree = out(root, "rev-parse", target_ref + "^{tree}")
         self.fp = set((out(root, "rev-list", "--first-parent", target_ref) or "").split())
+        self._branch_fp = {}
+        self._landed = None
+
+    def branch_fp(self, ref):
+        """本地分支的 first-parent 集合，按需计算并缓存。"""
+        if ref not in self._branch_fp:
+            self._branch_fp[ref] = set((out(self.root, "rev-list", "--first-parent", ref) or "").split())
+        return self._branch_fp[ref]
+
+    def landed(self):
+        if self._landed is None:
+            self._landed = landed_changes(self)
+        return self._landed
 
     def merged(self, tip):
         if tip in self.fp:
@@ -185,6 +199,28 @@ def check_subs(ctx, wt, item):
     return manual
 
 
+def landed_into(ctx, wt):
+    """HEAD 被 merge 进的另一个本地分支（在其历史里、不在其 first-parent 链上）；没有则 None。"""
+    refs = (out(ctx.root, "for-each-ref", "--contains", wt["head"], "--format=%(refname)", "refs/heads/") or "").split()
+    for ref in refs:
+        if ref != wt["branch"] and wt["head"] not in ctx.branch_fp(ref):
+            return ref[len("refs/heads/"):]
+    return None
+
+
+def attempt_change(path, changes):
+    """所属 change：先读切片标记的 change_dir，读不到再看飞行记录改动的路径；认不出或有歧义返回 None。"""
+    try:
+        with open(os.path.join(path, ".openspec-slice"), encoding="utf-8") as f:
+            cd = json.load(f).get("change_dir")
+        if isinstance(cd, str) and cd.strip("/"):
+            return os.path.basename(cd.rstrip("/"))
+    except (OSError, ValueError, AttributeError):
+        pass
+    names = set(CHANGE_RE.search(p).group(1) for p in changes if FLIGHT_RE.match(p))
+    return names.pop() if len(names) == 1 else None
+
+
 def worktree_item(ctx, wt):
     path = real(wt["path"])
     root = real(ctx.root)
@@ -225,6 +261,21 @@ def worktree_item(ctx, wt):
     item["_args"] = rm[1:]
     if wt["locked"]:
         item["command"] = cmd_str(["git", "worktree", "unlock", name]) + " && " + item["command"]
+    if state == "unmerged" and under(path, os.path.join(root, ".claude", "worktrees")):
+        b = landed_into(ctx, wt)
+        if b:
+            item["merged"] = state = "branch"
+            item["reasons"].append("landed: 已合进本地分支 %s" % b)
+        else:
+            c = attempt_change(path, changes)
+            if c and c in ctx.landed():
+                state = "dead-attempt"
+                if wt["branch"]:
+                    item["reasons"].append("dead-attempt: %s 已落地，提交仍在分支 %s"
+                                           % (c, wt["branch"].replace("refs/heads/", "", 1)))
+                else:
+                    item["reasons"].append("dead-attempt: %s 已落地，但提交只在该 worktree（游离 HEAD），删除会丢失" % c)
+                    manual = True
     if state in ("fresh", "unmerged"):
         item["tier"] = "keep"
         item["reasons"].append(keep_reason(state, ctx.target))
@@ -285,7 +336,12 @@ def plan_sync(ctx, warnings):
 
 def landed_changes(ctx):
     rc, names, _ = run(ctx.root, "ls-tree", "-r", "-z", "--name-only", ctx.target_ref)
-    return set(m.group(1) for m in (CHANGE_RE.search(p) for p in (names if rc == 0 else "").split("\0")) if m)
+    landed = set()
+    for p in (names if rc == 0 else "").split("\0"):
+        m = ARCHIVE_RE.search(p) or CHANGE_RE.search(p)
+        if m and m.group(1) != "archive":
+            landed.add(m.group(1))
+    return landed
 
 
 def compute(ctx):

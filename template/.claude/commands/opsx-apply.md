@@ -80,8 +80,10 @@ description: 飞行模式 apply：批准后从门禁 lint 直跑到 PR，中途�
    python3 .claude/hooks/session-decompose.py --session <当前会话 jsonl，取 ~/.claude/projects/<slug>/ 下最新> --workflow <Workflow 返回的 Transcript dir> --expect-models '<.flight 里的 models>'
    python3 .claude/hooks/timeline.py report --change-dir openspec/changes/<name>
    python3 .claude/hooks/flight-doctor.py cost --change-dir openspec/changes/<name>
+   python3 .claude/hooks/slice-gate.py reap --change-dir openspec/changes/<name>
    ```
    `cost` 在 timeline report 之后运行，原样打印本 change 的全量 / 增量次数与每次全量的原因归因（必要 / 可避免），恒 exit 0。
+   `reap` 回收本次飞行的临时 worktree：已落地的直接删，作废尝试先归档到 `refs/flight/<change>/attic/<目录名>` 再删（可用 `git worktree add <路径> <ref>` 找回），锁定的不碰；原样打印它在 timeline 里记下的那一行「回收 N 个 · 释放 X MB · 归档 M 个」。恒 exit 0，不影响收口结论；报 `invalid choice`（hooks 未升级）时跳过，照常往下。
    `--expect-models` 是机械对账：非 0 → **铁律 11 违规**，在收口报告点名与路由表不符的 agent（角色 / 期望 / 实际），并把它作为一条 `{"severity": "HIGH", "summary": "路由不符 …"}` 追加进 `review-findings.json.blocking`——`ship` 据此自动判 draft，主会话不自行判断。打印 session-decompose 与 timeline report 输出的飞行记录（含**各 agent 实际模型**）；把工作流返回的 `{blocked, blocking, deferred, fix}` 与 `waves`（每个 wave 的集成检查结论与跨片修复）原样写入 `openspec/changes/<name>/review-findings.json`（`blocked` 条目带 `kind: gate | infra`，供 `/pr-ship` 进 PR 正文作说明；`blocking` 是 `ship` 裁决依据之一）；删除 `openspec/changes/<name>/.flight`；然后跑机械裁决：
    ```bash
    python3 .claude/hooks/slice-gate.py ship --change-dir openspec/changes/<name>    # 退出 0 ready / 1 draft；reasons 列出为何不 ready

@@ -9,7 +9,7 @@
 3. TDD 与留痕：生产代码前必有先失败的测试；测试运行由 hook 留痕，不接受自述。
 4. 独立评审必有：每个 change 至少一次不带主会话立场的 reviewer；CRITICAL/HIGH 未闭环不得非 draft PR。
 5. 门禁红不收口：slice-gate / final gate 红时禁止勾选、禁止声明完成、禁止 PR。
-6. Git 边界：每 change 一间 worktree；不自动 merge、不推 main、不删 worktree（例外：已合回且无未合回改动的切片临时 worktree 由 `slice-gate.py merge` 不带强制参数回收；显式跑 `/clean-after-merged` = 授权其 safe 档）；ADR 不可改只 supersede；`branch -D` / `push --delete` 永远交人。
+6. Git 边界：每 change 一 worktree；不自动 merge、不推 main、不删 worktree（例外：切片临时 worktree 已合回且无残留改动由 `slice-gate.py merge` 不带强制参数回收、收口由 `slice-gate.py reap` 回收（作废尝试先归档）；显式跑 `/clean-after-merged` = 授权 safe 档）；ADR 不可改只 supersede；`branch -D` / `push --delete` 永远交人。
    - **命令即授权**：显式跑 `/opsx-apply` / `/pr-ship` = 授权该命令文档内的 commit · push feature 分支 · 建 PR · 贴 review 评论 · draft↔ready 转换。
 7. 两处人类审批不可省：飞行计划批准（运行 /opsx-apply）与 PR review；第一处由 `.claude/hooks/takeoff-gate.py` 机械校验（人类消息证据 + 新鲜度；会话 `/goal` 生效 = 人类持续授权，豁免新鲜度），模型不得自证。
 8. 度量必打印：每次 apply 收口打印飞行记录；无数据不得声称提速。

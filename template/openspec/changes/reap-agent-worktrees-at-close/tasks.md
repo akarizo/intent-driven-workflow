@@ -1,0 +1,7 @@
+<!-- 本文件由 slices.json 生成，不要手写编辑；改动请改 slices.json 后重新生成。 -->
+
+## 切片
+
+- [x] S1 slice-gate.py reap：飞行收口回收本次飞行的临时 worktree（已落地复用 _reap_one；作废尝试先归档到 refs/flight/<change>/attic/；恒 exit 0 并记 reap 事件） （deps: - · verify: `python3 -m pytest -q tests/test_close_reap.py tests/test_merge_reap.py tests/test_slice_gate.py`）
+- [x] S2 merged-cleanup.py：.claude/worktrees 下的 worktree 认 landed（被 merge 进其他本地分支）与 dead-attempt（属于已落地 / 已归档 change） （deps: - · verify: `python3 -m pytest -q tests/test_merged_cleanup_landed.py tests/test_merged_cleanup.py`）
+- [x] S3 文档：opsx-apply 收口运行 reap（命令与 skill 同改）、clean-after-merged 原因表、铁律 6 与 README （deps: S1, S2 · verify: `python3 -m pytest -q tests/test_close_reap_docs.py tests/test_merge_reap.py tests/test_docs_iron_rules.py tests/test_template_docs.py tests/test_agents_workflow.py tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_baseline_incremental_docs.py tests/test_budget_docs.py tests/test_clean_after_merged_docs.py tests/test_gate_checks_docs.py tests/test_glossary_docs.py tests/test_goal_takeoff_docs.py tests/test_guard_docs.py tests/test_incremental_final_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_resume_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_submodule_docs.py tests/test_template_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_wave_docs.py`）
