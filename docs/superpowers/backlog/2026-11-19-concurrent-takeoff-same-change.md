@@ -14,4 +14,4 @@ change `wave-integration-guard`（2026-11-18）：会话 A 12:06 起飞（Workfl
 ## 建议
 
 - 起飞互斥：`takeoff-gate.py`（或 step 4 写 `.flight` 时）若 `.flight` 已存在且其工作流仍活跃，拒绝起飞并打印持有方；只有确认原飞行已停（无活跃 Workflow / 超时）才允许覆盖。
-- `record` 拒收形如 `S\d+ <sha>` 的切片名，或要求 `--json` 里 `commit` 非空；integrator.md 明写「门禁 JSON 原样转交，禁止手拼」。
+- 附带的 `record` 坏行：防线见 `2026-11-18-record-accepts-unknown-slice.md`（本次记为第 2 次）。
