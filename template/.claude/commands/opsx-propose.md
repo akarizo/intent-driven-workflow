@@ -35,10 +35,18 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    ```
    这会在 `openspec/changes/<name>/`（worktree 内）建好 `.openspec.yaml`。
 
+   建好后立即**后台**预热（例如 Bash 的 `run_in_background`），不等它结束：
+   ```bash
+   python3 .claude/hooks/slice-gate.py warm --change-dir openspec/changes/<name>
+   ```
+   - 它沿用最近一个 change 的 `gate.test`（stdout 的 `test_cmd`）；
+   - 计划的 `gate.test` 写成同一条命令，正式 baseline 才能复用这次预热；
+   - 分层仓库或无可沿用命令时，它打印「跳过预热」，什么也不做。
+
 3. **一次成稿**
 
    - `openspec status --change "<name>" --json` 拿 `applyRequires` 与 `artifacts`。
-   - **并行**对每个待建工件跑 `openspec instructions <id> --change "<name>" --json`，一次性全部读完（不要逐个来回问询）。
+   - 运行一次 `python3 .claude/hooks/plan-kit.py instructions --change "<name>"`，一次性读完全部待建工件的 instruction（不要逐个来回问询）。
    - 按下面的**触发器表**决定每个可选工件要不要写实质内容：
 
      | 工件 | 触发条件 | 未命中时 |
@@ -49,7 +57,7 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
      | tasks | 恒必需 | — |
 
    - 一次性写出全部该建的工件（proposal → specs → design(按触发器) → adr(按触发器) → tasks）。
-   - **tasks 阶段**额外产出（详见 schema 的 tasks instruction）：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 测试骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 生成的 `tasks.md`。
+   - **tasks 阶段**额外产出（详见 schema 的 tasks instruction）：`slices.json`、每个切片一份 `slices/<S>.md` 切片包、每个 scenario 一个 `xfail(strict)` 测试骨架（放进所属切片 owns 的测试文件）、由 `slices.json` 经脚本生成的 `tasks.md`（见下方机械产物）。
    - 写骨架前**先定层**：默认单元层；确需真实文件 / 子进程 / 网络才进集成区域。openspec 根有 `test-tiers.json` 时，骨架放在 `unit.paths` 或已选区域（`gate.integration`）的 `paths` 里，`gate.test` 等于 `unit.cmd`，`covers` 与 `owns` 相交的区域选上或在 `gate.integration_skip` 写理由（lint 校验）。部件形态（`test-tiers.json` 顶层是 `parts`）下 `gate.test` 改为等于 `python3 .claude/hooks/test-tiers.py run unit`、不得写 `gate.impacted`，骨架落在某部件的单元层或已选区域。
    - 选测范围声明（契约 v2）：openspec 根的 `gate-scope.json` 恰含 `cmd` 或 `builtin` 之一：`{"builtin": true}`（模板内建选测，只配可识别的 `gate.test`：pytest / `python3 <路径>/test-tiers.py run unit` / `npm test` / `go test ./...` / `cargo test`）或 `{"cmd": "<只算范围的命令>"}`（仓库自带选测，按改动选测试范围、可能退化为全选），另可选 `global` / `blind` / `inert` / `anchor_max_hops`（见 `.claude/flight-runner-contract.md`），计划里的 `gate.scope`（cmd）优先于它。未声明 → lint 判红「未声明选测范围」；本 change 正在建立 `gate-scope.json` 时，按伪触发项 `scope:undeclared` 在 `gate.scope_full_reason` 写理由。cmd 由 lint 与 preflight 在 git 顶层实跑（300 秒），环境带 `GATE_SCOPE_PLANNED`（计划 owns 清单文件，一行一条）与 `GATE_SCOPE_CHANGE`（change 目录相对 git 顶层的路径），命令往 `GATE_SCOPE_OUT` 指向的文件写 `{full, triggers, count}`，失败即红；builtin 在进程内预测 final 会不会全选，计划期取不到依赖图锚点时把 owns 内可疑文件列为待定项（可预写理由）。lint 报「选测退化为全选」时，先看触发项是不是工作流自己的元数据改动——能修选测就修选测；不能修再在 `gate.scope_full_reason` 逐个触发项写理由（键须等于触发项），由人类在 spec.html 看着触发项与理由放行；理由以 approve 提交为准，批准后再改会让 final 的开跑前复核判红。
    - **全局守护**：`gate-checks.json` 里带 `slice` 的检查是全局守护，抄进 `gate.checks` 时连同 `slice` 一起抄；每片门禁与每个 wave 合回后都会运行它，所以它必须是秒级的（运行契约见 `.claude/flight-runner-contract.md` 第 11 节）。
@@ -57,6 +65,30 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    - **`owns_wide`**：单条通配展开出多于 20 个现存文件时，在该片写 `"owns_wide": {"<通配>": "<理由>"}`，lint 会打印每条通配的展开数；能列文件就不要用宽通配。
    - **`gate.wave_test_budget_sec`**（可选）：wave 集成检查里重跑受影响测试的预算（秒，缺省 120）；估算超过它时这一半留给 final。
    - 新写的 gate.test 包装脚本必须转发 `FLIGHT_PLUGIN_PATH` / `FLIGHT_PYTEST_ARGS`，用 `$GATE_CHANGE` 取 change 名，不写死 change 名（见 `.claude/flight-runner-contract.md`）。
+   - 写完 `slices.json` 后依次跑机械产物（零 token）：
+     1. 切片包：
+        ```bash
+        python3 .claude/hooks/plan-kit.py packets --change-dir openspec/changes/<name>
+        ```
+        每个 `slices/<S>.md` 的 `<!-- plan-kit:begin -->` / `<!-- plan-kit:end -->` 之间是机械区，不手改（改 `slices.json` 后重跑）；主会话在 `<!-- plan-kit:end -->` 之后写接口约定、怎么做、注意事项。
+     2. 测试骨架：
+        ```bash
+        python3 .claude/hooks/plan-scaffold.py scaffold --change-dir openspec/changes/<name>
+        ```
+        生成每个 scenario 的 strict-xfail 骨架，断言位置是一行 `PLAN-SCAFFOLD-PLACEHOLDER` 占位。然后**补断言**：
+        - **分组**：把待补的骨架按**测试文件**分组。
+        - **多于 1 组**：在同一条消息里为每组派一个 fork（Agent 工具，`subagent_type: "fork"`）。prompt 写明只改分到的测试文件：把 `PLAN-SCAFFOLD-PLACEHOLDER` 那行换成真实断言，必要时加 fixture 参数，保留 GWT 注释与 xfail 标记；不碰其他文件；完成后运行下面的骨架校验并回报结果。
+        - **回退**：fork 报错或不可用 → 主会话**串行**补完剩下的组。
+        - **只有 1 组**：主会话自己写，不派 fork。
+        - **路由**：fork 继承主会话，不进路由配置。
+     3. 骨架校验，必须 exit 0：
+        ```bash
+        python3 .claude/hooks/plan-scaffold.py gwt --change-dir openspec/changes/<name>
+        ```
+     4. 生成 `tasks.md`（不手写）：
+        ```bash
+        python3 .claude/hooks/plan-kit.py tasks --change-dir openspec/changes/<name>
+        ```
    - 随后跑：
      ```bash
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>

@@ -81,11 +81,12 @@ def test_planning_docs_carry_no_routing():
     files = [CMD / ("opsx-%s.md" % g) for g in sorted(groups)] + [SKILLS / s / "SKILL.md" for s in PLANNING_SKILLS]
 
     # When: 读 frontmatter 与正文
-    # Then: 组名正好是 5 个且都有命令文件；frontmatter 无 model / effort；正文无 subagent_type 与 model: "
+    # Then: 组名正好是 5 个且都有命令文件；frontmatter 无 model / effort；正文的 subagent_type 只允许 fork、无 model: "
     assert groups == {"propose", "explore", "new", "continue", "mini"}, groups
     for f in files:
         assert f.exists(), f
         t = read(f)
         fm = frontmatter(t)
         assert not re.search(r"^(model|effort):", fm, re.M), f
-        assert "subagent_type" not in t and 'model: "' not in t, f
+        assert all(v == "fork" for v in re.findall(r'subagent_type:\s*"?([\w-]+)', t)), f
+        assert 'model: "' not in t, f
