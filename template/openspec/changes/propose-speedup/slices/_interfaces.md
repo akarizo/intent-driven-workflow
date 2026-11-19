@@ -17,3 +17,6 @@
 - `_scaffold_errors(data, change_dir)` lint 阶段检出残留占位
 - `_run_baseline(change_dir, data, full, warm=False)` 基线运行支持 warm
 - `cmd_warm(args)` 基线预热子命令；辅助 `_pid_alive` / `_wait_warm` / `_warm_source` / `_adopt_wrapper(root, src_dir, change_dir, cmds)`
+
+## S4 · template/.claude/commands/opsx-propose.md、template/.claude/skills/openspec-propose/SKILL.md
+- 仅文档与测试（命令 / skill 改用 plan-kit、plan-scaffold 工具链），无新增公开代码接口
