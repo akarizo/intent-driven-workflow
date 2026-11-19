@@ -94,7 +94,7 @@ Do not use bulk mode when only one candidate change remains. Stop and tell the u
 
    For each executable candidate change:
 
-   - Dispatch one subagent in that change's worktree.
+   - Dispatch one subagent in that change's worktree. Before dispatching, run `python3 .claude/hooks/model-routing.py get bulk.apply` and pass its `model` and `effort` explicitly on every subagent dispatch (never leave `model` empty).
    - Run all delegated apply flows in parallel.
    - Do not apply any change directly in the parent agent.
 

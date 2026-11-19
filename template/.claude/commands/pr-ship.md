@@ -146,10 +146,10 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 
    ```bash
    git rev-parse HEAD                        # 记为 REVIEW_HEAD_1
-   python3 .claude/hooks/session-model.py    # stdout: opus|sonnet|haiku|fable，记为 <main>；exit 3 = 判定不出
+   python3 .claude/hooks/model-routing.py get ship.reviewer --change-dir openspec/changes/<name>   # stdout: {"model","effort","source"}；没有 change 时去掉 --change-dir
    ```
 
-   用 **Agent 工具**启一个 `subagent_type=code-reviewer`、`model: "<main>"`（`<main>` = `python3 .claude/hooks/session-model.py` 的输出，禁模型自述；判定不出则**停下报告**，让用户显式给出别名后重跑；铁律：派发不得省略 `model`）。该 agent 的 system prompt 已含完整分级 rubric、finding 格式、签名——只传 PR 特有上下文：
+   用 **Agent 工具**启一个 `subagent_type=code-reviewer`，显式带上一条 `get ship.reviewer` 输出的 `model` 与 `effort`（禁模型自述；exit 非 0 则**停下报告**，把 stderr 原样交出；铁律：派发不得省略 `model`）。该 agent 的 system prompt 已含完整分级 rubric、finding 格式、签名——只传 PR 特有上下文：
 
    ```
    背景: review GitHub/GitLab 上的 PR/MR #<num>。
@@ -190,7 +190,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
 10. **CRITICAL/HIGH 自动修复（至多 2 轮，不询问）**
 
     - 有 CRITICAL/HIGH（首审或复核）→ 直接修复并 push，不询问，走下面的流程（至多 2 轮）。
-    - 自动修：主会话直接按建议修代码 → 每个独立修复点一个 commit（message 引用 finding 摘要：`fix: 按 review 修 <finding 摘要>`）→ `git push` → 派一个 fresh `code-reviewer`（`model: "<main>"`，同 step 8 由 `session-model.py` 判定，判定不出则停下报告）走 **`follow-up` 模式**复核：
+    - 自动修：主会话直接按建议修代码 → 每个独立修复点一个 commit（message 引用 finding 摘要：`fix: 按 review 修 <finding 摘要>`）→ `git push` → 派一个 fresh `code-reviewer`（先运行 `python3 .claude/hooks/model-routing.py get ship.followup --change-dir openspec/changes/<name>`，没有 change 时去掉 `--change-dir`，按其 `model` / `effort` 派发；exit 非 0 则停下报告）走 **`follow-up` 模式**复核：
       ```
       背景: 复核 PR/MR #<num> 的修复补丁。
       评审模式: follow-up

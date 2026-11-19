@@ -70,6 +70,11 @@ metadata:
      python3 .claude/hooks/slice-gate.py lint --change-dir openspec/changes/<name>
      ```
      红 → 修 `slices.json` 直到绿。
+   - lint 绿后钉住执行层路由：
+     ```bash
+     python3 .claude/hooks/model-routing.py pin --change-dir openspec/changes/<name>
+     ```
+     pin 把 flight 与 ship 两组的路由（模型 · effort）钉进 `slices.json.routing`；下一步渲染的 spec.html 会显示它，人类批准即确认这份路由。之后改路由（改 `model-routing.json`）要重新 pin，并重新批准。exit 非 0（配置非法）→ 停下把 stderr 原样报告。
 
 4. **渲染审批面板**
    ```bash
