@@ -4,11 +4,8 @@
 骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from test_audit_scan import H, U, audit, setup, tiers
 
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S3 未实现")
 
 A, B, C = ("region-slow:" + H + n for n in ("test_a", "test_b", "test_c"))
 
@@ -35,7 +32,6 @@ def repo_now(repo, secs, extra_files=()):
     setup(repo, tiers(hooks_budget={"case_sec": 5}), cases, extra_files=extra_files)
 
 
-@PENDING
 def test_compare_reports_resolved_remaining_new(git_repo, tmp_path):
     # Given: 之前 A、B 不合规；现在 A 已不超线，B 仍超线，另有新的超线用例 C
     repo_now(git_repo, {"test_a": 1.0, "test_b": 9.0, "test_c": 8.0})
@@ -51,7 +47,6 @@ def test_compare_reports_resolved_remaining_new(git_repo, tmp_path):
     assert p.returncode == 1
 
 
-@PENDING
 def test_compare_exits_zero_when_targets_resolved(git_repo, tmp_path):
     # Given: 整改稿只把 A 排进本轮（B 标 keep）；现在 A 已解决、B 仍在，没有新增，也没有未判项
     repo_now(git_repo, {"test_a": 1.0, "test_b": 9.0})
@@ -66,7 +61,6 @@ def test_compare_exits_zero_when_targets_resolved(git_repo, tmp_path):
     assert any(l.startswith("前后对比：已解决 1 条 · 仍在 1 条 · 新增 0 条") for l in p.stdout.splitlines()), p.stdout
 
 
-@PENDING
 def test_compare_fails_when_target_remains(git_repo, tmp_path):
     # Given: 整改稿把 A 与 B 都排进本轮；现在 A 已解决、B 仍在
     repo_now(git_repo, {"test_a": 1.0, "test_b": 9.0})
@@ -81,7 +75,6 @@ def test_compare_fails_when_target_remains(git_repo, tmp_path):
     assert (out["compare"]["targets"], out["compare"]["targets_remaining"]) == (2, [B]), out["compare"]
 
 
-@PENDING
 def test_compare_unconfirmed_when_unjudged(git_repo, tmp_path):
     # Given: 目标 A 已不在不合规项里、没有新增；但 hooks 有一个测试文件没有测量
     repo_now(git_repo, {"test_a": 1.0}, extra_files=("tests/integration/hooks/test_h2.py",))

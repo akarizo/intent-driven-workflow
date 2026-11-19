@@ -4,14 +4,9 @@
 骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from test_audit_scan import H, HF, U, UF, audit, ids, in_days, item, setup, tiers
 
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S3 未实现")
 
-
-@PENDING
 def test_audit_unjudged_when_no_measurement(git_repo):
     # Given: 分层与预算都合规，每个测试文件恰属一层；本机没有账本
     setup(git_repo, tiers(hooks_budget={"case_sec": 5}), extra_files=(UF, HF), ledger=False)
@@ -25,7 +20,6 @@ def test_audit_unjudged_when_no_measurement(git_repo):
     assert "unjudged:no-measure" in ids(out), ids(out)
 
 
-@PENDING
 def test_audit_unjudged_scope_with_unmeasured_files(git_repo):
     # Given: 区域 hooks 写了总量预算 5 秒；账本覆盖单元层全部文件，hooks 的两个测试文件里只有一个有测量（9.0 秒）
     other = "tests/integration/hooks/test_h2.py"
@@ -42,7 +36,6 @@ def test_audit_unjudged_scope_with_unmeasured_files(git_repo):
     assert "total-over:hooks" not in ids(out) and "unjudged:scope:unit" not in ids(out), ids(out)
 
 
-@PENDING
 def test_audit_compliant_exits_zero(git_repo):
     # Given: 分层、预算、放行都合规，账本覆盖全部测试文件且都在线内；一条 3 天后到期的放行（用例 5.0 秒、上限 10 秒）、
     #        一条耗时已回到线内的放行（用例 0.2 秒）；两条用例没写 Given / When / Then 注释
@@ -69,7 +62,6 @@ def test_audit_compliant_exits_zero(git_repo):
     assert by_cat["allow-unneeded"]["id"] == "allow-unneeded:" + unneeded, by_cat["allow-unneeded"]
 
 
-@PENDING
 def test_audit_filters_by_scope_category_top(git_repo, tmp_path):
     # Given: 区域 hooks 有两条超线用例（9.0 秒与 7.0 秒），单元层有一条超线用例
     setup(git_repo, tiers(hooks_budget={"case_sec": 5}),
