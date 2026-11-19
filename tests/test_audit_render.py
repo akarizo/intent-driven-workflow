@@ -4,11 +4,7 @@
 骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S4 未实现")
 
 FIX = {"unit-slow": ["speedup", "move", "allow"], "region-slow": ["speedup", "allow", "delete"],
        "no-case-limit": ["budget"], "allow-unbounded": ["allow", "drop-allow"]}
@@ -51,7 +47,6 @@ def render(repo, tmp_path, items, plan):
     return p, out, page
 
 
-@PENDING
 def test_render_writes_approval_page_with_tracks(git_repo, tmp_path):
     # Given: 体检里 unit-slow、region-slow、no-case-limit、allow-unbounded 各一条；整改稿依次是搬到区域 hooks、提速、
     #        写预算（稿的 tiers 给 docs 写了 case_sec）、交人放行
@@ -75,7 +70,6 @@ def test_render_writes_approval_page_with_tracks(git_repo, tmp_path):
     assert "导出 Markdown" in html and html.count('type="checkbox"') >= 4, html[:400]
 
 
-@PENDING
 def test_render_rejects_inapplicable_actions(git_repo, tmp_path):
     # Given: 给 no-case-limit 条目写了 speedup；有一个体检结果里不存在的条目 id；一条 keep 没写理由
     slow = "unit-slow:" + U + "test_slow"
@@ -93,7 +87,6 @@ def test_render_rejects_inapplicable_actions(git_repo, tmp_path):
     assert page.exists() and "region-slow:ghost" in page.read_text(encoding="utf-8")
 
 
-@PENDING
 def test_render_checks_move_destinations(git_repo, tmp_path):
     # Given: 三条 unit-slow 的去向都是 move：目标仍在单元层、目标不属于任何层、目标在区域 hooks
     one, two, three = ("unit-slow:" + U + n for n in ("test_one", "test_two", "test_three"))
@@ -113,7 +106,6 @@ def test_render_checks_move_destinations(git_repo, tmp_path):
     assert not any(three in l for l in err), p.stderr
 
 
-@PENDING
 def test_render_lists_unplanned_violations(git_repo, tmp_path):
     # Given: 体检里三条不合规项，整改稿只安排了其中一条
     items = [entry("unit-slow", U + n, "unit") for n in ("test_one", "test_two", "test_three")]
