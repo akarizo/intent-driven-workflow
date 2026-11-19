@@ -1,13 +1,10 @@
 """slice-gate.py warm：规划开始时预热全量，正式 baseline 等待并按本 change 旧基线规则复用
 （scenario: baseline-warm#warm-runs-full-suite-as-own-baseline、#warm-adopts-latest-change-wrapper、#warm-skips-tiered-repo、
-#baseline-reuses-warm-when-only-tests-changed、#baseline-waits-for-running-warm，共 5 条）。
-骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
+#baseline-reuses-warm-when-only-tests-changed、#baseline-waits-for-running-warm，共 5 条）。"""
 import json
 import subprocess
 import sys
 import time
-
-import pytest
 
 from conftest import hook_path, run_hook, write
 from test_baseline_incremental import PLAIN_FULL, baseline, read_bl, setup_change
@@ -30,7 +27,6 @@ def last_json(text):
     return json.loads([ln for ln in text.splitlines() if ln.startswith("{")][-1])
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_warm_runs_full_suite_as_own_baseline(git_repo):
     # Given: change prev 的 gate.test 是直接的 pytest 全量；新 change c 只有目录
     setup_change(git_repo, change="prev", gate_test=PLAIN_FULL, old_red=False)
@@ -48,7 +44,6 @@ def test_warm_runs_full_suite_as_own_baseline(git_repo):
     assert "\twarm\t" in (d / "timeline.md").read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_warm_adopts_latest_change_wrapper(git_repo):
     # Given: prev 的 gate.test 运行 openspec/changes/prev/verify/full.py（setup_change 缺省）
     prev = setup_change(git_repo, change="prev", old_red=False)
@@ -65,7 +60,6 @@ def test_warm_adopts_latest_change_wrapper(git_repo):
     assert "openspec/changes/c/verify/full.py" in cmd and "openspec/changes/prev/" not in cmd, cmd
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_warm_skips_tiered_repo(git_repo):
     # Given: openspec 根有 test-tiers.json
     setup_change(git_repo, change="prev", gate_test=PLAIN_FULL, old_red=False)
@@ -81,7 +75,6 @@ def test_warm_skips_tiered_repo(git_repo):
     assert not (d / "gate-baseline.json").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_baseline_reuses_warm_when_only_tests_changed(git_repo):
     # Given: c 已预热成功；之后写入 c 的计划（gate.test 同一命令）并新增 tests/test_new.py
     setup_change(git_repo, change="prev", gate_test=PLAIN_FULL, old_red=False)
@@ -100,7 +93,6 @@ def test_baseline_reuses_warm_when_only_tests_changed(git_repo):
     assert bl["incremental"]["rerun_files"] == ["tests/test_new.py"]
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_baseline_waits_for_running_warm(git_repo):
     # Given: prev 带一个要跑 4 秒的测试；对 c 在后台启动 warm，等它写出运行标记后写入 c 的计划（不提交）
     setup_change(git_repo, change="prev", gate_test=PLAIN_FULL, old_red=False, extra={"tests/test_slow.py": SLOW_TEST})
