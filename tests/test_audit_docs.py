@@ -2,19 +2,14 @@
 （scenario: test-audit#test-audit-command-doc-covers-flow、#readme-and-install-count-test-audit、
 #standard-doc-matches-script-constants）。
 骨架：strict xfail，断言是真实的；切片 S7 实现后去掉标记即解锁。"""
-import pytest
-
 from conftest import ROOT, load_hook
 from test_audit_standard_docs import standard_section
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S7 未实现")
 
 CMD = ROOT / "template" / ".claude" / "commands" / "test-audit.md"
 README = ROOT / "README.md"
 INSTALL = ROOT / "install.sh"
 
 
-@PENDING
 def test_test_audit_command_doc_covers_flow():
     # Given: 模板仓库的 /test-audit 命令文档
     text = CMD.read_text(encoding="utf-8")
@@ -31,7 +26,6 @@ def test_test_audit_command_doc_covers_flow():
         assert word in head[2], word
 
 
-@PENDING
 def test_readme_and_install_count_test_audit():
     # Given: README.md 与 install.sh
     readme, install = README.read_text(encoding="utf-8"), INSTALL.read_text(encoding="utf-8")
@@ -45,7 +39,6 @@ def test_readme_and_install_count_test_audit():
     assert "17 个 slash" not in readme and "17 个 slash" not in install
 
 
-@PENDING
 def test_standard_doc_matches_script_constants():
     # Given: test-tiers.py 的 AUDIT_RULES 与 test-audit.py 的 ACTIONS
     rules, actions = load_hook("test-tiers").AUDIT_RULES, load_hook("test-audit").ACTIONS

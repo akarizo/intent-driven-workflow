@@ -87,9 +87,9 @@ def test_docs_list_new_command():
     # When: 查找新命令的登记
     row = re.search(r"^\| `/clean-after-merged", readme, re.M)
 
-    # Then: README 命令表有它一行；install.sh 写 17 个 slash command 并列出它；WORKFLOW_zh 提到它
+    # Then: README 命令表有它一行；install.sh 写 18 个 slash command 并列出它；WORKFLOW_zh 提到它
     assert row, "README 命令表缺 /clean-after-merged"
-    assert "17 个 slash command" in install and "/clean-after-merged" in install
+    assert "18 个 slash command" in install and "/clean-after-merged" in install
     assert "/clean-after-merged" in workflow
 
 
