@@ -13,6 +13,7 @@
 #
 # 复用 slice-gate.py 的分层判定（按路径加载），只读不改它。兼容 Python 3.8+，只用标准库。
 import argparse
+import ast
 import html
 import importlib.util
 import json
@@ -38,6 +39,7 @@ def _load(name):
 
 
 sg = _load("slice-gate")
+tl = _load("test-ledger")
 
 
 def fail(msg, code=2):
@@ -203,6 +205,157 @@ def cmd_render(args):
     return 1 if problems else 0
 
 
+# ---------------------------------------------------------------- verify
+
+
+def _rel(path, top):
+    return os.path.relpath(os.path.realpath(path), os.path.realpath(top)).replace(os.sep, "/")
+
+
+def _is_assert_call(node):
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    name = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
+    return name.startswith("assert") or name in ("raises", "warns")
+
+
+def _sig(fn):
+    """测试函数签名 = (参数化装饰器 dump 排序元组, 断言 dump 排序元组)。"""
+    params = tuple(sorted(d for d in (ast.dump(x) for x in fn.decorator_list) if "parametrize" in d))
+    asserts = tuple(sorted(ast.dump(n) for n in ast.walk(fn) if isinstance(n, ast.Assert) or _is_assert_call(n)))
+    return params, asserts
+
+
+def _test_funcs(text):
+    """源码 → [(名字, 签名)]：模块顶层与 Test* 类里以 test 开头的函数；SyntaxError 上抛。"""
+    funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    out = []
+    for node in ast.parse(text).body:
+        if isinstance(node, funcs) and node.name.startswith("test"):
+            out.append((node.name, _sig(node)))
+        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            out.extend(("%s.%s" % (node.name, m.name), _sig(m)) for m in node.body
+                       if isinstance(m, funcs) and m.name.startswith("test"))
+    return out
+
+
+def _read_text(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def _case_violations(top, base, tests, unchecked):
+    """改动的测试文件 → 用例与断言的违反；核对不了的路径追加进 unchecked。"""
+    sides = ({}, {})
+    for rel in tests:
+        if not rel.endswith(".py"):
+            unchecked.append(rel)
+            continue
+        try:
+            old = sg.git(top, "show", "%s:%s" % (base, rel))
+        except RuntimeError:
+            old = ""
+        try:
+            parsed = (_test_funcs(old), _test_funcs(_read_text(os.path.join(top, rel))))
+        except SyntaxError:
+            unchecked.append(rel)
+            continue
+        for side, found in zip(sides, parsed):
+            for name, sig in found:
+                side.setdefault(name, []).append(sig)
+    old, new = sides
+    out = []
+    for name in sorted(set(old) | set(new)):
+        o, n = old.get(name, []), new.get(name, [])
+        if len(o) > len(n):
+            out.append("用例消失：%s" % name)
+        elif len(n) > len(o):
+            out.append("用例新增：%s" % name)
+        else:
+            o, n = sorted(o), sorted(n)
+            if [s[0] for s in o] != [s[0] for s in n]:
+                out.append("参数化有改动：%s" % name)
+            if [s[1] for s in o] != [s[1] for s in n]:
+                out.append("断言有改动：%s" % name)
+    return out
+
+
+def _tier_violations(old, new, plan_items):
+    """两版分层文件 + 稿 → (违反, 变动行)。"""
+    old, new = old or {}, new or {}
+    ob, nb = sg.tier_budgets(old) if old else {}, sg.tier_budgets(new) if new else {}
+    oa, na = old.get("slow_allow") or {}, new.get("slow_allow") or {}
+    lines = tl.budget_changes(ob, nb, oa, na)
+
+    def keys(action):
+        return {iid.split(":", 1)[1] for iid, x in plan_items.items()
+                if isinstance(x, dict) and x.get("action") == action and ":" in iid}
+
+    out = []
+    budget_keys = keys("budget")
+    for sc in sorted(set(ob) | set(nb)):
+        if sc in budget_keys:
+            continue
+        out.extend("稿外的预算放宽：%s" % ln for ln in tl.budget_changes({sc: ob.get(sc)}, {sc: nb.get(sc)}, {}, {})
+                   if "放宽" in ln)
+    drop, allow = keys("drop-allow"), keys("allow")
+    for k in sorted(set(oa) | set(na)):
+        found = tl.budget_changes({}, {}, {k: oa[k]} if k in oa else {}, {k: na[k]} if k in na else {})
+        if found and k not in (drop if k not in na else allow):
+            out.extend("稿外的放行改动：%s" % ln for ln in found)
+    return out, lines
+
+
+def cmd_verify(args):
+    plan = read_json(args.plan, "整改稿")
+    if not isinstance(plan, dict) or not isinstance(plan.get("items", {}), dict):
+        fail("整改稿须是对象（items 为 条目 id → 整改）")
+    top = sg.toplevel()
+    try:
+        sg.git(top, "cat-file", "-e", "%s^{commit}" % args.base)
+    except RuntimeError:
+        fail("--base %s 不是本仓库的 commit" % args.base)
+    osroot = args.openspec_root or os.path.join(top, "openspec")
+    tiers_path = os.path.join(osroot, sg.TIER_FILE)
+    tiers_rel, os_rel = _rel(tiers_path, top), _rel(osroot, top)
+    paths = set(sg.git(top, "-c", "core.quotepath=off", "diff", "--name-only", "--no-renames", args.base).splitlines())
+    paths |= set(sg.git(top, "-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard").splitlines())
+    old, new = sg._tiers_at(top, args.base, tiers_path), sg._load_tiers_file(tiers_path)[0]
+    covers = [g for t in (old, new) if t for _, reg in sg._tier_regions(t).values() for g in reg.get("covers") or []]
+    support = [str(s) for s in plan.get("support") or []]
+    violations, unchecked, tests, changed_support, tiers_changed = [], [], [], [], False
+    for rel in sorted(p for p in paths if p):
+        if rel == tiers_rel:
+            tiers_changed = True
+        elif os_rel != "." and (rel == os_rel or rel.startswith(os_rel + "/")):
+            continue
+        elif sg.TIER_TEST_NAME_RE.search(rel):
+            tests.append(rel)
+        elif any(sg.glob_match(rel, g) for g in covers):
+            violations.append("改了被测代码：%s" % rel)
+        elif any(sg.glob_match(rel, g) for g in support):
+            changed_support.append(rel)
+        else:
+            violations.append("稿外的改动：%s" % rel)
+    violations.extend(_case_violations(top, args.base, tests, unchecked))
+    tier_v, budget_lines = _tier_violations(old, new, plan.get("items", {}))
+    violations.extend(tier_v)
+    ok = not violations
+    if args.json:
+        print(json.dumps({"ok": ok, "violations": violations, "unchecked": unchecked,
+                          "changed": {"tests": len(tests), "support": changed_support, "tiers": tiers_changed},
+                          "budget_changes": budget_lines}, ensure_ascii=False))
+    else:
+        for line in violations + ["未核对：%s" % u for u in unchecked] + budget_lines:
+            print(line)
+        print("护栏通过" if ok else "护栏未过")
+    return 0 if ok else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="test-audit.py")
     sub = ap.add_subparsers(dest="command")
@@ -212,8 +365,13 @@ def main(argv=None):
     p.add_argument("--plan", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--openspec-root")
+    p = sub.add_parser("verify")
+    p.add_argument("--plan", required=True)
+    p.add_argument("--base", required=True)
+    p.add_argument("--openspec-root")
+    p.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    handler = {"render": cmd_render}[args.command]
+    handler = {"render": cmd_render, "verify": cmd_verify}[args.command]
     return handler(args)
 
 
