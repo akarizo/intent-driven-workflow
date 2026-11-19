@@ -18,6 +18,7 @@
 #   advice(d) -> [行]   segment(d) -> 片段   parse_segment(note) -> dict | None   render(d) -> Markdown
 #   budget(final, base, budgets, scope_of, allow=None, phase="final") -> 预算结论（G13 集成层单条 · G14 层总量）
 #   budget_changes(old_budgets, new_budgets, old_allow, new_allow) -> [行]   （change tier-budgets D3、D5、D7）
+#   violations(ledger, budgets, scope_of, allow=None) -> [超线行]   体检用的全量超线清单，线与 budget() 同源（change test-audit D4）
 # 只读仓库；只写 git common dir 下的 flight-ledger/，不改仓库文件。
 # 不反向加载 slice-gate.py：层的归属由调用方传 tier_of(文件) -> 层名 | None。
 # 纯标准库，兼容 Python 3.9。
@@ -383,6 +384,32 @@ def _top_text(top):
     return "、".join("%s %.1fs" % (cid, s) for cid, s in top)
 
 
+def _case_line(spec, a):
+    """单条用例的线：有效放行 → (放行上限, "allow")；否则 → (预算单条上限, "budget")。线为 None 表示不判。"""
+    if a and not a.get("expired"):
+        return a.get("limit"), "allow"
+    return spec.get("case_sec"), "budget"
+
+
+def violations(ledger, budgets, scope_of, allow=None):
+    """账本 → 全部超线用例（不看 m、不截断），按 (-秒, 用例) 排序；线的取法与 budget() 同一处（_case_line）。"""
+    allow = allow or {}
+    amap = {_to_junit(k): v for k, v in allow.items()} if (ledger.get("id_form") or "nodeid") == "junit" else allow
+    rows = []
+    for cid, c in (ledger.get("cases") or {}).items():
+        s, sc = c.get("s"), scope_of(cid, c.get("t"))
+        if s is None or sc not in budgets:
+            continue
+        line, by = _case_line(budgets[sc], amap.get(cid))
+        if line is None:
+            continue
+        kind = budgets[sc].get("kind")
+        if (s >= line) if (kind == "unit" and by == "budget") else (s > line):
+            rows.append({"case": cid, "scope": sc, "kind": kind, "sec": s, "line": line, "by": by})
+    rows.sort(key=lambda r: (-r["sec"], r["case"]))
+    return rows
+
+
 def budget(final, base, budgets, scope_of, allow=None, phase="final"):
     """收口（或基线）账本 → 预算结论：集成层单条棘轮（G13）与层总量（G14）。"""
     budgets = budgets or {}
@@ -424,8 +451,8 @@ def budget(final, base, budgets, scope_of, allow=None, phase="final"):
         if spec.get("kind") != "region" or c.get("m") != 1 or s is None:
             continue
         case_sec, a = spec.get("case_sec"), amap.get(cid)
-        via_allow = bool(a) and not a.get("expired")
-        line = a.get("limit") if via_allow else case_sec
+        line, by = _case_line(spec, a)
+        via_allow = by == "allow"
         if via_allow and case_sec is not None and s > case_sec and (line is None or s <= line):
             allowed_n += 1
             warnings.append("G13 已放行：%s %.1fs（%s）" % (cid, s, a.get("approved") or "-"))
