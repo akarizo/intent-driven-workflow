@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 
-import pytest
 
 from conftest import git, run_hook, write
 from submodule_helpers import g as gsub, git_rc
@@ -34,7 +33,6 @@ def integrate(git_repo, sha, sid="S1"):
     git(git_repo, "merge", "-q", "--no-ff", sha, "-m", "integrate: " + sid)
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-removes-landed-slice-worktree")
 def test_close_reap_removes_landed_slice_worktree(git_repo):
     # Given: change 家检出 worktree-c；一间临时 worktree 的提交已 --no-ff 合进 change 分支，里面只剩飞行记录、切片标记与字节码
     home_repo(git_repo)
@@ -55,7 +53,6 @@ def test_close_reap_removes_landed_slice_worktree(git_repo):
     assert git(git_repo, "branch", "--show-current") == "worktree-c"
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-ignores-worktrees-without-flight-evidence")
 def test_close_reap_ignores_worktrees_without_flight_evidence(git_repo):
     # Given: 一间人开的 worktree（HEAD 就是 change 分支的 tip，没有切片标记、没有飞行记录改动）；
     #        一间切片标记指向另一个 change（other）的 worktree
@@ -77,7 +74,6 @@ def test_close_reap_ignores_worktrees_without_flight_evidence(git_repo):
     assert real(mine) not in mentioned and real(other) not in mentioned, out
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-skips-locked-worktree")
 def test_close_reap_skips_locked_worktree(git_repo):
     # Given: 一间带本 change 飞行记录改动的临时 worktree，提交已合进 change 分支，但被 git worktree lock 锁住
     home_repo(git_repo)
@@ -96,7 +92,6 @@ def test_close_reap_skips_locked_worktree(git_repo):
     assert len(hit) == 1 and "锁定" in hit[0]["why"], out
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-archives-superseded-attempt")
 def test_close_reap_archives_superseded_attempt(git_repo):
     # Given: 一间临时 worktree 的提交没有进 change 分支（门禁红后重派留下的旧尝试），只剩本 change 的飞行记录改动
     home_repo(git_repo)
@@ -116,7 +111,6 @@ def test_close_reap_archives_superseded_attempt(git_repo):
     assert [real(x) for x in out["reaped"]] == [real(old)], out
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-archives-uncommitted-work")
 def test_close_reap_archives_uncommitted_work(git_repo, tmp_path):
     # Given: 一间未交回执行体的游离 HEAD 临时 worktree：带切片标记；src/a.py（已提交）被改成 X = 2；另有未跟踪的 src/new.py
     home_repo(git_repo)
@@ -144,7 +138,6 @@ def test_close_reap_archives_uncommitted_work(git_repo, tmp_path):
     assert (back / "src" / "new.py").read_text(encoding="utf-8") == "NEW = 1\n"
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-keeps-worktree-with-own-submodule-clone")
 def test_close_reap_keeps_worktree_with_own_submodule_clone(git_repo, tmp_path):
     # Given: change 分支带 submodule vendor/sub；一间临时 worktree 自己初始化了子仓克隆，提交已合进 change 分支，只剩飞行记录改动
     home_repo(git_repo)
@@ -171,7 +164,6 @@ def test_close_reap_keeps_worktree_with_own_submodule_clone(git_repo, tmp_path):
     assert len(hit) == 1 and "子仓" in hit[0]["why"], out
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#close-reap-reports-and-records-timeline")
 def test_close_reap_reports_and_records_timeline(git_repo):
     # Given: 本次飞行留下一间已落地的临时 worktree 和一间作废的尝试，两间都只剩本 change 的飞行记录改动
     home_repo(git_repo)
