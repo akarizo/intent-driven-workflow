@@ -1,0 +1,31 @@
+<!-- timeline: ISO时间\t事件\t备注（由 hooks 自动追加） -->
+2026-11-18T13:25:42Z	baseline	增量（经锚点 tier-budgets@2cc616742f，补跑 95 个测试文件 552.2s） ok；排队 0.0s · 负载 1.6→6.7/18
+2026-11-19T02:15:54Z	baseline	exit 0, 470.6s ok；全量：有非测试文件改动：README.md, docs/superpowers/backlog/2026-11-18-record-accepts-unknown-slice.md, docs/superpowers/backlog/2026-11-19-concurrent-takeoff-same-change.md, template/.claude/agents/integrator.md, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/pr-ship.md；verify 推导 7 片；排队 0.0s · 负载 3.0→1.9/18
+2026-11-19T02:16:10Z	approve	2026-11-19T01:55:58Z · 起飞 test-audit
+2026-11-19T02:26:26Z	gate	S1 ok
+2026-11-19T02:26:26Z	gate	S4 ok
+2026-11-19T02:26:26Z	gate	S6 ok
+2026-11-19T02:26:34Z	integrate	wave 1
+2026-11-19T02:27:25Z	wave-check	wave 1/3 · 测试 51.0s（17 个文件） · 排队 0.0s · 负载 3.0→4.3/18 ok
+2026-11-19T02:36:50Z	gate	S2 ok
+2026-11-19T02:36:51Z	gate	S5 ok
+2026-11-19T02:37:02Z	integrate	wave 2
+2026-11-19T02:38:50Z	wave-check	wave 2/3 · 测试 106.7s（28 个文件） · 排队 0.0s · 负载 3.1→3.7/18 ok
+2026-11-19T02:51:48Z	gate	S3 ok
+2026-11-19T02:51:48Z	gate	S7 ok
+2026-11-19T02:51:56Z	integrate	wave 3
+2026-11-19T02:53:56Z	wave-check	wave 3/3 · 测试 115.7s（39 个文件） · 排队 0.0s · 负载 3.7→5.7/18 ok
+2026-11-19T03:09:46Z	fix	blocking=2
+2026-11-19T03:09:46Z	review	findings=25 blocking=2 deferred=23
+2026-11-19T03:09:46Z	final	同树沿用 e220ffb01e ok
+2026-11-19T03:09:48Z	apply-done	blocked=0 blocking=2
+2026-11-19T03:10:24Z	apply-done	
+2026-11-19T03:10:36Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:12:06Z	ship	draft: final 过期：记录 485245c4dc，HEAD c73f0df51d；补跑将是增量（锚点 e220ffb01e，Δ 1 个文件）; 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:12:24Z	final	增量（锚点 e220ffb01e，重跑 0 个文件 / 沿用 831 个用例） 测试 0.0s · 检查 schema-validate 1.3s · 用例 +2/-0（新增 0.7s） · 排队 0.0s · 负载 3.5→3.8/18 ok
+2026-11-19T03:12:24Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:12:36Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:13:21Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/24
+2026-11-19T03:31:21Z	final	增量（锚点 c73f0df51d，重跑 13 个文件 / 沿用 746 个用例） 测试 102.8s · 检查 schema-validate 2.3s · 用例 +4/-0（新增 1.2s） · 排队 0.0s · 负载 4.5→3.0/18 ok
+2026-11-19T03:31:21Z	ship	ready
+2026-11-19T03:31:29Z	pr-ready	https://github.com/akarizo/intent-driven-workflow/pull/24

@@ -1,0 +1,238 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-ledger.py",
+      "line": 396,
+      "summary": "violations() 没有像 budget() 那样先写 `budgets = budgets or {}`，调用方传 None（比如 tier_budgets 读不到时）会在 `sc not in budgets` 处抛 TypeError。budget() 对同样的输入会退化为空结论，两个同源函数在这里不对称。下游 S 片的 audit 调用方是否保证非 None，需进一步确认。",
+      "fix": "在函数开头加一行 `budgets = budgets or {}`，与 budget() 保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_audit_core.py",
+      "line": 12,
+      "summary": "spec 有两条分支没有用例覆盖：(1) 区域层沿用值（m=0）也要判，现有测试只在单元层用了 m=0；(2) 单元层带有效放行时应改用 `s > limit`，不再用 `>=`。实现目前对这两条都正确，但重构时退化不会被发现。",
+      "fix": "后续补两条用例：区域 hooks 一条 m=0、42.0 秒的用例应在清单里；单元层一条 3.0 秒、带 limit=3.0 放行的用例不在清单里，limit=2.0 时在清单里且 by 为 allow。断言措辞与 spec 的 THEN 对齐。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 123,
+      "summary": "整改稿里 action 不是字符串（如 [\"move\"] 或对象）时，`action not in ACTIONS` 抛 TypeError: unhashable type，脚本带 traceback 以退出码 1 结束，审批页不写、stdout 也没有 JSON。这违反了退出码契约：1 本该是「有问题，页面照写」，2 是「输入读不了」。已定向抽查复现。整改稿由模型起草，这种畸形输入并非不可能出现。",
+      "fix": "在 _check_item 开头判断 `isinstance(action, str)`，不是字符串就记一条「去向 X 不适用于 <类别>（可选：…）」问题，并返回 legal=False。也可以把判断写成 `not isinstance(action, str) or action not in ACTIONS or ...`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 133,
+      "summary": "目标分层文件为 None 时（稿里的 tiers 不合法，或现行分层文件不存在），每条 move / split 都会再报一次「落点 … 未归层」。根因是分层文件不可用，这些报法会误导人。另外，现行分层文件不存在时 _load_tiers_file 返回 (None, [])，第 111 行不记任何问题，用户看不到「找不到分层文件」这个根因。",
+      "fix": "tiers 为 None 时，move / split 改报「无可用的目标分层文件，落点无法判定」，或者只在第一次报。现行分层文件不存在且稿里有 move / split 时，补一条点明文件路径的问题。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 106,
+      "summary": "稿里 tiers 的顶层不是对象时，_load_tiers_file 的报错文本里带着已经被 unlink 的临时文件路径（/tmp/tmpXXXX.json）。审批页和 stderr 会显示一个不存在、用户也不认识的路径。",
+      "fix": "拼接 errors 前把临时路径替换成「稿里的 tiers」（如 `e.replace(path, \"稿里的 tiers\")`）；或者先判断 `isinstance(plan[\"tiers\"], dict)`，不是对象就直接记问题，不再落临时文件。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 181,
+      "summary": "support 和 fix（第 121 行 `list(entry.get(\"fix\") or [])`）都没有校验是不是数组。字符串会被逐字符拆开：support 为 \"tests/**\" 时，随迁文件清单变成一串单字符；fix 为字符串时，「可选：」列表也是单字符。",
+      "fix": "support 不是 list 时记一条问题「support 须是 glob 数组」；fix 不是 list 时按空列表处理。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_audit_standard_docs.py",
+      "line": 3,
+      "summary": "去掉 @PENDING 与 PENDING 定义后，模块 docstring 仍写着「骨架：strict xfail……切片 S6 实现后去掉标记即解锁」，跟现状对不上，后来读的人会误以为这两条用例还是骨架。",
+      "fix": "把 docstring 第 3 行改成现状，比如「S6 已解锁；standard_section / TITLE 供 S7 的对账测试 import」，或者直接删掉这一行。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/flight-runner-contract.md",
+      "line": 290,
+      "summary": "本节末句和 test-tiers.md 新加的那一行都指向 `.claude/commands/test-audit.md`（/test-audit），但 88504f2 这个 commit 里还没有这个文件（git ls-tree 查不到）。它由后续切片新建，所以在那之前这是一个悬空指针。按计划这是预期的，只要求收口时确认已补上。",
+      "fix": "本片不用改。final gate 或 PR 前确认 template/.claude/commands/test-audit.md 已由后续切片建好；如果那个切片被砍或推迟，就同时删掉这两处指针。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 577,
+      "summary": "junit 形式的账本里，测试文件已删掉的用例不会被丢弃。tl._file_of(cid, \"junit\", top) 只在候选文件真实存在时才返回路径，文件删了就返回 None，于是 place() 走进「定不出文件」分支，沿用账本里记的层，source.dropped 也不加。结果是体检仍会给已不存在的用例报 unit-slow / region-slow，而且这种条目没法整改。spec 写的是「所在文件已不存在的用例 SHALL 丢弃」。切片包第 6 步原文就是直接调 _file_of，这个缺口可能来自设计本身，需进一步确认是否有意为之。",
+      "fix": "junit 形式下 _file_of(cid, form, top) 返回 None 时，再用 _file_of(cid, form, None) 取第一个候选路径（a/b/test_x.py）。如果分类名能映射成 .py 路径、该路径落在 TEST_FILE_RE 或某个层的 glob 里、但文件不存在，就算丢弃，计入 dropped；非 Python 的分类名（例如 com.foo.BarTest）仍按「定不出文件」处理，保留账本里的层。另外补一条 junit 账本加已删文件的用例。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 572,
+      "summary": "探针用例的所在文件不存在时，只把 cid 加进 dropped，table 里同名的账本条目没有删。junit 形式下，账本那条因为定不出文件被保留着，同一个用例就既算进 source.cases，又算进 source.dropped，还可能继续拿旧耗时报超线。",
+      "fix": "place() 判为丢弃时，同时执行 table.pop(cid, None)。也可以在探针循环里 got is None 时 pop，让一个用例只会落在「保留」或「丢弃」其中一边。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 568,
+      "summary": "部件形态下，账本 id 可能以部件名开头（slice-gate 第 1350 行定不出文件时写成 \"<部件>::<classname>::<name>\"）。case_table 的 place() 没有排除部件名，部件名里有点号时（例如 web.app）_looks_like_path 会判为路径，用例被误丢。allow-stale 那段已经用 part_names 做了排除，两处判据不一致。",
+      "fix": "把 part_names 的计算提前到 case_table 里（或作为参数传进去），在 place() 里遇到 cand in part_names 时直接走「定不出文件 → 用账本记的层」，跟 allow-stale 的判据保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 582,
+      "summary": "load_probes 只校验了 tests 是不是字典，没有校验每条 rec 是不是字典。探针文件形状不对（比如 tests 的值是数字）时，rec.get 会抛 AttributeError，打出 traceback 后以退出码 1 结束，不符合文件头「探针读不了 → 2」的约定。",
+      "fix": "在 load_probes 里加一条校验：tests 的每个值都必须是 dict，否则 fail(\"探针结果 %s 的 tests 形状不对\" % path)。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 329,
+      "summary": "verify 没有校验整改稿里 support 的形状。如果 support 写成字符串（如 \"src/**\"），列表推导会把它逐字符拆成 's','r','c','/','*','*'。其中 '*' 在 fnmatchcase 下能匹配任意路径（包括带 / 的），于是所有没命中 covers 的稿外改动（如 tools/helper.py）都会被当成 support 放行，护栏静默失效，最终仍输出「护栏通过」。render 第 183 行同样没有校验，审批页上只会显示一串单个字符，人工也不容易看出问题。",
+      "fix": "在 cmd_verify 读完稿后先校验：support 必须是 list 且每项是非空 str，否则 fail(\"整改稿的 support 须是 glob 数组\")（退出 2）。render 宜同步加校验并列入 problems，但第 183 行属 S4 owns，由后续切片或 follow-up 处理。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 237,
+      "summary": "收集测试函数时只认模块顶层和名字以 Test 开头的顶层类。pytest 会收集任意名字的 unittest.TestCase 子类（例如 Django 常见的 class UserServiceTests(TestCase)），也会收集嵌套的 Test* 类。这些类里方法的断言或参数化被改了，verify 看不到，仍判「护栏通过」，形成护栏漏报。实现与切片包第 4 步的字面要求一致，所以这是 spec 层面的缺口（需进一步确认是否接受）。",
+      "fix": "把类的判定放宽为：名字以 Test 开头，或任一基类的名字（Name.id / Attribute.attr）以 TestCase 结尾；并递归进入嵌套类，名字记作 外类.内类.函数名。这条要先在 spec「整改护栏」第 2 条与 design D8 中同步改措辞，并补一条对应的 scenario 测试。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 264,
+      "summary": "只捕获了 SyntaxError。测试文件不是 UTF-8 时，当前一侧 _read_text 会抛 UnicodeDecodeError（属于 ValueError，不是 OSError，第 243 行没接住），基线一侧 sg.git 的 text=True 解码也会抛同样的异常；含 NUL 字节时，Python 3.8 到 3.11 的 ast.parse 抛的是 ValueError。这几种情况都会以 traceback 退出，退出码 1，与「有违反」混在一起，违背 spec「核对不了的如实列出、不判失败」。",
+      "fix": "把整段读取和解析（包括 sg.git show 与 _read_text）包进 try，捕获 (SyntaxError, ValueError)，即包含 UnicodeDecodeError，命中时把该路径追加进 unchecked 后 continue。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-audit.py",
+      "line": 327,
+      "summary": "_load_tiers_file 返回的 errors 被丢掉了。工作树里的分层文件改坏（JSON 不合法或形状错误）时 new=None，按空处理后会冒出一串「稿外的预算放宽」和「放行移除」，当前版 covers 也会整体丢失，但输出里没有一句提示「分层文件不合法」，排查方向容易被带偏。",
+      "fix": "取 new, errs = sg._load_tiers_file(tiers_path)；errs 非空时把每条以「分层文件不合法：…」追加进 violations，或者至少在文本输出里先打印出来。spec 要求按空处理的语义保持不变。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 817,
+      "summary": "--compare 的 now 取的是 --scope / --category 筛选后的不合规 id，was 却是之前那份体检的全部不合规 id。范围外或类别外仍在的旧不合规项会被算进 resolved，范围外的目标也不会进 targets_remaining，于是误判「整改达标」并退出 0。例如目标 B 在 hooks 区域且仍然超线，跑 `audit --compare prev --plan plan --scope unit`，得到已解决 2 条、退出 0。反过来，如果 prev 本身是用 --top / --scope 存的档，items 不全，was 就缺项，比较也不对。实现符合 spec「now = 筛选后」的字面，但这会给出假的整改通过。",
+      "fix": "二选一。一是 --compare 与 --scope / --category 同时出现时 fail（退出 2）。二是比较时把 was 和目标也按同样的 scope / category 过滤，再求差集。另外建议在 --out 的 JSON 里记下筛选参数（如 `filters: {scope, category, top}`）。load_compare 读到筛选过的 prev 时 fail 或警告，以免拿截断过的存档当基线。都需要同步修 spec 的「体检前后对比」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 819,
+      "summary": "--top 没有校验取值。传 0 或负数会把每个类别的明细都截成空，退出码照常按截断前的条目算，用户看到的是有计数、没有明细，没有任何报错。",
+      "fix": "在 emit_audit 或 cmd_audit 开头加一句：`if args.top is not None and args.top < 1: fail(\"--top 要是正整数\")`。文件头退出码 2 的列表同步补上。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 746,
+      "summary": "load_compare 要求整改稿必须带 items 对象，缺 items 就退出 2。同一个 change 的 test-audit.py 对同一种整改稿用的是 `plan.get(\"items\", {})`，缺 items 视为空稿，两边对同一份输入的判定不一致。",
+      "fix": "改成 `isinstance(plan.get(\"items\", {}), dict)`，并返回 `plan.get(\"items\", {})`，与 test-audit.py 的 _tier_violations / verify 入口口径保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/test-tiers.py",
+      "line": 770,
+      "summary": "文本「测量来源」一行直接格式化 led[\"change\"] / led[\"phase\"] / led[\"at\"] / led[\"mode\"]。用 --ledger 传入的账本缺这些字段时，会打印出字面的 \"None\"（只有 commit 做了 `or \"-\"` 兜底）。",
+      "fix": "这四个字段都按 commit 的做法用 `or \"-\"` 兜底，例如 `led[\"change\"] or \"-\"`。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/test-audit.md",
+      "line": 18,
+      "summary": "整改稿示例自相矛盾，原样照抄的话 `test-audit.py render` 会退出 1。示例里的 `tiers` 是「拟写入的完整内容」，其中 `regions` 为空：(1) `unit-slow` 的 `move` 落点 `tests/integration/hooks/test_a_big.py` 找不到所属的层，`_check_item` 会报「落点…未归层」；(2) `no-case-limit:hooks` 选了 `budget`，但稿里的 tiers 没有 hooks 区域及其 `case_sec`，会报「区域 hooks 在稿的 tiers 里仍没有 case_sec」；(3) 示例里还有 `region-slow` / `pure-in-region` 指向 hooks 区域，按这份 tiers 写入会把整个 hooks 区域删掉。模型起草时最容易照抄这个示例。",
+      "fix": "把示例里的 `tiers.regions` 补成含 hooks 区域的完整对象，例如 `{\"hooks\": {\"paths\": [\"tests/integration/hooks/**\"], \"covers\": [...], \"cmd\": \"...\", \"budget\": {\"case_sec\": 10}}}`，让每个 `move` 落点都能唯一归层、`budget` 条目的区域带上 `case_sec`。改完用 `test-audit.py render` 跑一遍，确认退出 0。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/test-audit.md",
+      "line": 30,
+      "summary": "文档没有约束存档与整改稿放在哪里，会让第 5 步的 `verify` 误报「稿外的改动」。`cmd_verify` 收集的是 `git diff --name-only <base>` 加上未跟踪文件（`ls-files --others --exclude-standard`），只跳过 `openspec/` 目录、测试文件、`support` 与分层文件。如果第 1 / 2 步把 `<存档路径>`、`<整改稿>` 写在仓库里 `openspec/` 以外的位置，而且没被 gitignore（比如仓库根的 audit.json / plan.json），它们在第 4 步记基线时还是未跟踪文件，verify 会报「稿外的改动：…」并退出 1。",
+      "fix": "第 1、2 步明确存放位置：存档与整改稿放在 `openspec/superpower/` 下（与审批页同目录，例如 `openspec/superpower/<YYYY-MM-DD>-test-audit.json`、`…-test-audit-plan.json`），或者放在仓库外的临时目录。第 5 步 probe 的 `--json` 输出也照此处理。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/test-audit.md",
+      "line": 43,
+      "summary": "命令内执行的 `drop-allow` 没写怎么做。render 只对 `budget` 强制要求稿里给 `tiers`，所以一份只有 `drop-allow`、没有 `tiers` 的稿能渲染通过；可按第 4 步，「分层文件按稿里的 `tiers` 写入」就没有内容可写，执行者不知道怎样删 `slow_allow` 条目（只能手改分层文件）。另外，第 51 行的 `--probe <文件>` 写成了单数，实际 `--probe` 可以重复（action=append），动过多层时应该每层带一个。",
+      "fix": "在第 2 步或第 4 步补一句：选了 `drop-allow` / `retier` 时，稿里必须给出删掉对应 `slow_allow` 键（或改好归层）之后的完整 `tiers`，第 4 步照它写入。第 51 行改为 `--probe <文件>`（动过几层就带几个，可重复）。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "e220ffb01e6061ee029ff1dc7731d383833692bd",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 35/35；增量：重跑 39 个文件（155 个用例）/ 沿用 676 个，锚点 bb2e52420e。修复两条：(1) test-tiers.py emit_audit 带 --scope 时保留 no-tiers: / unjudged:no-measure / unjudged:ledger（新常量 AUDIT_GLOBAL_IDS），新增测试 tests/test_audit_verdict.py::test_audit_scope_keeps_global_entries，先红后绿；spec「体检的输出与筛选」补了一句：这三类不受 --scope 影响（改的是 openspec 工件，因为 finding 点名要修 spec）。(2) commands/test-audit.md 第 1 步写明存档那次不带 --top，第 5 步 --compare 带上与第 1 步相同的 --scope / --category；新增测试 tests/test_audit_docs.py::test_test_audit_doc_batch_compare_uses_same_filter，先红后绿。没有改任何已有骨架断言。fix 不在 slices.json 中，所以跳过了 start；基点校验 exit 0，sub-sync ok。全量 pytest 831 passed，compileall 通过。两个 commit，没有 push。"
+  },
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "files": [
+          "tests/test_audit_core.py",
+          "tests/test_audit_docs.py",
+          "tests/test_audit_render.py",
+          "tests/test_audit_standard_docs.py",
+          "tests/test_budget_docs.py",
+          "tests/test_gate_lock.py",
+          "tests/test_guard_docs.py",
+          "tests/test_install.py",
+          "tests/test_ledger_core.py",
+          "tests/test_ledger_docs.py",
+          "tests/test_lock_docs.py",
+          "tests/test_plan_hygiene_docs.py",
+          "tests/test_runner_contract_docs.py",
+          "tests/test_scope_docs.py",
+          "tests/test_ship_rerun_docs.py",
+          "tests/test_tiers_docs.py",
+          "tests/test_tiers_parts_docs.py"
+        ],
+        "rerun_tests": 67,
+        "est_sec": 38.2,
+        "sec": 51,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "rerun_tests": 122,
+        "est_sec": 78.3,
+        "sec": 106.7,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 3,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "rerun_tests": 153,
+        "est_sec": 86.2,
+        "sec": 115.7,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}

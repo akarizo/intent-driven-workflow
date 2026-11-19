@@ -1,0 +1,195 @@
+{
+ "gate": {
+  "test": "python3 -m pytest -q tests",
+  "lint": "python3 -m compileall -q template/.claude/hooks",
+  "typecheck": null,
+  "checks": [
+   {
+    "name": "schema-validate",
+    "baseline": "cd template && openspec schema validate intent-driven",
+    "final": "cd template && openspec schema validate intent-driven",
+    "timeout_sec": 120
+   }
+  ]
+ },
+ "slices": [
+  {
+   "id": "S1",
+   "title": "test-ledger.py：全量超线清单 violations()，线的取法与 budget() 共用一处",
+   "packet": "slices/S1.md",
+   "owns": [
+    "template/.claude/hooks/test-ledger.py",
+    "tests/test_audit_core.py"
+   ],
+   "deps": [],
+   "verify": "python3 -m pytest -q tests/test_audit_core.py tests/test_budget_core.py tests/test_ledger_core.py tests/test_ledger_delta.py tests/test_flight_doctor_tests.py tests/test_budget_doctor.py",
+   "scenarios": [
+    "test-audit#violations-list-every-over-line-case",
+    "test-audit#violations-honor-allow-limit-and-expiry",
+    "test-audit#violations-skip-unjudgeable-cases",
+    "test-audit#violations-match-junit-form-ledger"
+   ]
+  },
+  {
+   "id": "S2",
+   "title": "test-tiers.py audit：只读体检的数据来源与归层、十个不合规类别、AUDIT_RULES、JSON 输出与基本退出码",
+   "packet": "slices/S2.md",
+   "owns": [
+    "template/.claude/hooks/test-tiers.py",
+    "tests/test_audit_scan.py"
+   ],
+   "deps": [
+    "S1"
+   ],
+   "verify": "python3 -m pytest -q tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_budget_allow_cli.py tests/test_tiers_probe.py",
+   "scenarios": [
+    "test-audit#audit-without-tiers-file-points-to-test-tiers",
+    "test-audit#audit-lists-over-line-cases-from-ledger",
+    "test-audit#audit-recomputes-layer-and-drops-missing-files",
+    "test-audit#audit-works-for-parts-form",
+    "test-audit#audit-flags-layering-problems",
+    "test-audit#audit-flags-region-without-case-limit",
+    "test-audit#audit-flags-total-over-budget",
+    "test-audit#audit-flags-allow-entries",
+    "test-audit#audit-probe-flags-impure-unit-cases"
+   ]
+  },
+  {
+   "id": "S3",
+   "title": "test-tiers.py audit：提示与未判、结论与退出码 3、文本输出、按范围 / 类别 / 最慢 N 条筛选、--compare 与 --plan",
+   "packet": "slices/S3.md",
+   "owns": [
+    "template/.claude/hooks/test-tiers.py",
+    "tests/test_audit_verdict.py",
+    "tests/test_audit_compare.py"
+   ],
+   "deps": [
+    "S2"
+   ],
+   "verify": "python3 -m pytest -q tests/test_audit_verdict.py tests/test_audit_compare.py tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py",
+   "scenarios": [
+    "test-audit#audit-unjudged-when-no-measurement",
+    "test-audit#audit-unjudged-scope-with-unmeasured-files",
+    "test-audit#audit-compliant-exits-zero",
+    "test-audit#audit-filters-by-scope-category-top",
+    "test-audit#compare-reports-resolved-remaining-new",
+    "test-audit#compare-exits-zero-when-targets-resolved",
+    "test-audit#compare-fails-when-target-remains",
+    "test-audit#compare-unconfirmed-when-unjudged"
+   ]
+  },
+  {
+   "id": "S4",
+   "title": "test-audit.py render：整改稿校验、按去向归轨道（ACTIONS）、单文件审批页",
+   "packet": "slices/S4.md",
+   "owns": [
+    "template/.claude/hooks/test-audit.py",
+    "tests/test_audit_render.py"
+   ],
+   "deps": [],
+   "verify": "python3 -m pytest -q tests/test_audit_render.py",
+   "scenarios": [
+    "test-audit#render-writes-approval-page-with-tracks",
+    "test-audit#render-rejects-inapplicable-actions",
+    "test-audit#render-checks-move-destinations",
+    "test-audit#render-lists-unplanned-violations"
+   ]
+  },
+  {
+   "id": "S5",
+   "title": "test-audit.py verify：整改护栏（改动范围、用例与断言不变、分层文件改动与稿一致、未核对清单）",
+   "packet": "slices/S5.md",
+   "owns": [
+    "template/.claude/hooks/test-audit.py",
+    "tests/test_audit_verify.py"
+   ],
+   "deps": [
+    "S4"
+   ],
+   "verify": "python3 -m pytest -q tests/test_audit_verify.py tests/test_audit_render.py",
+   "scenarios": [
+    "test-audit#verify-passes-pure-moves",
+    "test-audit#verify-flags-source-changes",
+    "test-audit#verify-flags-assert-and-case-changes",
+    "test-audit#verify-flags-unplanned-budget-and-allow-changes",
+    "test-audit#verify-lists-non-python-files-as-unchecked"
+   ]
+  },
+  {
+   "id": "S6",
+   "title": "文档：运行器契约新增「测试套件合规标准」一节，test-tiers 命令文档指向体检",
+   "packet": "slices/S6.md",
+   "owns": [
+    "template/.claude/flight-runner-contract.md",
+    "template/.claude/commands/test-tiers.md",
+    "tests/test_audit_standard_docs.py"
+   ],
+   "deps": [],
+   "verify": "python3 -m pytest -q tests/test_audit_standard_docs.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_scope_docs.py",
+   "scenarios": [
+    "test-audit#contract-states-compliance-standard",
+    "test-audit#test-tiers-doc-points-to-audit"
+   ]
+  },
+  {
+   "id": "S7",
+   "title": "文档：新命令 /test-audit，README 与 install.sh 的命令计数 17 → 18，标准文档与脚本常量对账",
+   "packet": "slices/S7.md",
+   "owns": [
+    "template/.claude/commands/test-audit.md",
+    "README.md",
+    "install.sh",
+    "tests/test_audit_docs.py",
+    "tests/test_tiers_docs.py",
+    "tests/test_clean_after_merged_docs.py"
+   ],
+   "deps": [
+    "S2",
+    "S5"
+   ],
+   "verify": "python3 -m pytest -q tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_tiers_docs.py tests/test_clean_after_merged_docs.py tests/test_install.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_resume_docs.py",
+   "scenarios": [
+    "test-audit#test-audit-command-doc-covers-flow",
+    "test-audit#readme-and-install-count-test-audit",
+    "test-audit#standard-doc-matches-script-constants"
+   ]
+  }
+ ],
+ "scenario_tests": {
+  "test-audit#violations-list-every-over-line-case": "tests/test_audit_core.py::test_violations_list_every_over_line_case",
+  "test-audit#violations-honor-allow-limit-and-expiry": "tests/test_audit_core.py::test_violations_honor_allow_limit_and_expiry",
+  "test-audit#violations-skip-unjudgeable-cases": "tests/test_audit_core.py::test_violations_skip_unjudgeable_cases",
+  "test-audit#violations-match-junit-form-ledger": "tests/test_audit_core.py::test_violations_match_junit_form_ledger",
+  "test-audit#audit-without-tiers-file-points-to-test-tiers": "tests/test_audit_scan.py::test_audit_without_tiers_file_points_to_test_tiers",
+  "test-audit#audit-lists-over-line-cases-from-ledger": "tests/test_audit_scan.py::test_audit_lists_over_line_cases_from_ledger",
+  "test-audit#audit-recomputes-layer-and-drops-missing-files": "tests/test_audit_scan.py::test_audit_recomputes_layer_and_drops_missing_files",
+  "test-audit#audit-works-for-parts-form": "tests/test_audit_scan.py::test_audit_works_for_parts_form",
+  "test-audit#audit-flags-layering-problems": "tests/test_audit_scan.py::test_audit_flags_layering_problems",
+  "test-audit#audit-flags-region-without-case-limit": "tests/test_audit_scan.py::test_audit_flags_region_without_case_limit",
+  "test-audit#audit-flags-total-over-budget": "tests/test_audit_scan.py::test_audit_flags_total_over_budget",
+  "test-audit#audit-flags-allow-entries": "tests/test_audit_scan.py::test_audit_flags_allow_entries",
+  "test-audit#audit-probe-flags-impure-unit-cases": "tests/test_audit_scan.py::test_audit_probe_flags_impure_unit_cases",
+  "test-audit#audit-unjudged-when-no-measurement": "tests/test_audit_verdict.py::test_audit_unjudged_when_no_measurement",
+  "test-audit#audit-unjudged-scope-with-unmeasured-files": "tests/test_audit_verdict.py::test_audit_unjudged_scope_with_unmeasured_files",
+  "test-audit#audit-compliant-exits-zero": "tests/test_audit_verdict.py::test_audit_compliant_exits_zero",
+  "test-audit#audit-filters-by-scope-category-top": "tests/test_audit_verdict.py::test_audit_filters_by_scope_category_top",
+  "test-audit#compare-reports-resolved-remaining-new": "tests/test_audit_compare.py::test_compare_reports_resolved_remaining_new",
+  "test-audit#compare-exits-zero-when-targets-resolved": "tests/test_audit_compare.py::test_compare_exits_zero_when_targets_resolved",
+  "test-audit#compare-fails-when-target-remains": "tests/test_audit_compare.py::test_compare_fails_when_target_remains",
+  "test-audit#compare-unconfirmed-when-unjudged": "tests/test_audit_compare.py::test_compare_unconfirmed_when_unjudged",
+  "test-audit#render-writes-approval-page-with-tracks": "tests/test_audit_render.py::test_render_writes_approval_page_with_tracks",
+  "test-audit#render-rejects-inapplicable-actions": "tests/test_audit_render.py::test_render_rejects_inapplicable_actions",
+  "test-audit#render-checks-move-destinations": "tests/test_audit_render.py::test_render_checks_move_destinations",
+  "test-audit#render-lists-unplanned-violations": "tests/test_audit_render.py::test_render_lists_unplanned_violations",
+  "test-audit#verify-passes-pure-moves": "tests/test_audit_verify.py::test_verify_passes_pure_moves",
+  "test-audit#verify-flags-source-changes": "tests/test_audit_verify.py::test_verify_flags_source_changes",
+  "test-audit#verify-flags-assert-and-case-changes": "tests/test_audit_verify.py::test_verify_flags_assert_and_case_changes",
+  "test-audit#verify-flags-unplanned-budget-and-allow-changes": "tests/test_audit_verify.py::test_verify_flags_unplanned_budget_and_allow_changes",
+  "test-audit#verify-lists-non-python-files-as-unchecked": "tests/test_audit_verify.py::test_verify_lists_non_python_files_as_unchecked",
+  "test-audit#contract-states-compliance-standard": "tests/test_audit_standard_docs.py::test_contract_states_compliance_standard",
+  "test-audit#test-tiers-doc-points-to-audit": "tests/test_audit_standard_docs.py::test_test_tiers_doc_points_to_audit",
+  "test-audit#test-audit-command-doc-covers-flow": "tests/test_audit_docs.py::test_test_audit_command_doc_covers_flow",
+  "test-audit#readme-and-install-count-test-audit": "tests/test_audit_docs.py::test_readme_and_install_count_test_audit",
+  "test-audit#standard-doc-matches-script-constants": "tests/test_audit_docs.py::test_standard_doc_matches_script_constants"
+ }
+}

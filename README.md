@@ -172,7 +172,7 @@ curl -fsSL https://raw.githubusercontent.com/akarizo/intent-driven-workflow/main
 ```
 your-project/
 ├── .claude/
-│   ├── commands/       # 17 个 slash 命令（见下方）
+│   ├── commands/       # 18 个 slash 命令（见下方）
 │   ├── skills/         # 16 个 skill + 1 个 legacy（见下方）
 │   ├── agents/         # 4 个 agent：slice-executor / slice-executor-large / integrator / code-reviewer（见下方）
 │   ├── workflows/      # opsx-apply.js：飞行流程的命名 Workflow 调度器
@@ -275,6 +275,7 @@ slice-gate.py lint（校验 slices.json）→ 算 wave
 - **计划**：`gate.test` 必须等于 `unit.cmd`；`gate.integration` 选本 change 要跑的区域、`gate.integration_skip` 写不跑的理由；`covers` 与切片 `owns` 相交的区域必须表态；scenario 骨架放在单元层或已选区域的 `paths` 里，由 `slice-gate.py lint` 校验
 - **门禁**：baseline 只跑单元层（带探针、不走增量）与已选区域；final 对区域逐个差分（`G2 region <NAME>`）；`G10` 慢单测（单元层用例 ≥3 秒，经人类放行 `test-tiers.py allow-slow` 才降为警告）· `G11` 单测不纯（触碰真实文件 / 子进程 / 网络）· `G12` 切片改动的测试文件未归层
 - **时间预算**：分层文件可给每层写 `budget`（`case_sec` 单条线 · `total_sec` 总量），放行可带上限 `limit_sec` 与到期日 `expires`（`allow-slow --limit-sec / --expires`）；单元层超线 / 超总量判红（`G10` / `G14`），集成层只对本 change 新增的超线用例判红（`G13`），细则见 `.claude/flight-runner-contract.md` 第 10 节
+- **体检与整改**：`test-tiers.py audit` 只读体检（按 R1–R8 列出不合规项与可选去向，不跑测试）、`/test-audit` 按经人类批准的整改稿改到合规，细则见 `.claude/flight-runner-contract.md` 的「测试套件合规标准」一节
 - **耗时**：`gate` / `baseline` / `final` 输出 `tier_sec`（单元 / 集成 / 各区域秒数），写进 `summary` 与飞行记录；没有分层文件时以上都不触发，行为不变
 - **部件（monorepo / 多语言）**：顶层写 `parts` 即部件形态，每个子项目 × runner 一个部件（`root` · `test_files` · 单元层 · 区域，选择器 `paths` 或 `list`），门禁逐部件运行、逐部件判 G10 / G11，final 恒全量；`gate.test` 写驱动命令 `python3 .claude/hooks/test-tiers.py run unit`。非 pytest 部件经 JUnit（`FLIGHT_JUNIT`）判 G10、经仓库内探针适配器判 G11，适配器须先过 `test-tiers.py canary` 金丝雀自检（库随机出题、亲自核验落盘），自检后按 sha 锁定，改动即 lint 红。简写形态（顶层 `unit` / `regions`）不变
 
@@ -425,7 +426,7 @@ PR 被人类合并后跑 `/clean-after-merged [target-branch]`：先 `--ff-only`
 
 ---
 
-## 17 个 slash 命令
+## 18 个 slash 命令
 
 按命名空间分组。
 
@@ -469,11 +470,12 @@ PR 被人类合并后跑 `/clean-after-merged [target-branch]`：先 `--ff-only`
 | --- | --- |
 | `/spec-html [name]` | 手动重渲 `openspec/changes/<name>/spec.html` 意图审批面板（propose / continue 已自动跑） |
 
-### `/test-tiers`（测试分层，1 个）
+### `/test-tiers` 与 `/test-audit`（测试分层与合规，2 个）
 
 | 命令 | 目的 |
 | --- | --- |
 | `/test-tiers` | 把仓库测试重划分为单元层与集成区域：探针实测 → 起草划分 → 审批页等人类批准 → 搬文件 → 复核，产出 `openspec/test-tiers.json`（命令本身即逻辑，无同名 skill） |
+| `/test-audit` | 体检测试套件离合规标准多远，并把不合规项改到合规：体检 → 整改稿 → 审批页等人类批准 → 按轨道处置 → 复核（命令本身即逻辑，无同名 skill） |
 
 ---
 
