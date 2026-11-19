@@ -38,3 +38,14 @@ def test_lint_passes_real_assertion(git_repo):
 
     # Then: 没有 skeleton: 一条
     assert "skeleton:" not in p.stderr, p.stderr
+
+
+def test_lint_ignores_marker_quoted_in_real_assertion(git_repo):
+    # Given: scenario 测试在真实断言里引用占位标记（讨论 scaffold 本身的测试）
+    d = plan(git_repo, 's = "x"\n    assert "PLAN-SCAFFOLD-PLACEHOLDER" not in s')
+
+    # When: 运行 lint
+    p = run_hook("slice-gate", "lint", "--change-dir", str(d), cwd=git_repo)
+
+    # Then: 没有 skeleton: 一条（只认 scaffold 生成的那行 assert False 占位）
+    assert "skeleton:" not in p.stderr, p.stderr

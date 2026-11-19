@@ -16,7 +16,7 @@
 #                                              带通配的条目在轮次档那棵树上展开 > 20 个现存文件 → 须在该片 owns_wide（条目 → 非空理由）写理由，
 #                                              时间线已有 approve 事件时只提示不判红；owns_wide 形状 / 多余键 / 空理由判红；不在 git 仓库里不数文件；
 #                                              通过时 stderr 为每条通配打一行 `owns: <切片> <条目> → <N> 个文件`
-#                                              skeleton:：.py 的 scenario 测试函数体仍含 PLAN-SCAFFOLD-PLACEHOLDER → 判红（文件 / 函数不存在跳过）
+#                                              skeleton:：.py 的 scenario 测试函数体仍有 `assert False, "PLAN-SCAFFOLD-PLACEHOLDER…` 占位行 → 判红（文件 / 函数不存在跳过）
 #   waves    --change-dir DIR                 只打印 waves JSON（不跑选测命令、不判未声明）
 #   turns    --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: standard / large}：owns 在基线 commit（取不到 → HEAD）树上的已提交文件 > 8 → large，计划写 "turns": "large" 可升档；不写任何文件
 #   landed   --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: 门禁行 commit}：最新门禁行绿、commit 能解析且是 HEAD 祖先、
@@ -2883,6 +2883,8 @@ def slice_turns(data, change_dir, root):
 
 
 SCAFFOLD_PLACEHOLDER = "PLAN-SCAFFOLD-PLACEHOLDER"
+# 只认 scaffold 生成的那一行占位断言（design D5 形状），与 plan-scaffold.py 的 PLACEHOLDER_RE 同一判定
+SCAFFOLD_PLACEHOLDER_RE = re.compile(r"^\s*assert\s+False\s*,\s*[\"']" + re.escape(SCAFFOLD_PLACEHOLDER), re.M)
 
 
 def _scaffold_errors(data, change_dir):
@@ -2901,7 +2903,7 @@ def _scaffold_errors(data, change_dir):
                     bodies[rel] = dict(_test_bodies(rel, f.read().splitlines()))
             except OSError:
                 bodies[rel] = {}
-        if SCAFFOLD_PLACEHOLDER in bodies[rel].get(func.rsplit("::", 1)[-1], ""):
+        if SCAFFOLD_PLACEHOLDER_RE.search(bodies[rel].get(func.rsplit("::", 1)[-1], "")):
             errors.append("skeleton: %s 仍是 scaffold 占位断言，补真实断言后再 lint" % target)
     return errors
 

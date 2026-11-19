@@ -111,3 +111,16 @@ def test_gwt_reports_missing_steps_and_placeholders(tmp_path):
     write(root / "tests" / "test_g.py", good)
     p2 = run_hook("plan-scaffold", "gwt", "--change-dir", str(d), cwd=root)
     assert p2.returncode == 0, (p2.stdout, p2.stderr)
+
+
+def test_gwt_ignores_marker_quoted_in_real_assertion(tmp_path):
+    # Given: test_gamma 的真实断言里引用占位标记（不是 scaffold 生成的 assert False 占位行）
+    root, d = repo(tmp_path, {"add-gamma": "tests/test_q.py::test_gamma"})
+    write(root / "tests" / "test_q.py",
+          "def test_gamma():\n    # Given: x\n    # When: y\n    # Then: z\n    s = 'x'\n    assert \"%s\" not in s\n" % MARK)
+
+    # When: 运行 gwt
+    p = run_hook("plan-scaffold", "gwt", "--change-dir", str(d), cwd=root)
+
+    # Then: 退出 0，不报占位
+    assert p.returncode == 0, (p.stdout, p.stderr)
