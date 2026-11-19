@@ -11,3 +11,6 @@
 2026-11-19T14:18:45Z	gate	S6 ok
 2026-11-19T14:19:03Z	integrate	wave 2
 2026-11-19T14:21:01Z	wave-check	wave 2/2 · 测试 111.3s（47 个文件） · 排队 0.0s · 负载 2.2→2.7/18 ok
+2026-11-19T14:22:58Z	review	findings=17 blocking=0 deferred=17
+2026-11-19T14:25:00Z	final	增量（锚点 dc6c26a128，重跑 47 个文件 / 沿用 595 个用例） 测试 112.8s · 检查 schema-validate 2.4s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 1.7→3.6/18 ok
+2026-11-19T14:25:03Z	apply-done	blocked=0 blocking=0
