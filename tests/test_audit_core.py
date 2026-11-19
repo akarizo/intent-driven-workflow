@@ -2,18 +2,13 @@
 （scenario: test-audit#violations-list-every-over-line-case、#violations-honor-allow-limit-and-expiry、
 #violations-skip-unjudgeable-cases、#violations-match-junit-form-ledger）。
 骨架：strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。只调纯函数，不碰真实文件、不起子进程。"""
-import pytest
-
 from conftest import load_hook
 from test_budget_core import allowed, budgets, case, ledger, scope_of
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S1 未实现")
 
 U = "tests/unit/test_u.py::"
 H = "tests/integration/hooks/test_h.py::"
 
 
-@PENDING
 def test_violations_list_every_over_line_case():
     # Given: 单元层单条 3 秒、区域 hooks 单条 30 秒；单元层一条沿用的 3.0 秒与一条 0.2 秒，hooks 一条实测 42.0 秒与一条恰好 30.0 秒
     tl = load_hook("test-ledger")
@@ -29,7 +24,6 @@ def test_violations_list_every_over_line_case():
     assert {r["by"] for r in rows} == {"budget"}, rows
 
 
-@PENDING
 def test_violations_honor_allow_limit_and_expiry():
     # Given: 区域 hooks 单条 30 秒；四条 74.0 秒的用例分别带：上限 90 的放行、上限 60 的放行、没有上限的放行、已过期的放行
     tl = load_hook("test-ledger")
@@ -46,7 +40,6 @@ def test_violations_honor_allow_limit_and_expiry():
     assert got == {H + "test_l60": (60.0, "allow"), H + "test_gone": (30.0, "budget")}, rows
 
 
-@PENDING
 def test_violations_skip_unjudgeable_cases():
     # Given: 一条没有耗时的用例、一条所在层不在预算里的用例、一条在没写 case_sec 的区域 docs 里耗时 500 秒的用例
     tl = load_hook("test-ledger")
@@ -60,7 +53,6 @@ def test_violations_skip_unjudgeable_cases():
     assert rows == [], rows
 
 
-@PENDING
 def test_violations_match_junit_form_ledger():
     # Given: junit 形式的账本里 test_big 耗时 74.0 秒；放行名单的键是 nodeid 形式
     tl = load_hook("test-ledger")
