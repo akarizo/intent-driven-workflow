@@ -31,7 +31,7 @@ description: 体检测试套件离合规标准多远，并把不合规项改到�
    - 退出码：`0` 合规（汇报后结束）· `1` 有不合规项 · `2` 输入不可用（分层文件不合法、账本 / 探针 / change 目录读不了，按 stderr 修好重跑）· `3` 没有不合规项但有未判项；
    - 出现 `no-tiers`（没有分层文件）→ **停下**，让人先跑 `/test-tiers`；
    - 有「未判」→ 先取测量：任一在途 change 跑过 baseline 即有测试账本；或 `python3 .claude/hooks/test-tiers.py probe --cmd "<该层命令>" --json <文件>`，再带 `--probe <文件>` 重新体检；
-   - 大仓库用 `--scope <范围>` / `--category <类别>` / `--top N` 取一批，本轮只处理这一批。
+   - 大仓库用 `--scope <范围>` / `--category <类别>` 取一批，本轮只处理这一批；存档那次不带 `--top`（存档只写截断后的明细，第 5 步会把批内被截掉的旧项算成新增）。`--top N` 只用于另跑一次只看不存的体检；也可以不筛选地存全量档，分批只体现在整改稿的 `items` 里。
 
 2. **起草整改稿**（形状见上）：每条不合规项从它的 `fix` 里选一个去向，或 `keep` 并写理由；搬与拆写 `dest`；要改分层文件时给出 `tiers`；随迁的非测试文件写进 `support`。依据是体检条目、探针证据（触碰记录、耗时）与被测模块本身，**不凭文件名猜**。
 
@@ -48,7 +48,7 @@ description: 体检测试套件离合规标准多远，并把不合规项改到�
    - `python3 .claude/hooks/test-audit.py verify --plan <整改稿> --base <第 4 步记下的 commit>` 退出 `0`；输出里「未核对」的文件逐个请人看 diff；
    - `python3 .claude/hooks/test-tiers.py check` 退出 `0`；
    - 对动过的层重新取测量：`python3 .claude/hooks/test-tiers.py probe --cmd "<该层命令>" --json <文件>`（它持全机测试锁；部件形态带 `--root` / `--adapter`）；
-   - `python3 .claude/hooks/test-tiers.py audit --probe <文件> --compare <第 1 步的存档> --plan <整改稿>`：退出 `0` = 本轮目标都已解决且没有新增；`1` = 有目标没解决或改出了新的不合规；`3` = 未能确认（还有没量到的范围）。
+   - `python3 .claude/hooks/test-tiers.py audit --probe <文件> --compare <第 1 步的存档> --plan <整改稿>`（第 1 步筛选过的，必须带上与第 1 步相同的 `--scope` / `--category`，否则批外的旧不合规项都会被算成新增）：退出 `0` = 本轮目标都已解决且没有新增；`1` = 有目标没解决或改出了新的不合规；`3` = 未能确认（还有没量到的范围）。
 
 6. **收尾**：`/opsx-mini --done` 清除声明；汇报已解决 / 仍在 / 转 change 的条数与清单；**不代 commit**，由人类提交。
 
