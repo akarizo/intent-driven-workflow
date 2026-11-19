@@ -22,7 +22,7 @@ if args[:1] == ["status"]:
 if args[:1] == ["instructions"]:
     aid = args[1]
     if aid in spec.get("fail", []):
-        sys.stderr.write("boom %s\n" % aid)
+        sys.stderr.write("boom %%s\n" %% aid)
         sys.exit(1)
     a = spec["detail"][aid]
     print(json.dumps(dict({"artifactId": aid, "changeName": "c"}, **a)))
@@ -72,7 +72,6 @@ SPEC = ("## ADDED Requirements\n\n### Requirement: 导出\n用户 SHALL 能导�
         "#### Scenario: csv-download\n- **GIVEN** 有 3 条订单\n- **WHEN** 用户点导出\n- **THEN** 下载到 3 行的 CSV\n")
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_instructions_prints_pending_artifacts(tmp_path):
     # Given: openspec 桩：proposal 已 done，design 与 tasks 待建
     env = stub_openspec(tmp_path, ARTIFACTS, DETAIL)
@@ -89,7 +88,6 @@ def test_kit_instructions_prints_pending_artifacts(tmp_path):
     assert "## proposal" not in p.stdout and "INSTR-proposal" not in p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_instructions_fails_loud(tmp_path):
     # Given: openspec 桩的 instructions design 以非 0 退出
     env = stub_openspec(tmp_path, ARTIFACTS, DETAIL, fail=("design",))
@@ -102,7 +100,6 @@ def test_kit_instructions_fails_loud(tmp_path):
     assert "openspec instructions design" in p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_tasks_generates_from_slices(tmp_path):
     # Given: 两片计划，S2 依赖 S1
     d = plan(tmp_path, [S1, S2], {"export": SPEC})
@@ -118,7 +115,6 @@ def test_kit_tasks_generates_from_slices(tmp_path):
     assert "- [ ] S2 导出页按钮 （deps: S1 · verify: `pytest -q tests/test_y.py`）" in text, text
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_tasks_keeps_checked_state(tmp_path):
     # Given: 旧 tasks.md 里 S1 已勾选
     d = plan(tmp_path, [S1, S2], {"export": SPEC})
@@ -137,7 +133,6 @@ def region(text):
     return text[text.index("<!-- plan-kit:begin -->"):text.index("<!-- plan-kit:end -->")]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_packets_renders_mechanical_region(tmp_path):
     # Given: 两片计划，S2 依赖 S1 并有一个 scenario
     d = plan(tmp_path, [S1, S2], {"export": SPEC})
@@ -153,7 +148,6 @@ def test_kit_packets_renders_mechanical_region(tmp_path):
         assert frag in r, (frag, r)
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_kit_packets_preserves_notes(tmp_path):
     # Given: S1 包已有机械区，标记之后有一段说明；之后 S1 的 owns 多了 src/extra.py
     d = plan(tmp_path, [S1, S2], {"export": SPEC})
