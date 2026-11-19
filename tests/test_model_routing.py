@@ -3,10 +3,8 @@
 #routing-rejects-planning-keys、#routing-rejects-non-model-names、#routing-pin-writes-flight-and-ship、
 #routing-resolve-requires-pin、#routing-resolve-outputs-workflow-args、#routing-resolve-refuses-env-override、
 #routing-get-prefers-pinned，共 9 条）。
-骨架：strict xfail，断言是真实的；切片 S1 实现后去掉标记即解锁。"""
+骨架已由切片 S1 解锁。"""
 import json
-
-import pytest
 
 from conftest import run_hook, write
 
@@ -30,7 +28,6 @@ def routing(*args, env=None):
     return run_hook("model-routing", *args, env={**CLEAN_ENV, **(env or {})})
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_builtin_defaults_without_config(tmp_path):
     # Given: openspec 根下没有 model-routing.json 的仓库
     repo(tmp_path)
@@ -48,7 +45,6 @@ def test_routing_builtin_defaults_without_config(tmp_path):
     assert {v["source"] for v in table.values()} == {"builtin"}
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_config_overrides_per_key(tmp_path):
     # Given: model-routing.json 只写了 flight.executor = opus·medium
     repo(tmp_path, {"flight": {"executor": {"model": "opus", "effort": "medium"}}})
@@ -63,7 +59,6 @@ def test_routing_config_overrides_per_key(tmp_path):
     assert table["flight.reviewer"] == {"model": "opus", "effort": "high", "source": "builtin"}
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_rejects_planning_keys(tmp_path):
     # Given: model-routing.json 含规划期组 propose.skeleton
     repo(tmp_path, {"propose": {"skeleton": {"model": "opus", "effort": "medium"}}})
@@ -76,7 +71,6 @@ def test_routing_rejects_planning_keys(tmp_path):
     assert "规划期不进路由配置" in p.stderr and "propose.skeleton" in p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_rejects_non_model_names(tmp_path):
     # Given: flight.reviewer 的 model 写成 main
     repo(tmp_path, {"flight": {"reviewer": {"model": "main", "effort": "high"}}})
@@ -89,7 +83,6 @@ def test_routing_rejects_non_model_names(tmp_path):
     assert "只写模型名" in p.stderr and "flight.reviewer" in p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_pin_writes_flight_and_ship(tmp_path):
     # Given: change 的 slices.json（含 gate 与 slices），仓库配置把 flight.executor 设为 opus·medium
     change = repo(tmp_path, {"flight": {"executor": {"model": "opus", "effort": "medium"}}})
@@ -108,7 +101,6 @@ def test_routing_pin_writes_flight_and_ship(tmp_path):
     assert after["gate"] == before["gate"] and after["slices"] == before["slices"]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_resolve_requires_pin(tmp_path):
     # Given: 没有 routing 的 slices.json
     change = repo(tmp_path)
@@ -121,7 +113,6 @@ def test_routing_resolve_requires_pin(tmp_path):
     assert "model-routing.py pin --change-dir" in p.stderr and "重新批准" in p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_resolve_outputs_workflow_args(tmp_path):
     # Given: 已 pin 的 change（仓库配置 flight.executor = opus·medium）
     change = repo(tmp_path, {"flight": {"executor": {"model": "opus", "effort": "medium"}}})
@@ -140,7 +131,6 @@ def test_routing_resolve_outputs_workflow_args(tmp_path):
     assert out["efforts"]["executor"] == "medium"
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_resolve_refuses_env_override(tmp_path):
     # Given: 已 pin 的 change，环境变量 CLAUDE_CODE_EFFORT_LEVEL=high
     change = repo(tmp_path)
@@ -154,7 +144,6 @@ def test_routing_resolve_refuses_env_override(tmp_path):
     assert "CLAUDE_CODE_EFFORT_LEVEL" in p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_routing_get_prefers_pinned(tmp_path):
     # Given: change 钉住时 ship.reviewer 为内建 opus·high；之后仓库配置改为 sonnet·medium
     change = repo(tmp_path)

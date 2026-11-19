@@ -1,0 +1,6 @@
+{
+  "flight": {
+    "executor": {"model": "opus", "effort": "medium"},
+    "executor-large": {"model": "opus", "effort": "medium"}
+  }
+}
