@@ -40,7 +40,6 @@ def func_src(text, name):
     return ast.get_source_segment(text, node), node
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_scaffold_creates_strict_xfail_skeletons(tmp_path):
     # Given: scenario refund-paid-order 映射到尚不存在的 tests/test_new.py::test_alpha
     root, d = repo(tmp_path, {"refund-paid-order": "tests/test_new.py::test_alpha"})
@@ -62,7 +61,6 @@ def test_scaffold_creates_strict_xfail_skeletons(tmp_path):
     assert json.loads(p.stdout)["created"] == ["tests/test_new.py::test_alpha"]
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_scaffold_leaves_existing_functions(tmp_path):
     # Given: tests/test_old.py 已有写好断言的 test_beta；同时映射尚不存在的 test_gamma
     root, d = repo(tmp_path, {"keep-beta": "tests/test_old.py::test_beta", "add-gamma": "tests/test_old.py::test_gamma"})
@@ -81,7 +79,6 @@ def test_scaffold_leaves_existing_functions(tmp_path):
     assert "tests/test_old.py::test_beta" in out["existing"] and "tests/test_old.py::test_gamma" in out["created"], out
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_scaffold_skips_non_python(tmp_path):
     # Given: 一个 scenario 映射到 web/a.test.js::renders
     root, d = repo(tmp_path, {"js-render": "web/a.test.js::renders"})
@@ -95,7 +92,6 @@ def test_scaffold_skips_non_python(tmp_path):
     assert not (root / "web" / "a.test.js").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_gwt_reports_missing_steps_and_placeholders(tmp_path):
     # Given: test_beta 缺 When 注释；test_gamma 仍含占位标记
     root, d = repo(tmp_path, {"keep-beta": "tests/test_g.py::test_beta", "add-gamma": "tests/test_g.py::test_gamma"})
