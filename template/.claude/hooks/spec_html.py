@@ -657,6 +657,33 @@ def render_forecast(change_dir):
            "：" + esc(", ".join(str(c) for c in checks)) if checks else ""))
 
 
+def render_guards(gate):
+    """全局守护与 wave 测试预算（wave-integration-guard D9）：只读计划；都没有 → 空串（旧计划页面不变）。"""
+    gate = gate if isinstance(gate, dict) else {}
+    checks = gate.get("checks")
+    guards = [c for c in (checks if isinstance(checks, list) else [])
+              if isinstance(c, dict) and isinstance(c.get("slice"), str) and c["slice"].strip()]
+    parts = []
+    if guards:
+        rows = "".join('<tr><td>%s</td><td><code>%s</code></td></tr>' % (esc(str(c.get("name", "?"))), esc(c["slice"]))
+                       for c in guards)
+        parts.append('<h3>全局守护</h3><p>每片门禁与每个 wave 合回后都运行</p>'
+                     '<table class="flight-table"><thead><tr><th>检查</th><th>slice 命令</th></tr></thead>'
+                     '<tbody>%s</tbody></table>' % rows)
+    budget = gate.get("wave_test_budget_sec")
+    if isinstance(budget, (int, float)) and not isinstance(budget, bool) and budget > 0:
+        parts.append('<p>wave 集成检查的测试预算 %s 秒</p>' % esc(str(budget)))
+    return "".join(parts)
+
+
+def owns_wide_html(s):
+    """切片的宽通配理由：owns_wide 为 {通配: 理由}；没有 → 空串。"""
+    wide = s.get("owns_wide")
+    if not isinstance(wide, dict) or not wide:
+        return ""
+    return "<br>" + "<br>".join("通配 <code>%s</code> → %s" % (esc(str(k)), esc(str(v))) for k, v in wide.items())
+
+
 TIER_LABELS = {"large": "大片档", "standard": "标准档"}
 
 
@@ -695,7 +722,7 @@ def render_flight(change_dir):
     slice_rows, scenario_rows = [], []
     for s in slices:
         sid = s.get("id", "?")
-        owns_html = "<br>".join(esc(o) for o in (s.get("owns") or []))
+        owns_html = "<br>".join(esc(o) for o in (s.get("owns") or [])) + owns_wide_html(s)
         slice_rows.append(
             '<tr><td class="mono">%s</td><td>%s</td><td>wave %d</td><td>%s</td><td>%s</td><td><code>%s</code></td><td>%s</td></tr>'
             % (esc(sid), inline_md(s.get("title", "")), wave_of.get(sid, 0),
@@ -733,10 +760,10 @@ def render_flight(change_dir):
         '<h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th>'
         '<th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody>%s</tbody></table>%s'
         '<h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th>'
-        '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s%s'
+        '<th>状态</th></tr></thead><tbody>%s</tbody></table>%s%s%s'
         % ("".join(slice_rows), render_scope(data.get("gate"), change_dir,
                                                         [o for s in slices for o in (s.get("owns") or [])]),
-           "".join(scenario_rows), render_forecast(change_dir), timeline_html)
+           "".join(scenario_rows), render_forecast(change_dir), render_guards(data.get("gate")), timeline_html)
     )
 
 

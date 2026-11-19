@@ -302,6 +302,15 @@ artifacts:
       `gate.checks`（可选）：仓库自定义的成对检查，数组，每项
       `{name, baseline, final, timeout_sec}`；baseline 运行 `baseline` 命令
       （为 null 时 baseline 不跑），final 运行 `final` 命令，判定只看退出码。
+      另可带 `slice`（全局守护：baseline、每片门禁与每个 wave 合回后运行；非空
+      字符串，须是秒级命令，进 `plan_sha`）；`gate-checks.json` 里带 `slice` 的
+      检查抄进 `gate.checks` 时连同 `slice` 一起抄。运行契约见
+      `.claude/flight-runner-contract.md` 第 10 节。
+      `gate.wave_test_budget_sec`（可选，正数）：wave 集成检查里重跑受影响测试的
+      预算（秒，缺省 120）；估算超过它时这一半跳过、留给 final。
+      `owns_wide`（切片级，可选）：`{"<owns 里的通配条目>": "<理由>"}`；单条通配
+      展开出多于 20 个现存文件时必须写，lint 打印每条通配的展开数；能列文件就
+      不要用宽通配。
       `gate.checks_skip`（可选）：`{<name>: <理由>}`。openspec 根目录下有
       `gate-checks.json`（仓库默认检查）时，把其中每个检查抄进 `gate.checks`，
       或在 `gate.checks_skip` 写明理由；由 `slice-gate.py lint` 校验。
@@ -378,7 +387,7 @@ artifacts:
 
 
       **Slicing rules**（由 `slice-gate.py lint` 校验；1–9 片、DAG 深度 ≤ 3、同 wave
-      owns 不相交、每片 owns ≤ 12 条、每片 verify 非空）:
+      owns 不相交、每片 owns 条数：标准档 12、大片档 30、每片 verify 非空）:
 
       - 1–9 slices total.
 
@@ -387,7 +396,8 @@ artifacts:
       - Within the same wave (topological layer), no two slices' `owns` globs
       may overlap.
 
-      - Each slice's `owns` has at most 12 entries.
+      - Each slice's `owns` entry count is capped by its turn tier: 标准档 12、大片档 30
+      (write `"turns": "large"` when a small slice genuinely needs more entries).
 
       - Every slice has a non-empty `verify` command.
 

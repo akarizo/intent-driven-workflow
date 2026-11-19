@@ -1,0 +1,160 @@
+{
+  "blocked": [
+    {
+      "slice": "wave3",
+      "kind": "infra",
+      "reason": "merge S3: 冲突文件 template/.claude/hooks/slice-gate.py, tests/test_owns_tiers.py"
+    }
+  ],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4809,
+      "summary": "baseline 沿用 slice 旧记录（reused: True）以及 dir_kept 的三种走向都没有测试钉住，包括执行体在 summary 里申报的那个保守选择：baseline 命令重跑清空了目录，slice 就必须重跑。现有 9 条用例只覆盖首次运行与红的情形。以后改这段时，「本该重跑却沿用了旧绿记录」这种回退不会有任何测试变红。",
+      "fix": "在 tests/test_guard_slice.py（或 test_gate_checks_baseline.py）补三条用例：① 只有 slice 的检查，Δ 为空、目录仍在，第二次 baseline 记 reused 且 runs 不增加；② 同时有 baseline 与 slice 的检查，baseline 命令因 cmd 变化而重跑，slice 也要重跑（runs 增加、记录没有 reused）；③ 共用目录被删后，slice 不沿用旧记录。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 4810,
+      "summary": "沿用 slice 记录只比 strict_delta、旧记录 exit、cmd 和目录这四项，不比 cmd_key 指纹；同一循环里 baseline 命令沿用时还要求 key 相同。_delta 会排除 _ignored 路径和计划文件，所以 slice 命令引用的脚本如果落在这些路径里，内容改了也会沿用旧的绿记录。spec 列出的沿用条件里本来就没有 key，所以这条只是两边不对称（需进一步确认是否值得收紧）。",
+      "fix": "两种做法选一：保持现状，在 design D1 写明 slice 沿用不比指纹的理由；或者在 slice 记录里加 key（cmd_key(root, change_rel, scmd)），沿用时一并比较。后者会改 _interfaces.md 里的记录形状，须同步更新契约。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 1119,
+      "summary": "plan_sha 判断检查是否带 slice 用的是真值（c.get(\"slice\")），_guard_checks / lint 用的是 _nonblank。lint 已经拒掉空白串，所以眼下两边不会分叉，但同一个概念有两种判定写法，以后放宽 lint 时容易漂移。",
+      "fix": "plan_sha 这一行改成 `_nonblank(c.get(\"slice\"))`。不带 slice 的计划算出的 plan_sha 一个字节都不变，钉住旧行为的测试不受影响。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 285,
+      "summary": "spec 第三条 Requirement 明确写了停飞分支（修复的合回失败记 gate 且不合回、G0 两次被拒记 infra、合回 integrator 两次未返回记 infra），但新加的测试一条都没覆盖。9 条 scenario 测试只走到红修复、未返回、G15、G16 四条路径，这几个分支的 kind、理由文案以及 stopAll/waveBlocked 的取值都没有测试钉住；以后改动打错 kind 或漏掉 red 标志，测试不会报错。",
+      "fix": "在 tests/test_wave_workflow.py 补 2～3 条用例：(a) 修复返回绿，integrate:w1:fix 返回 ok:false，断言 blocked 有 wave1 且 kind=gate、理由含修复 commit、waves[0].fix.ok 为假；(b) 修复两次都返回 G0，断言 kind=infra、没有 integrate:w1:fix 派发；(c) integrate:w1:fix 两次抛错，断言 kind=infra（也就是 summary 里申报的偏离）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 286,
+      "summary": "跨片修复的合回 integrator 两次未返回时记的是 kind 'infra'。spec 原文是「修复交回了红结论或合回失败时 kind 为 gate」，执行体在 summary 里申报了这处偏离。integrator 未返回不等于没执行：merge 可能已经做了，只是没交回结构化结果，这时分支里可能已有修复提交，工作流却当未合回处理，还按停飞范围拦掉下游。",
+      "fix": "保留 infra 可以，但建议在理由里加一句「合回状态未知，需人工核对分支是否已含修复提交」；同时在 spec 或 design 里补记这处偏离，免得后续评审把它当成违反 spec。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 296,
+      "summary": "兜底的 else 分支除了接住真正的「修复交回红结论」，也接住了 wf.ok 为真但 wf.commit 为空的情形。后一种情形下理由会写成「跨片修复后仍红：（修复提交 undefined，未合回）」，失败项为空，commit 是 undefined，读起来误导。",
+      "fix": "把 wf.ok && !wf.commit 单列出来，理由写成「修复执行体返回 ok 但没有 commit，无法合回」；或者让 fixed 文案在 wf.failed 为空时退回用 chk.failed，commit 缺失时不拼进理由。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 176,
+      "summary": "pushReview 和 reviewPrompt 被 wavefix 评审复用后，有两处文案仍按切片写：评审未返回时理由是「切片 wavefix1 评审未返回」，评审 prompt 的 evidence 一行仍是「本切片的测试运行留痕」。wavefix 不是切片，PR 读者看了会混淆。",
+      "fix": "pushReview 的理由改成「' + s + ' 评审未返回」（去掉「切片」），或按 s 是否以 wavefix 开头选用词；reviewPrompt 的 evidence 行在 fixOf 为真时改成「本次跨片修复的测试运行留痕」。这两处措辞若被测试钉住，要先 grep tests/。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/openspec/schemas/intent-driven/schema.yaml",
+      "line": 390,
+      "summary": "Slicing rules 抬头把分档说法直接塞进顿号并列里：「同 wave owns 不相交、每片 owns 条数：标准档 12、大片档 30、每片 verify 非空」。冒号后面又接顿号，读起来像「大片档 30」和「每片 verify 非空」是同一层级的并列项，语义含糊；由这条 instruction 生成的 tasks.md 抬头会照抄这种写法。",
+      "fix": "把分档说法用括号包起来，例如「每片 owns 条数按轮次档（标准档 ≤ 12、大片档 ≤ 30）」，仍保留子串「大片档 30」可写成「（标准档 12、大片档 30）」，这样测试照样能匹配，并列结构也清楚。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6866,
+      "summary": "G16 的退出码判定比 final 宽：final（约 4360 行）在 `rc == 1 and not fails` 时判红（pytest 报失败但没收集到任何 FAILED/ERROR 结局，属于异常运行），wave-check 只看 `rc not in (0, 1, 5)`。结果是 rc==1 且一条失败结局都没录到时会静默判绿。切片包写的是「rc == 1 而没有新增失败时是预存红」，这句默认存在预存红的失败结局。全部失败都没录到时是否也该放行，需进一步确认。",
+      "fix": "与 final 对齐：先算出 `fails = {n for n, o in outcomes if o in (\"FAILED\", \"ERROR\")}`，条件改成 `elif rc not in (0, 1, 5) or (rc == 1 and not fails) or \"ERROR collecting\" in text:`，这样 rc==1 且没有任何失败结局时判 G16 红；有预存红结局时照旧放行。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6851,
+      "summary": "锁标签和 summary 用 `args.wave or \"?\"` / `args.of or \"?\"`，传 `--wave 0` 时会显示成 `?`。`_wave_note` 用的是 `is None` 判断（显示 `0`），两处不一致。",
+      "fix": "统一按 `is None` 判断，例如 `\"?\" if args.wave is None else args.wave`，也可以直接复用 `_wave_note` 里的 `q()`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 6868,
+      "summary": "取锁之后，`_run_guards` 或 `_pytest_outcomes` 一旦抛异常就不会执行 `hold.release()`，独占锁要等过期回收。这和 gate / final 的现有写法一样，不算本片新引入的模式；不过 wave-check 在跑受影响测试时持的是独占锁，会挡住其它切片的门禁。",
+      "fix": "把守护和测试段包进 `try: ... finally: hold.release()`，`lock = hold.info` 放在 finally 之后。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 18,
+      "summary": "文件头子命令清单顺手改了无关行的对齐：`waves` 行由 `waves    --change-dir` 变成 `waves   --change-dir`（少 1 个空格），`scope-seed` 行（第 22 行）的 `DIR           DIR/gate-scope.json` 也少了 1 个空格。这两行的语义没变，但列对齐被打乱，属于最小改动范围外的修改。",
+      "fix": "把第 18 行 `waves` 与第 22 行 `scope-seed` 的空格恢复为改动前的宽度，只保留新增的 owns 说明行和 `landed` 行。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 3637,
+      "summary": "cmd_landed 用 `git diff --quiet <sha> -- <change>/slices/<id>.md <change>/specs` 判断规格有没有改。git diff 看不到未跟踪文件，所以在 specs/ 下新建但还没提交的 delta spec 不会让切片失去「已落地」资格（需进一步确认：重新起飞前计划是否一定已提交）。",
+      "fix": "如果重新起飞流程不保证计划工件都已提交，就再跑一次 `git ls-files --others --exclude-standard -- <change>/specs <change>/slices/<id>.md`，有输出时不算落地；如果流程保证已提交，在 docstring 里写明这个前提。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/pr-ship.md",
+      "line": 121,
+      "summary": "「跨片修复」一节只按「waves 里带 fix 的条目」筛选，没有区分 fix.ok。工作流在修复后仍红、或被 G0 拒绝时也会写入 fix（opsx-apply.js:267 的 fixInfo(false) 带的是未合回 / 基点错误的 commit），照这条规则 PR 正文会把从没进分支的 commit 当成已做的跨片修复列出来，人类 reviewer 会被误导。",
+      "fix": "改成「`waves` 里 `fix.ok` 为真的条目列成『## 跨片修复』」；`fix.ok` 为假的条目要么不列，要么单独标注「未合回（集成检查仍红）」，并指向对应的 blocked `wave<i>`。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 73,
+      "summary": "回退路径号称与脚本逐项一致，但停飞规则只写了「仍红」这一种情况，还只区分 G15 和「只有 G16」。对照脚本（opsx-apply.js:288-303）有三处没写：① 修复执行体重派后仍未返回、或合回 integrator 失败 / 未返回，同样算红，记 blocked wave<i>（kind 为 infra 或 gate）；② 停飞范围看的是「最后一次检查」的失败项，修复没交回有效结论时沿用原 check.failed；③ 失败项里没有 G15 时（例如 G6 flight-record）一律只停下游，并不要求「只有 G16」。按现在的文档执行回退路径，遇到这几种情况会没有规则可循，或者和脚本行为不一致。同一段在 SKILL.md:81 也有同样问题。",
+      "fix": "两份文档同改，把末尾改成：「仍红，或修复未返回、合回失败 → 不合回，记 blocked（wave<i>；交回红结论或合回失败为 gate，未返回为 infra）；最后一次集成检查的失败项里有 G15 → 后面的 wave 全部停下并记 blocked（infra）；否则 → 只停依赖本 wave 切片的下游切片」。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/skills/openspec-apply-change/SKILL.md",
+      "line": 81,
+      "summary": "与 opsx-apply.md:73 是同一个缺口（两份镜像）：回退路径漏写修复未返回 / 合回失败时的 blocked 规则，停飞判定写成「只有 G16」，而脚本的实际规则是「没有 G15」。",
+      "fix": "与 opsx-apply.md 同步改写同一句，保持两份文档镜像一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/pr-ship.md",
+      "line": 120,
+      "summary": "上一行仍写着 review-findings.json 由飞行收口写入「{blocked, blocking, deferred, fix}」，而本片已让收口同时写入 `waves`，紧接着的 121 行也在读 `waves`，两行描述的形状对不上。",
+      "fix": "把 120 行括号里的字段清单改成 `{blocked, blocking, deferred, fix, waves}`（注意先 grep tests/ 有没有断言钉住原句）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 268,
+      "summary": "README 说契约文档里有「全局守护」一节（第 10 节），但契约文档里实际的标题是「## 10. 全局守护与 wave 集成检查」，名称不完全一致。另外 wave 集成检查那一条（269 行）列跳过原因时漏了 gate.impacted（slice-gate.py:67 写明配了 gate.impacted 时也会跳过）。",
+      "fix": "指针改成「全局守护与 wave 集成检查」一节；跳过原因里补上「配了 gate.impacted」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_wave_docs.py",
+      "line": 3,
+      "summary": "标记已经去掉，但模块 docstring 还写着「骨架：strict xfail……切片 S5 实现后去掉标记即解锁」，成了过时注释。",
+      "fix": "把 docstring 第 3 行改成说明这些用例已经解锁，或者删掉这句骨架说明。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/openspec/changes/wave-integration-guard/gate-report.md",
+      "line": 11,
+      "summary": "评审对象与合回对象不一致（需进一步确认）：本次审的 7599ac7 不是当前分支 HEAD 的祖先。gate-report 第 11 行与 timeline 第 14 行登记的 S7 门禁通过 commit 是 405bb6c8，48e046c「integrate: S7」合回的也是 405bb6c8。7599ac7 是另一份并行或重试产出的 S7 实现，从未合回。本轮对 7599ac7 的结论（无阻断项）不能直接当作已合回代码的独立评审依据。",
+      "fix": "编排侧核对 S7 的评审记录：若 405bb6c 没有独立 reviewer 记录，对 `git show 405bb6c` 补一次 full 评审（铁律 4），再把评审结论与 gate-report 的 commit 对齐。7599ac7 作为废弃产物在记录中注明即可，不需要修代码。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 681,
+      "summary": "render_guards 里的 esc(c.get(\"name\") or \"?\") 和 owns_wide_html 里的 esc(why) 把计划原值直接传给 html.escape。计划手写出非字符串值时（例如 owns_wide 理由写成数字，或检查 name 写成整数），html.escape 会抛 AttributeError。render_flight 外层没有 try，整页渲染会中断，与切片包「渲染失败不得抛错中断 / 缺数据就不显示」的约定不符。既有的 title、owns 渲染也有同样的弱点，所以记为 LOW。",
+      "fix": "新增的两处改成 esc(str(...))，或在 owns_wide_html / render_guards 里只渲染值为 str 的项（例如 `if isinstance(why, str)`），其余项跳过。"
+    }
+  ],
+  "fix": null
+}

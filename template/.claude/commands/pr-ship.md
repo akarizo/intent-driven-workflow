@@ -57,6 +57,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
      python3 .claude/hooks/slice-gate.py final --change-dir openspec/changes/<name>
      ```
      该理由后面的补跑预告已写明这次是增量还是全量。
+   - reasons 里出现「wave 集成检查红」→ 修复后在 change worktree 里重跑 `python3 .claude/hooks/slice-gate.py wave-check --change-dir openspec/changes/<name>`，再 `ship`。
 
    要不要重跑由 `ship` 的输出决定，模型不自行判断。
 
@@ -117,6 +118,7 @@ description: 端到端送出本次变更：commit → push → 创建 PR/MR → 
      输出非空时追加到正文（不 ready 时是「## 飞行门禁未全绿」+ reasons；有 blocked 切片时附「### 飞行中记 blocked 的切片」并标 `gate` / `infra`）。不要自己改写或删减 reasons。
      输出还可能含「## 测试变更」一节（本次 final 与基线的对账结果，ready 时也可能有）：原样贴入，不改写、不删减。
    - `openspec/changes/<name>/review-findings.json` 存在（飞行收口写入的 `{blocked, blocking, deferred, fix}`）→ 正文追加一段「## 切片评审（未自动修的 MEDIUM/LOW）」逐条列出 `文件:行号 — 摘要 — 修法`，让人类 reviewer 看得见 AI 放过了什么。
+   - `review-findings.json` 的 `waves` 里有带 `fix` 的条目 → 正文追加一段「## 跨片修复」逐条列出 `wave 号 — 修复 commit — 改动文件 — 其中落在所有切片 owns 之外的文件（fix.outside_owns）`；没有就不写这一节。
    - step 2b 有沉淀条目 → 正文追加一段「## 记忆层沉淀」逐条列出 `载体 — 路径 — 动作 — 一行证据`。
    - step 2b 有较大差异条目 → 正文追加一段「## 记忆层：需与你对齐」逐条列出，注明它们**未落盘**，等你在 PR review 时裁决。
 

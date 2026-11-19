@@ -1,0 +1,212 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ]
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "slice-gate.py：检查的 slice 命令（全局守护）——lint 与仓库默认清单对账、plan_sha、baseline 记录、切片门禁的 G15",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_guard_slice.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_guard_slice.py tests/test_gate_checks_lint.py tests/test_gate_checks_baseline.py tests/test_gate_checks_final.py tests/test_slice_gate.py tests/test_gate_lock.py tests/test_slice_gate_baseline_preflight.py tests/test_evidence_shared_gate.py tests/test_plan_hygiene_baseline.py tests/test_tiers_gate.py",
+      "scenarios": [
+        "slice-guards#lint-accepts-slice-command",
+        "slice-guards#lint-requires-slice-declared-by-repo-default",
+        "slice-guards#slice-command-is-part-of-plan-sha",
+        "slice-guards#baseline-runs-and-records-slice-command",
+        "slice-guards#baseline-red-when-slice-command-fails",
+        "slice-guards#gate-runs-guards-in-slice-phase",
+        "slice-guards#gate-reds-g13-when-guard-fails",
+        "slice-guards#gate-g13-needs-green-baseline-record",
+        "slice-guards#gate-without-guards-unchanged"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "slice-gate.py：wave-check 子命令（守护 + 受影响的测试、预算与跳过、--fix-base）、record 认 wave 行、ship 读 wave 行",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_wave_check.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_wave_check.py tests/test_guard_slice.py tests/test_ship_verdict.py tests/test_ship_forecast.py tests/test_final_incremental.py tests/test_final_tests_only.py tests/test_gate_checks_final.py tests/test_gate_lock.py tests/test_ledger_final.py tests/test_evidence_shared_gate.py tests/test_slice_gate.py tests/test_flight_doctor.py",
+      "scenarios": [
+        "wave-check#wave-check-runs-guards-and-impacted-tests",
+        "wave-check#wave-check-reds-on-new-test-failure",
+        "wave-check#wave-check-reds-on-guard",
+        "wave-check#wave-check-skips-tests-without-anchor",
+        "wave-check#wave-check-skips-tests-over-budget",
+        "wave-check#wave-check-leaves-anchors-and-ledger-alone",
+        "wave-check#wave-check-fix-base-lists-files-outside-owns",
+        "wave-check#record-writes-back-wave-row",
+        "wave-check#ship-drafts-on-red-wave-row"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "slice-gate.py：owns 条数上限随轮次档、宽通配须写理由并打印展开数；landed 子命令列出已落地的切片",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/hooks/slice-gate.py",
+        "tests/test_owns_tiers.py",
+        "tests/test_landed.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_owns_tiers.py tests/test_landed.py tests/test_turn_tiers.py tests/test_slice_gate.py tests/test_gate_scope_lint.py tests/test_gate_checks_lint.py tests/test_slice_gate_baseline_preflight.py tests/test_spec_html_turns.py tests/test_wave_check.py",
+      "scenarios": [
+        "owns-tiers#owns-cap-follows-turn-tier",
+        "owns-tiers#wide-glob-needs-reason",
+        "owns-tiers#lint-prints-glob-expansion",
+        "owns-tiers#approved-change-not-reddened-by-wide-rule",
+        "retakeoff-landed#landed-lists-green-merged-slices",
+        "retakeoff-landed#landed-excludes-slice-whose-plan-changed"
+      ]
+    },
+    {
+      "id": "S4",
+      "title": "工作流与 agent 定义：合回派发带 wave 集成检查、红时派跨片修复并合回、停飞范围、已落地切片不重派；integrator 与执行体定义各补一段",
+      "packet": "slices/S4.md",
+      "owns": [
+        "template/.claude/workflows/opsx-apply.js",
+        "template/.claude/agents/integrator.md",
+        "template/.claude/agents/slice-executor.md",
+        "tests/test_wave_workflow.py",
+        "tests/test_agents_workflow.py",
+        "tests/test_workflow_resume.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_wave_workflow.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_approval_gate.py tests/test_ship_verdict.py tests/test_template_docs.py tests/test_submodule_docs.py tests/test_tiers_docs.py tests/test_goal_takeoff_docs.py",
+      "scenarios": [
+        "wave-fix#workflow-asks-integrator-for-wave-check",
+        "wave-fix#workflow-skips-when-integrator-has-no-check",
+        "wave-fix#integrator-contract-describes-wave-check",
+        "wave-fix#workflow-dispatches-cross-slice-fix-on-red",
+        "wave-fix#executor-contract-describes-cross-slice-fix",
+        "wave-fix#workflow-stops-all-when-guard-still-red",
+        "wave-fix#workflow-stops-only-dependents-when-tests-red",
+        "wave-fix#workflow-retries-fix-noreturn-then-blocks",
+        "retakeoff-landed#workflow-skips-landed-slices"
+      ]
+    },
+    {
+      "id": "S5",
+      "title": "文档（起飞侧）：opsx-apply 命令与同名 skill 镜像集成检查、跨片修复与 landed；pr-ship 列出跨片修复；README",
+      "packet": "slices/S5.md",
+      "owns": [
+        "template/.claude/commands/opsx-apply.md",
+        "template/.claude/skills/openspec-apply-change/SKILL.md",
+        "template/.claude/commands/pr-ship.md",
+        "README.md",
+        "tests/test_wave_docs.py",
+        "tests/test_agents_workflow.py"
+      ],
+      "deps": [
+        "S2",
+        "S4"
+      ],
+      "verify": "python3 -m pytest -q tests/test_wave_docs.py tests/test_agents_workflow.py tests/test_workflow_resume.py tests/test_resume_docs.py tests/test_template_docs.py tests/test_incremental_final_docs.py tests/test_goal_takeoff_docs.py tests/test_lock_docs.py tests/test_runner_contract_docs.py tests/test_scope_docs.py tests/test_ship_verdict.py tests/test_submodule_docs.py tests/test_ledger_docs.py tests/test_ship_memory_docs.py tests/test_ship_rerun_docs.py tests/test_docs_iron_rules.py tests/test_gate_checks_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_plan_hygiene_docs.py tests/test_baseline_incremental_docs.py tests/test_clean_after_merged_docs.py tests/test_glossary_docs.py tests/test_install.py",
+      "scenarios": [
+        "wave-fix#apply-docs-mirror-wave-check-and-fix",
+        "wave-fix#pr-ship-doc-lists-cross-slice-fixes",
+        "wave-fix#readme-describes-wave-guard"
+      ]
+    },
+    {
+      "id": "S6",
+      "title": "文档（规划侧）：运行器契约新增「全局守护与 wave 集成检查」一节；opsx-propose 命令与同名 skill、schema 说明 slice、owns_wide、预算与 owns 分档",
+      "packet": "slices/S6.md",
+      "owns": [
+        "template/.claude/flight-runner-contract.md",
+        "template/.claude/commands/opsx-propose.md",
+        "template/.claude/skills/openspec-propose/SKILL.md",
+        "template/openspec/schemas/intent-driven/schema.yaml",
+        "tests/test_guard_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_guard_docs.py tests/test_gate_checks_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_ledger_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_scope_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_template_docs.py tests/test_baseline_incremental_docs.py tests/test_goal_takeoff_docs.py tests/test_approval_gate.py tests/test_incremental_final_docs.py tests/test_glossary_docs.py tests/test_install.py tests/test_flight_doctor.py tests/test_runner_statement.py",
+      "scenarios": [
+        "slice-guards#contract-describes-guards-and-wave-check",
+        "slice-guards#propose-docs-describe-guards-and-owns-tiers"
+      ]
+    },
+    {
+      "id": "S7",
+      "title": "看得见：spec_html.py 审批页标出全局守护、预算与宽通配理由；flight-doctor.py cost 汇总 wave 集成检查",
+      "packet": "slices/S7.md",
+      "owns": [
+        "template/.claude/hooks/flight-doctor.py",
+        "template/.claude/hooks/spec_html.py",
+        "tests/test_wave_surfaces.py"
+      ],
+      "deps": [
+        "S2"
+      ],
+      "verify": "python3 -m pytest -q tests/test_wave_surfaces.py tests/test_flight_doctor.py tests/test_flight_doctor_cost_lock.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_surfaces.py tests/test_flight_doctor_tests.py tests/test_spec_html.py tests/test_spec_html_scope.py tests/test_spec_html_turns.py tests/test_spec_html_glossary.py tests/test_scope_contract_v2.py tests/test_ship_forecast.py tests/test_inert_reconcile.py",
+      "scenarios": [
+        "slice-guards#spec-html-shows-guards-and-wide-owns",
+        "wave-check#cost-reports-wave-checks"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "slice-guards#lint-accepts-slice-command": "tests/test_guard_slice.py::test_lint_accepts_slice_command",
+    "slice-guards#lint-requires-slice-declared-by-repo-default": "tests/test_guard_slice.py::test_lint_requires_slice_declared_by_repo_default",
+    "slice-guards#slice-command-is-part-of-plan-sha": "tests/test_guard_slice.py::test_slice_command_is_part_of_plan_sha",
+    "slice-guards#baseline-runs-and-records-slice-command": "tests/test_guard_slice.py::test_baseline_runs_and_records_slice_command",
+    "slice-guards#baseline-red-when-slice-command-fails": "tests/test_guard_slice.py::test_baseline_red_when_slice_command_fails",
+    "slice-guards#gate-runs-guards-in-slice-phase": "tests/test_guard_slice.py::test_gate_runs_guards_in_slice_phase",
+    "slice-guards#gate-reds-g13-when-guard-fails": "tests/test_guard_slice.py::test_gate_reds_g13_when_guard_fails",
+    "slice-guards#gate-g13-needs-green-baseline-record": "tests/test_guard_slice.py::test_gate_g13_needs_green_baseline_record",
+    "slice-guards#gate-without-guards-unchanged": "tests/test_guard_slice.py::test_gate_without_guards_unchanged",
+    "wave-check#wave-check-runs-guards-and-impacted-tests": "tests/test_wave_check.py::test_wave_check_runs_guards_and_impacted_tests",
+    "wave-check#wave-check-reds-on-new-test-failure": "tests/test_wave_check.py::test_wave_check_reds_on_new_test_failure",
+    "wave-check#wave-check-reds-on-guard": "tests/test_wave_check.py::test_wave_check_reds_on_guard",
+    "wave-check#wave-check-skips-tests-without-anchor": "tests/test_wave_check.py::test_wave_check_skips_tests_without_anchor",
+    "wave-check#wave-check-skips-tests-over-budget": "tests/test_wave_check.py::test_wave_check_skips_tests_over_budget",
+    "wave-check#wave-check-leaves-anchors-and-ledger-alone": "tests/test_wave_check.py::test_wave_check_leaves_anchors_and_ledger_alone",
+    "wave-check#wave-check-fix-base-lists-files-outside-owns": "tests/test_wave_check.py::test_wave_check_fix_base_lists_files_outside_owns",
+    "wave-check#record-writes-back-wave-row": "tests/test_wave_check.py::test_record_writes_back_wave_row",
+    "wave-check#ship-drafts-on-red-wave-row": "tests/test_wave_check.py::test_ship_drafts_on_red_wave_row",
+    "owns-tiers#owns-cap-follows-turn-tier": "tests/test_owns_tiers.py::test_owns_cap_follows_turn_tier",
+    "owns-tiers#wide-glob-needs-reason": "tests/test_owns_tiers.py::test_wide_glob_needs_reason",
+    "owns-tiers#lint-prints-glob-expansion": "tests/test_owns_tiers.py::test_lint_prints_glob_expansion",
+    "owns-tiers#approved-change-not-reddened-by-wide-rule": "tests/test_owns_tiers.py::test_approved_change_not_reddened_by_wide_rule",
+    "retakeoff-landed#landed-lists-green-merged-slices": "tests/test_landed.py::test_landed_lists_green_merged_slices",
+    "retakeoff-landed#landed-excludes-slice-whose-plan-changed": "tests/test_landed.py::test_landed_excludes_slice_whose_plan_changed",
+    "wave-fix#workflow-asks-integrator-for-wave-check": "tests/test_wave_workflow.py::test_workflow_asks_integrator_for_wave_check",
+    "wave-fix#workflow-skips-when-integrator-has-no-check": "tests/test_wave_workflow.py::test_workflow_skips_when_integrator_has_no_check",
+    "wave-fix#integrator-contract-describes-wave-check": "tests/test_wave_workflow.py::test_integrator_contract_describes_wave_check",
+    "wave-fix#workflow-dispatches-cross-slice-fix-on-red": "tests/test_wave_workflow.py::test_workflow_dispatches_cross_slice_fix_on_red",
+    "wave-fix#executor-contract-describes-cross-slice-fix": "tests/test_wave_workflow.py::test_executor_contract_describes_cross_slice_fix",
+    "wave-fix#workflow-stops-all-when-guard-still-red": "tests/test_wave_workflow.py::test_workflow_stops_all_when_guard_still_red",
+    "wave-fix#workflow-stops-only-dependents-when-tests-red": "tests/test_wave_workflow.py::test_workflow_stops_only_dependents_when_tests_red",
+    "wave-fix#workflow-retries-fix-noreturn-then-blocks": "tests/test_wave_workflow.py::test_workflow_retries_fix_noreturn_then_blocks",
+    "retakeoff-landed#workflow-skips-landed-slices": "tests/test_wave_workflow.py::test_workflow_skips_landed_slices",
+    "wave-fix#apply-docs-mirror-wave-check-and-fix": "tests/test_wave_docs.py::test_apply_docs_mirror_wave_check_and_fix",
+    "wave-fix#pr-ship-doc-lists-cross-slice-fixes": "tests/test_wave_docs.py::test_pr_ship_doc_lists_cross_slice_fixes",
+    "wave-fix#readme-describes-wave-guard": "tests/test_wave_docs.py::test_readme_describes_wave_guard",
+    "slice-guards#contract-describes-guards-and-wave-check": "tests/test_guard_docs.py::test_contract_describes_guards_and_wave_check",
+    "slice-guards#propose-docs-describe-guards-and-owns-tiers": "tests/test_guard_docs.py::test_propose_docs_describe_guards_and_owns_tiers",
+    "slice-guards#spec-html-shows-guards-and-wide-owns": "tests/test_wave_surfaces.py::test_spec_html_shows_guards_and_wide_owns",
+    "wave-check#cost-reports-wave-checks": "tests/test_wave_surfaces.py::test_cost_reports_wave_checks"
+  }
+}
