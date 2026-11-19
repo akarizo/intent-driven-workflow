@@ -87,8 +87,10 @@ metadata:
    python3 .claude/hooks/session-decompose.py --session <当前会话 jsonl，取 ~/.claude/projects/<slug>/ 下最新> --workflow <Workflow 返回的 Transcript dir> --expect-models '<.flight 里的 models>'
    python3 .claude/hooks/timeline.py report --change-dir openspec/changes/<name>
    python3 .claude/hooks/flight-doctor.py cost --change-dir openspec/changes/<name>
+   python3 .claude/hooks/slice-gate.py reap --change-dir openspec/changes/<name>
    ```
    `cost` 在 timeline report 之后运行，原样打印本 change 的全量 / 增量次数与每次全量的原因归因（必要 / 可避免），恒 exit 0。
+   `reap` 回收本次飞行的临时 worktree：已落地的直接删，作废尝试先归档到 `refs/flight/<change>/attic/<目录名>` 再删（可用 `git worktree add <路径> <ref>` 找回），锁定的不碰；原样打印它在 timeline 里记下的那一行「回收 N 个 · 释放 X MB · 归档 M 个」。恒 exit 0，不影响收口结论；报 `invalid choice`（hooks 未升级）时跳过，照常往下。
    `--expect-models` 机械对账：非 0 → 铁律 11 违规，收口报告点名不符的 agent，并把它作为一条 `severity: HIGH` 追加进 `review-findings.json.blocking`，由 `ship` 机械判 draft。打印飞行记录（含各 agent 实际模型）；把 `{blocked, blocking, deferred, fix}` 与 `waves`（每个 wave 的集成检查结论与跨片修复）原样写入 `openspec/changes/<name>/review-findings.json`（`blocked` 带 `kind: gate | infra`）；删除 `.flight`；跑 `python3 .claude/hooks/slice-gate.py ship --change-dir openspec/changes/<name>`（只读 gate-report.md 每切片最新行 + final 对齐 HEAD + blocking；退出 0 ready / 1 draft；`final 过期` → 重跑 final 再 ship；同树会秒回：代码树、计划、命令都没变且上次绿就沿用结论；内容变了走增量，只重跑受影响的测试；reasons 里出现「wave 集成检查红」→ 修复后重跑 `slice-gate.py wave-check` 再 `ship`）；把门禁绿的切片在 `tasks.md` 里勾选；飞行记录文件单独 `chore(flight)` commit。
 
 6. **不问，直接进入 `/pr-ship`**

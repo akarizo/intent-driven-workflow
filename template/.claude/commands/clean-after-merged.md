@@ -37,16 +37,18 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 
 4. **汇报**
 
-   打印 JSON 里的 `done` 与 `failed`。`manual` 里的命令原样放进一个 ```` ```bash ```` 代码块交用户执行，按原因标记逐条加一行中文说明：
+   打印 JSON 里的 `done` 与 `failed`。`manual` 里的命令原样放进一个 ```` ```bash ```` 代码块交用户执行，按原因标记逐条加一行中文说明（`landed` / `dead-attempt` 也会出现在 safe 档的原因里，供核对）：
 
-   | 原因标记 | 说明 |
-   | --- | --- |
-   | `content` | squash 合并：内容已在 target，但提交不是祖先，需 `git branch -D` |
-   | `unpushed-submodule` | 子仓库有只存在于该 worktree 的提交，先推送子仓再删 |
-   | `dirty` | worktree 有未提交改动，先看清改动再决定 |
-   | `locked` | worktree 被锁定，确认没有运行中的 agent |
-   | `outside` | worktree 在仓库目录外，确认后再删 |
-   | 远端分支 | `git push <R> --delete <branch>`，确认后自己执行 |
+| 原因标记 | 说明 |
+| --- | --- |
+| `content` | squash 合并：内容已在 target，但提交不是祖先，需 `git branch -D` |
+| `unpushed-submodule` | 子仓库有只存在于该 worktree 的提交，先推送子仓再删 |
+| `dirty` | worktree 有未提交改动，先看清改动再决定 |
+| `locked` | worktree 被锁定，确认没有运行中的 agent |
+| `outside` | worktree 在仓库目录外，确认后再删 |
+| `landed` | 临时 worktree 的提交已被 merge 进另一个本地分支（如 change 分支），删目录不丢内容 |
+| `dead-attempt` | 属于已落地 / 已归档 change 的作废尝试；有自己分支的进 safe，游离 HEAD 的进 manual（删了会丢提交） |
+| 远端分支 | `git push <R> --delete <branch>`，确认后自己执行 |
 
 5. **验证**
 
