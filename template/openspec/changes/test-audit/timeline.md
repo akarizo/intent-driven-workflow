@@ -15,3 +15,7 @@
 2026-11-19T02:51:48Z	gate	S7 ok
 2026-11-19T02:51:56Z	integrate	wave 3
 2026-11-19T02:53:56Z	wave-check	wave 3/3 · 测试 115.7s（39 个文件） · 排队 0.0s · 负载 3.7→5.7/18 ok
+2026-11-19T03:09:46Z	fix	blocking=2
+2026-11-19T03:09:46Z	review	findings=25 blocking=2 deferred=23
+2026-11-19T03:09:46Z	final	同树沿用 e220ffb01e ok
+2026-11-19T03:09:48Z	apply-done	blocked=0 blocking=2
