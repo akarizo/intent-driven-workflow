@@ -90,3 +90,16 @@ def test_compare_unconfirmed_when_unjudged(git_repo, tmp_path):
     # Then: 判不全时不说达标：退出 3 并写明未能确认；之前的体检读不了 → 退出 2
     assert p.returncode == 3 and "未能确认" in p.stdout, p.stdout + p.stderr
     assert bad.returncode == 2, bad.stdout + bad.stderr
+
+
+def test_compare_category_filter_keeps_unjudged(git_repo, tmp_path):
+    # Given: 目标 A 已不在不合规项里、没有新增；但 hooks 有一个测试文件没有测量
+    repo_now(git_repo, {"test_a": 1.0}, extra_files=("tests/integration/hooks/test_h2.py",))
+    prev = before(tmp_path / "before.json", A)
+    pl = plan(tmp_path / "plan.json", {A: {"action": "speedup"}})
+
+    # When: 带 --compare / --plan，并按文档带上同样的 --category 复核
+    p, _ = audit(git_repo, "--compare", prev, "--plan", pl, "--category", "region-slow")
+
+    # Then: 范围级未判不被 --category 滤掉：仍退出 3、写明未能确认，不说整改达标
+    assert p.returncode == 3 and "未能确认" in p.stdout, p.stdout + p.stderr

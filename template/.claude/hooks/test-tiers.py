@@ -804,8 +804,9 @@ def emit_audit(args, rep, prev=None, plan_items=None):
     if args.scope:  # 没有分层文件与全局未判对每个范围都成立，不受 --scope 影响
         items = [it for it in items if it["scope"] in args.scope or it["id"] in AUDIT_GLOBAL_IDS]
         rep["scopes"] = {sc: v for sc, v in rep["scopes"].items() if sc in args.scope}
-    if args.category:
-        items = [it for it in items if it["category"] in args.category]
+    if args.category:  # 未判与全局条目不受 --category 影响：没量到不能因筛选变成合规
+        items = [it for it in items
+                 if it["category"] in args.category or it["level"] == "unjudged" or it["id"] in AUDIT_GLOBAL_IDS]
     counts = {lv: sum(1 for it in items if it["level"] == lv) for lv in LEVEL_TEXT}
     by_cat = {}
     for it in items:

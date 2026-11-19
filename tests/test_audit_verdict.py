@@ -98,3 +98,15 @@ def test_audit_scope_keeps_global_entries(git_repo):
     assert p1.returncode == 3 and out1["verdict"] == "unjudged" and "unjudged:no-measure" in ids(out1), out1
     assert "unjudged:ledger" in ids(out2) and out2["counts"]["unjudged"] >= 1, out2
     assert p3.returncode == 1 and out3["verdict"] == "violations" and "no-tiers:" in ids(out3), out3
+
+
+def test_audit_category_keeps_unjudged_entries(git_repo):
+    # Given: 分层合规、每个测试文件恰属一层，本机没有账本也没有探针
+    setup(git_repo, tiers(hooks_budget={"case_sec": 5}), extra_files=(UF, HF), ledger=False)
+
+    # When: 只取 region-slow 类别体检
+    p1, out1 = audit(git_repo, "--json", "--no-ledger", "--category", "region-slow")
+
+    # Then: 未判不被 --category 滤掉——没量到不说合规
+    assert out1 is not None, p1.stdout + p1.stderr
+    assert p1.returncode == 3 and out1["verdict"] == "unjudged" and "unjudged:no-measure" in ids(out1), out1
