@@ -203,3 +203,5 @@ G12 照常校验。非 pytest 部件按退出码判，不做逐条失败差分�
 - 测试账本按分层文件给每条用例归层（`unit` 或区域名），没有分层文件时账本不分层（层记 `null`）；细则见 `.claude/flight-runner-contract.md` 第 9 节。
 
 写了 `budget` 后，门禁按账本判单条与总量（单元层 G10 / G14 判红，集成层 G13 只对本 change 新增的超线用例判红，其余与区域总量只警告），预算或放行相对基线的改动进 PR 正文的「## 测试变更」；细则见 `.claude/flight-runner-contract.md` 第 10 节。
+
+建层之后的例行体检用 `python3 .claude/hooks/test-tiers.py audit`（只读、不跑测试），要把不合规项改到合规走 `/test-audit`；判据见 `.claude/flight-runner-contract.md`「测试套件合规标准」一节。

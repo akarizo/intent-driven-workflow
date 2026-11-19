@@ -212,3 +212,79 @@ baseline 与 final 每次跑测试都留一份逐用例账本，收口时与基�
 - **要快**：它在每片门禁里跑，应当是秒级的；`timeout_sec` 照常生效，超时即红。
 - **wave 集成检查的测试那一半**：按依赖图只重跑受影响的测试（与增量 final 同一选法），新增失败记 `G16 wave test`。以下情况跳过并在时间线写明原因，不退化成全量：没有可用锚点；估算耗时超过 `gate.wave_test_budget_sec`（缺省 120 秒，留给 final）；配了分层文件或 `gate.impacted`。运行 `gate.test` 时 `GATE_PHASE` 同样是 `wave`。
 - **不做什么**：集成检查不写锚点、不写测试账本。
+
+## 12. 测试套件合规标准
+
+测试套件「合规」的明文判据。`test-tiers.py audit` 按它体检，`/test-audit` 按它整改；类别、规则号、去向与脚本常量 `AUDIT_RULES`（`test-tiers.py`）、`ACTIONS`（`test-audit.py`）一字不差，由测试对账。
+
+- **规则**：
+
+  | 规则 | 合规判据 | 数据来源 |
+  |---|---|---|
+  | R1 | openspec 根有合法的分层文件 | 文件 |
+  | R2 | 每个测试文件恰属一层（部件形态：恰属一个部件、在该部件内恰落一层） | 测试文件清单 |
+  | R3 | 单元层用例不碰真实文件、子进程、网络 | 探针记录 |
+  | R4 | 单元层用例不超线（缺省 3 秒；有效放行按放行上限） | 测量 |
+  | R5 | 每个集成区域写了单条上限 `budget.case_sec` | 分层文件 |
+  | R6 | 集成区域用例不超线（有效放行按放行上限） | 测量 |
+  | R7 | 写了总量预算的范围，合计不超预算 | 测量 |
+  | R8 | 放行条目有效且有边界：所指文件还在、未过期、有 `limit_sec` 与 `expires` | 分层文件 |
+
+- **体检**：`python3 .claude/hooks/test-tiers.py audit` 只读、**不跑测试**、不改文件（`--out` 除外）。
+  - 读：分层文件、测试文件清单（git 跟踪与未忽略）、最近一次测量——测试账本（第 9 节），可叠加 `test-tiers.py probe --json` 的结果（`--probe`，覆盖账本里同一用例的耗时并带触碰记录）；
+  - 账本的选取：`--ledger` > `--change-dir` 的收口账本（没有则基线账本）> 本机 `at` 最新的一份；`--no-ledger` 不读；
+  - 每条用例按当前分层文件由所在文件重新归层；所在文件已不存在的丢弃，计入 `source.dropped`；
+  - 参数：`--change-dir` / `--ledger` / `--no-ledger` / `--probe` / `--scope` / `--category` / `--top` / `--json` / `--out` / `--compare` / `--plan`。
+- **类别**：
+
+  | 类别 | 级别 | 规则 | 判据 | 可选去向 |
+  |---|---|---|---|---|
+  | `no-tiers` | 不合规 | R1 | 没有分层文件 | 无（先跑 `/test-tiers`） |
+  | `layering` | 不合规 | R2 | 测试文件未归层、匹配多层、不属于任何部件或属于多个部件 | `move` / `retier` |
+  | `unit-impure` | 不合规 | R3 | 探针记录里单元层用例有触碰 | `purify` / `move` / `split` |
+  | `unit-slow` | 不合规 | R4 | 单元层用例超线 | `speedup` / `move` / `allow` |
+  | `no-case-limit` | 不合规 | R5 | 集成区域没写 `budget.case_sec` | `budget` |
+  | `region-slow` | 不合规 | R6 | 集成区域用例超线 | `speedup` / `allow` / `delete` |
+  | `total-over` | 不合规 | R7 | 写了 `total_sec` 的范围合计超预算 | `speedup` / `delete` / `budget` |
+  | `allow-stale` | 不合规 | R8 | 放行所指的测试文件已不存在 | `drop-allow` |
+  | `allow-expired` | 不合规 | R8 | 放行已过期 | `allow` / `speedup` / `move` / `drop-allow` |
+  | `allow-unbounded` | 不合规 | R8 | 未过期的放行缺 `limit_sec` 或缺 `expires` | `allow` / `drop-allow` |
+  | `allow-soon` | 提示 | — | 放行 14 天内到期 | 无 |
+  | `allow-unneeded` | 提示 | — | 有测量且耗时已回到线内的有效放行 | `drop-allow` |
+  | `pure-in-region` | 提示 | — | 探针显示区域文件里有无触碰且低于单元层线的用例 | `move` / `split` |
+  | `purity-unchecked` | 提示 | — | 没有探针结果，纯度未在体检里核对 | 无 |
+  | `gwt-missing` | 提示 | — | Python 用例缺 Given / When / Then 注释的条数（只计数） | 无 |
+  | `unjudged` | 未判 | — | 没有测量、来源账本不完整或来自选测、某范围有测试文件没有测量或无耗时的用例超过一成 | 无 |
+
+  - 条目 id = `<类别>:<键>`，跨两次体检稳定；一条放行只归入最靠前的一个放行类别；
+  - 未判的范围不出 `total-over`，已量到的单条超线照常列出；提示不影响结论。
+- **退出码**：
+
+  | 码 | 含义 |
+  |---|---|
+  | `0` | 合规 |
+  | `1` | 有不合规项 |
+  | `2` | 输入不可用（分层文件不合法、账本 / 探针 / change 目录读不了） |
+  | `3` | 没有不合规项，但有未判项 |
+
+  - 带 `--compare`（再加 `--plan` 取本轮目标）：有新增不合规项或目标未解决 → `1`；否则有未判项 → `3`（未能确认）；否则 `0`。没排进本轮的老债不算失败。
+- **体检与门禁的区别**：门禁回答「这次变更有没有变坏」，体检回答「离标准多远」。集成层**老债**（G13）与区域总量超预算，门禁只警告（第 10 节），体检计为不合规。
+- **去向与轨道**：
+
+  | 去向 | 做什么 | 轨道 |
+  |---|---|---|
+  | `move` | 整文件搬到另一层的目录 | 命令内执行 |
+  | `split` | 把一条用例原样拆到另一个文件 | 命令内执行 |
+  | `retier` | 改分层文件的 `paths` / 部件归属 | 命令内执行 |
+  | `budget` | 写或调预算 | 命令内执行 |
+  | `drop-allow` | 删掉失效的放行条目 | 命令内执行 |
+  | `allow` | 放行，或给放行补上限与期限 | 交人放行（人类原话 + `test-tiers.py allow-slow`） |
+  | `speedup` / `purify` / `delete` | 提速、改纯、删用例 | 转 change（清单交 `/opsx-propose`） |
+  | `keep` | 本轮不处理 | 须写理由 |
+
+- **整改护栏**（`python3 .claude/hooks/test-audit.py verify`，对着相对 `--base` 的 git 改动核对）：
+  1. **改动范围**：只许测试文件、分层文件、openspec 根之下的文件与稿里 `support`；命中区域 `covers` 判「改了被测代码」，`support` 不能豁免；
+  2. **用例与断言不变**：按 `类名.函数名` 比较两边的用例集合、断言与参数化，跨文件移动不算改动；
+  3. **分层文件的改动与稿一致**：放行增改 ↔ `allow`、放行删除 ↔ `drop-allow`、预算放宽 ↔ `budget`，对不上判稿外；
+  4. **核对不了的如实列出**：非 Python 测试文件、解析失败的文件进「未核对」，不判失败。
+- 体检与整改的完整流程见 `.claude/commands/test-audit.md`（`/test-audit`）。
