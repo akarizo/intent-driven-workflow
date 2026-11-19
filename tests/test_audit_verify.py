@@ -4,11 +4,7 @@
 骨架：strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。"""
 import json
 
-import pytest
-
 from conftest import commit_all, run_hook, write
-
-PENDING = pytest.mark.xfail(strict=True, reason="change test-audit S5 未实现")
 
 ONE = "def test_one():\n    # Given: 无\n    # When: 无\n    # Then: 恒真\n    assert 1 + 1 == 2\n"
 TWO = "def test_two(tmp_path):\n    # Given: 无\n    # When: 写文件\n    # Then: 读回\n    (tmp_path / 'f').write_text('x')\n    assert (tmp_path / 'f').read_text() == 'x'\n"
@@ -92,7 +88,6 @@ def verify(repo, tmp_path, base, plan, name="plan.json"):
     return p, out
 
 
-@PENDING
 def test_verify_passes_pure_moves(git_repo, tmp_path):
     # Given: 基线里 tests/unit/test_a.py 有两条用例；之后把 test_two 原样拆到区域 hooks 下的新文件
     base = base_repo(git_repo)
@@ -107,7 +102,6 @@ def test_verify_passes_pure_moves(git_repo, tmp_path):
     assert out["ok"] is True and out["violations"] == [] and out["changed"]["tests"] == 2, out
 
 
-@PENDING
 def test_verify_flags_source_changes(git_repo, tmp_path):
     # Given: 拆文件的同时还改了 src/a.py（命中区域 hooks 的 covers）、新增 tools/helper.py 与 tests/conftest.py；
     #        稿的 support 只写了 tests/conftest.py 与 src/**
@@ -129,7 +123,6 @@ def test_verify_flags_source_changes(git_repo, tmp_path):
     assert not any("tests/conftest.py" in x for x in v) and "tests/conftest.py" in out["changed"]["support"], out
 
 
-@PENDING
 def test_verify_flags_assert_and_case_changes(git_repo, tmp_path):
     # Given: 基线里 tests/unit/test_b.py 有 test_x / test_y / test_z（三组参数）；之后搬到区域 hooks，同时
     #        test_x 的断言改了、test_y 删了、test_z 少了一组参数、新加了 test_w
@@ -148,7 +141,6 @@ def test_verify_flags_assert_and_case_changes(git_repo, tmp_path):
         assert any(word in x and name in x for x in v), (word, name, v)
 
 
-@PENDING
 def test_verify_flags_unplanned_budget_and_allow_changes(git_repo, tmp_path):
     # Given: 分层文件相对基线：hooks 的总量预算从 100 秒放宽到 200 秒，放行名单少了 K_OLD、多了 K_NEW
     base = base_repo(git_repo, tiers(allow={K_OLD: ENTRY}))
@@ -170,7 +162,6 @@ def test_verify_flags_unplanned_budget_and_allow_changes(git_repo, tmp_path):
     assert p2.returncode == 0 and planned is not None and planned["ok"] is True, p2.stdout + p2.stderr
 
 
-@PENDING
 def test_verify_lists_non_python_files_as_unchecked(git_repo, tmp_path):
     # Given: 改动里有一个非 Python 的测试文件与一个语法错误的 Python 测试文件
     base = base_repo(git_repo)
