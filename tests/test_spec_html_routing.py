@@ -1,8 +1,6 @@
 """审批页显示钉住的模型路由（scenario: spec-html-routing#spec-html-shows-pinned-routing、#spec-html-warns-missing-routing，共 2 条）。
-骨架：strict xfail，断言是真实的；切片 S4 实现后去掉标记即解锁。"""
+切片 S4 已解锁。"""
 import json
-
-import pytest
 
 from conftest import write
 from test_spec_html import artifacts, render
@@ -27,7 +25,6 @@ def row(html, key):
     return next(seg for seg in html.split("<tr>") if key in seg)
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_spec_html_shows_pinned_routing(tmp_path):
     # Given: slices.json 含 routing（flight.executor opus·medium、flight.integrator sonnet·low）
     change = artifacts(tmp_path / "openspec" / "changes" / "c")
@@ -45,7 +42,6 @@ def test_spec_html_shows_pinned_routing(tmp_path):
     assert "sonnet" in it and "low" in it, it
 
 
-@pytest.mark.xfail(strict=True, reason="S4 未实现")
 def test_spec_html_warns_missing_routing(tmp_path):
     # Given: 没有 routing 的 slices.json
     change = artifacts(tmp_path / "openspec" / "changes" / "c")
