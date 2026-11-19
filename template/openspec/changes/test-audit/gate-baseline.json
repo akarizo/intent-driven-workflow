@@ -1,15 +1,12 @@
 {
-  "commit": "780a686a2c4f1bbea953f60db76079c3d4a77d0c",
-  "at": "2026-11-18T13:25:09Z",
+  "commit": "bb2e52420e259b1919a8ad420ab763729f47ba7e",
+  "at": "2026-11-19T02:07:59Z",
   "plan_sha": "40b3f5572ef348a84639f5bc330ef04c24ad3af3",
   "ok": true,
   "reasons": [],
   "test": {
     "exit": 0,
-    "failed": null,
-    "failed_nodes": [],
-    "failed_form": "nodes",
-    "sec": 552.2
+    "sec": 470.6
   },
   "lint": {
     "exit": 0,
@@ -21,37 +18,44 @@
   "verify": {
     "S1": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_core.py tests/test_budget_core.py tests/test_ledger_core.py tests/test_ledger_delta.py tests/test_flight_doctor_tests.py tests/test_budget_doctor.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_core.py tests/test_budget_core.py tests/test_ledger_core.py tests/test_ledger_delta.py tests/test_flight_doctor_tests.py tests/test_budget_doctor.py",
+      "derived": "full"
     },
     "S2": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_budget_allow_cli.py tests/test_tiers_probe.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py tests/test_budget_allow_cli.py tests/test_tiers_probe.py",
+      "derived": "full"
     },
     "S3": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_verdict.py tests/test_audit_compare.py tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_verdict.py tests/test_audit_compare.py tests/test_audit_scan.py tests/test_tiers_cli.py tests/test_tiers_parts_cli.py",
+      "derived": "full"
     },
     "S4": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_render.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_render.py",
+      "derived": "full"
     },
     "S5": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_verify.py tests/test_audit_render.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_verify.py tests/test_audit_render.py",
+      "derived": "full"
     },
     "S6": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_standard_docs.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_scope_docs.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_standard_docs.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_runner_contract_docs.py tests/test_lock_docs.py tests/test_plan_hygiene_docs.py tests/test_ship_rerun_docs.py tests/test_tiers_docs.py tests/test_tiers_parts_docs.py tests/test_scope_docs.py",
+      "derived": "full"
     },
     "S7": {
       "exit": 0,
-      "cmd": "python3 -m pytest -q tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_tiers_docs.py tests/test_clean_after_merged_docs.py tests/test_install.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_resume_docs.py"
+      "cmd": "python3 -m pytest -q tests/test_audit_docs.py tests/test_audit_standard_docs.py tests/test_tiers_docs.py tests/test_clean_after_merged_docs.py tests/test_install.py tests/test_template_docs.py tests/test_docs_iron_rules.py tests/test_budget_docs.py tests/test_ledger_docs.py tests/test_lock_docs.py tests/test_resume_docs.py",
+      "derived": "full"
     }
   },
   "checks": {
     "schema-validate": {
       "exit": 0,
-      "sec": 3.0,
+      "sec": 4.6,
       "cmd": "cd template && openspec schema validate intent-driven",
       "key": "651acf9f2926d57f3b4c560b571724707ee3d73c"
     }
@@ -62,175 +66,42 @@
     "waited": 0.0,
     "why": "",
     "load": [
-      1.6,
-      6.7
+      3.0,
+      1.9
     ],
     "cores": 18
   },
-  "full_suite_sec": null,
+  "full_suite_sec": 470.6,
   "test_ok": true,
   "ledger": {
-    "cases": 789,
-    "measured": 579,
-    "inherited": 210,
+    "cases": 829,
+    "measured": 829,
+    "inherited": 0,
     "no_sec": 0,
     "id_form": "nodeid",
     "complete": true,
     "tiers": {
       "-": {
-        "cases": 789,
-        "sec": 577.6
+        "cases": 829,
+        "sec": 468.8
       }
     }
   },
   "change": "test-audit",
-  "mode": "incremental",
-  "snapshot": {
-    "template/openspec/adr/DRAFT-test-remediation-tracks.md": "692c095c507b7af00ba0836146d25e7664fce074",
-    "template/openspec/adr/DRAFT-test-suite-standard-audited-outside-gates.md": "400292bdd0e14019b9b10d387d9dc8678026d7f3",
-    "tests/test_audit_compare.py": "7a36a36fbb42341ad3c38ae92d28aef1cb76c637",
-    "tests/test_audit_core.py": "e58de26a6ffe693dbf3fc1c35e7edc71a6e4a7e8",
-    "tests/test_audit_docs.py": "9eceda6b387956aa50e53745d9b00cc8ae5ef484",
-    "tests/test_audit_render.py": "cae395bb9ae5e222ed4936684f19621c2f11487e",
-    "tests/test_audit_scan.py": "b84bb9f9aac9b79254a23bb11b0e0ad73ee20875",
-    "tests/test_audit_standard_docs.py": "93be6d85f5ecb34f87849fc1dccef97765072928",
-    "tests/test_audit_verdict.py": "f535d39a0d75d3985f07ba6578afed2d22275509",
-    "tests/test_audit_verify.py": "2804098c5735bc2f37fc4e61789a8409446a4645"
-  },
+  "mode": "full",
+  "snapshot": {},
   "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
   "byproducts": [],
-  "incremental": {
-    "source": "anchor",
-    "from": {
-      "change": "tier-budgets",
-      "commit": "2cc616742fa6ceadf8422c139f13dbe92b247417",
-      "at": "2026-11-18T11:19:09Z"
+  "reuse_skipped": [
+    {
+      "change": "test-audit",
+      "commit": "780a686a2c4f",
+      "reason": "有非测试文件改动：README.md, docs/superpowers/backlog/2026-11-18-record-accepts-unknown-slice.md, docs/superpowers/backlog/2026-11-19-concurrent-takeoff-same-change.md, template/.claude/agents/integrator.md, template/.claude/agents/slice-executor.md, template/.claude/commands/opsx-apply.md, template/.claude/commands/opsx-propose.md, template/.claude/commands/pr-ship.md"
     },
-    "rerun_files": [
-      "tests/test_anchor_hops.py",
-      "tests/test_audit_compare.py",
-      "tests/test_audit_core.py",
-      "tests/test_audit_docs.py",
-      "tests/test_audit_render.py",
-      "tests/test_audit_scan.py",
-      "tests/test_audit_standard_docs.py",
-      "tests/test_audit_verdict.py",
-      "tests/test_audit_verify.py",
-      "tests/test_baseline_anchor_reuse.py",
-      "tests/test_baseline_component_reuse.py",
-      "tests/test_baseline_incremental.py",
-      "tests/test_baseline_incremental_docs.py",
-      "tests/test_baseline_pool.py",
-      "tests/test_baseline_skip.py",
-      "tests/test_budget_allow_cli.py",
-      "tests/test_budget_core.py",
-      "tests/test_budget_docs.py",
-      "tests/test_budget_doctor.py",
-      "tests/test_budget_gate.py",
-      "tests/test_budget_parts.py",
-      "tests/test_budget_shape.py",
-      "tests/test_builtin_scope_precision.py",
-      "tests/test_clean_after_merged_docs.py",
-      "tests/test_docs_iron_rules.py",
-      "tests/test_evidence_shared_gate.py",
-      "tests/test_final_checks_env.py",
-      "tests/test_final_deps.py",
-      "tests/test_final_guard.py",
-      "tests/test_final_impacted.py",
-      "tests/test_final_incremental.py",
-      "tests/test_final_nodes_diff.py",
-      "tests/test_final_reuse.py",
-      "tests/test_final_tests_only.py",
-      "tests/test_final_tiers.py",
-      "tests/test_flight_doctor.py",
-      "tests/test_flight_doctor_cost_lock.py",
-      "tests/test_flight_doctor_lock.py",
-      "tests/test_flight_doctor_surfaces.py",
-      "tests/test_flight_doctor_tests.py",
-      "tests/test_gate_checks_baseline.py",
-      "tests/test_gate_checks_docs.py",
-      "tests/test_gate_checks_final.py",
-      "tests/test_gate_checks_lint.py",
-      "tests/test_gate_cost_note.py",
-      "tests/test_gate_lock.py",
-      "tests/test_gate_scope_lint.py",
-      "tests/test_gate_test_result.py",
-      "tests/test_glossary_docs.py",
-      "tests/test_goal_takeoff_docs.py",
-      "tests/test_incremental_final_docs.py",
-      "tests/test_inert_paths.py",
-      "tests/test_inert_reconcile.py",
-      "tests/test_install.py",
-      "tests/test_ledger_baseline.py",
-      "tests/test_ledger_core.py",
-      "tests/test_ledger_docs.py",
-      "tests/test_ledger_final.py",
-      "tests/test_lock_docs.py",
-      "tests/test_merge_reap.py",
-      "tests/test_plan_hygiene_baseline.py",
-      "tests/test_plan_hygiene_docs.py",
-      "tests/test_resume_docs.py",
-      "tests/test_runner_contract.py",
-      "tests/test_runner_contract_docs.py",
-      "tests/test_runner_statement.py",
-      "tests/test_scope_contract_v2.py",
-      "tests/test_scope_decl_extras.py",
-      "tests/test_scope_docs.py",
-      "tests/test_scope_runtime_guard.py",
-      "tests/test_ship_forecast.py",
-      "tests/test_ship_rerun_docs.py",
-      "tests/test_ship_verdict.py",
-      "tests/test_slice_gate.py",
-      "tests/test_slice_gate_baseline_preflight.py",
-      "tests/test_slice_gate_coverage.py",
-      "tests/test_slice_gate_final.py",
-      "tests/test_spec_html.py",
-      "tests/test_spec_html_scope.py",
-      "tests/test_spec_html_turns.py",
-      "tests/test_start_continue.py",
-      "tests/test_submodule_gate.py",
-      "tests/test_submodule_merge.py",
-      "tests/test_submodule_sync.py",
-      "tests/test_tier_file_incremental.py",
-      "tests/test_tiers_cli.py",
-      "tests/test_tiers_docs.py",
-      "tests/test_tiers_gate.py",
-      "tests/test_tiers_parts_cli.py",
-      "tests/test_tiers_parts_docs.py",
-      "tests/test_tiers_parts_gate.py",
-      "tests/test_tiers_parts_plan.py",
-      "tests/test_tiers_plan.py",
-      "tests/test_tiers_timing.py",
-      "tests/test_turn_tiers.py"
-    ],
-    "hops": 1,
-    "files": [
-      "README.md",
-      "docs/superpowers/backlog/2026-11-18-record-accepts-unknown-slice.md",
-      "template/.claude/commands/test-tiers.md",
-      "template/.claude/flight-runner-contract.md",
-      "template/.claude/hooks/flight-doctor.py",
-      "template/.claude/hooks/slice-gate.py",
-      "template/.claude/hooks/test-ledger.py",
-      "template/.claude/hooks/test-tiers.py",
-      "template/openspec/adr/DRAFT-test-remediation-tracks.md",
-      "template/openspec/adr/DRAFT-test-suite-standard-audited-outside-gates.md",
-      "tests/test_audit_compare.py",
-      "tests/test_audit_core.py",
-      "tests/test_audit_docs.py",
-      "tests/test_audit_render.py",
-      "tests/test_audit_scan.py",
-      "tests/test_audit_standard_docs.py",
-      "tests/test_audit_verdict.py",
-      "tests/test_audit_verify.py",
-      "tests/test_budget_allow_cli.py",
-      "tests/test_budget_core.py",
-      "tests/test_budget_docs.py",
-      "tests/test_budget_doctor.py",
-      "tests/test_budget_gate.py",
-      "tests/test_budget_parts.py",
-      "tests/test_budget_shape.py"
-    ],
-    "sec": 552.2
-  }
+    {
+      "change": "test-audit",
+      "commit": "780a686a2c4f",
+      "reason": "经锚点补跑超时"
+    }
+  ]
 }
