@@ -131,7 +131,7 @@ Rule: 提示不影响结论；未判单独一档
 - **AND** `items` 里有 `allow-soon`、`allow-unneeded`、`purity-unchecked`，以及 `gwt-missing`（`count` 为 2），`level` 都是 `advice`
 
 ### Requirement: 体检的输出与筛选
-`test-tiers.py audit` 缺省打印文本（首行 `测试体检：不合规 N 条 · 提示 N 条 · 未判 N 项`，一行测量来源，各类别明细，各范围一行，末行 `结论：合规` / `结论：不合规` / `结论：判不全`）；`--json` 时 stdout SHALL 只有一个 JSON 对象：`{v, at, head, form, verdict, source: {ledger, probes, cases, dropped}, counts: {violation, advice, unjudged, by_category}, items, scopes, allow}`。`--out PATH` SHALL 把同一个 JSON 对象写进文件。`--scope <范围>`（可重复）只保留该范围的条目与 `scopes` 行；`--category <类别>`（可重复）只保留该类别；`--top N` 让每个类别至多列出耗时最大的 N 条。`counts` SHALL 是 `--top` 截断之前的条数；`verdict` 与退出码按 `--scope` / `--category` 筛选之后、`--top` 截断之前的条目算。
+`test-tiers.py audit` 缺省打印文本（首行 `测试体检：不合规 N 条 · 提示 N 条 · 未判 N 项`，一行测量来源，各类别明细，各范围一行，末行 `结论：合规` / `结论：不合规` / `结论：判不全`）；`--json` 时 stdout SHALL 只有一个 JSON 对象：`{v, at, head, form, verdict, source: {ledger, probes, cases, dropped}, counts: {violation, advice, unjudged, by_category}, items, scopes, allow}`。`--out PATH` SHALL 把同一个 JSON 对象写进文件。`--scope <范围>`（可重复）只保留该范围的条目与 `scopes` 行，但没有分层文件（`no-tiers`）与全局未判（没有测量、来源账本不可判）对每个范围都成立，不受 `--scope` 影响；`--category <类别>`（可重复）只保留该类别；`--top N` 让每个类别至多列出耗时最大的 N 条。`counts` SHALL 是 `--top` 截断之前的条数；`verdict` 与退出码按 `--scope` / `--category` 筛选之后、`--top` 截断之前的条目算。
 Feature: 大仓库分批整：按层、按类别、按最慢 N 条取子集
 Rule: 截断只影响明细，不影响计数与结论
 
