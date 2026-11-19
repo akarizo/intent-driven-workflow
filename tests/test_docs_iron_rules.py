@@ -68,12 +68,12 @@ def test_docs_state_mechanical_resolution():
     # When: 检索模型路由与起飞批准相关段落
     routed = [docs["README.md"], docs["docs/WORKFLOW_zh.md"], docs["template/CLAUDE.md.snippet"], docs["CLAUDE.md"]]
 
-    # Then: 都声明主模型由 session-model.py 判定；铁律含"禁自述"与起飞批准的机械校验；无"看 /model"式措辞；install.sh 说明同步
-    assert all("session-model.py" in t for t in routed)
+    # Then: 都声明路由由 model-routing 机械解析；铁律含"禁自述"与起飞批准的机械校验；无"看 /model"式措辞；install.sh 说明同步
+    assert all("model-routing" in t for t in routed)
     assert all("看 `/model`" not in t for t in docs.values())
     assert "禁自述" in docs["CLAUDE.md"] and "禁自述" in docs["template/CLAUDE.md.snippet"]
     assert "takeoff-gate" in docs["CLAUDE.md"] and "takeoff-gate" in docs["install.sh"]
-    assert "session-model.py" in docs["install.sh"]
+    assert "model-routing" in docs["install.sh"]
 
 
 # ---------------------------------------------------------------- 配置驱动路由（scenario: iron-rule-routing#iron-rule-names-routing-config、
@@ -85,7 +85,6 @@ def rule_11(text):
     return next(line for line in text.splitlines() if re.match(r"^11\.\s", line))
 
 
-@pytest.mark.xfail(strict=True, reason="S6 未实现")
 def test_iron_rule_names_routing_config():
     # Given: 仓库根 CLAUDE.md 与 template/CLAUDE.md.snippet
     lines = [rule_11(read("CLAUDE.md")), rule_11(read("template/CLAUDE.md.snippet"))]
@@ -98,7 +97,6 @@ def test_iron_rule_names_routing_config():
         assert "会话主模型" not in line, line
 
 
-@pytest.mark.xfail(strict=True, reason="S6 未实现")
 def test_readme_and_installer_describe_routing():
     # Given: README.md、docs/WORKFLOW_zh.md 与 install.sh
     docs = {rel: read(rel) for rel in ("README.md", "docs/WORKFLOW_zh.md", "install.sh")}
