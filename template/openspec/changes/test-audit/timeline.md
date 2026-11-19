@@ -24,3 +24,5 @@
 2026-11-19T03:12:06Z	ship	draft: final 过期：记录 485245c4dc，HEAD c73f0df51d；补跑将是增量（锚点 e220ffb01e，Δ 1 个文件）; 2 条 CRITICAL/HIGH 评审未闭环
 2026-11-19T03:12:24Z	final	增量（锚点 e220ffb01e，重跑 0 个文件 / 沿用 831 个用例） 测试 0.0s · 检查 schema-validate 1.3s · 用例 +2/-0（新增 0.7s） · 排队 0.0s · 负载 3.5→3.8/18 ok
 2026-11-19T03:12:24Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:12:36Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
+2026-11-19T03:13:21Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/24
