@@ -26,6 +26,19 @@ def test_test_audit_command_doc_covers_flow():
         assert word in head[2], word
 
 
+def test_test_audit_doc_batch_compare_uses_same_filter():
+    # Given: /test-audit 命令文档的 Steps 段
+    body = CMD.read_text(encoding="utf-8").split("**Steps**", 1)[1]
+
+    # When: 取第 1 步（体检并存档）与第 5 步里带 --compare 的那条命令
+    step1 = body.split("\n2. ", 1)[0]
+    compare = next(l for l in body.split("\n5. ", 1)[1].splitlines() if "--compare" in l)
+
+    # Then: 存档那次不带 --top；对比命令带上与第 1 步相同的 --scope / --category，否则批外旧项全被算成新增
+    assert "存档那次不带 `--top`" in step1, step1
+    assert "与第 1 步相同的 `--scope` / `--category`" in compare, compare
+
+
 def test_readme_and_install_count_test_audit():
     # Given: README.md 与 install.sh
     readme, install = README.read_text(encoding="utf-8"), INSTALL.read_text(encoding="utf-8")

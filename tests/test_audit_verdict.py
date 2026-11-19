@@ -80,3 +80,21 @@ def test_audit_filters_by_scope_category_top(git_repo, tmp_path):
     assert not [it for it in unit["items"] if it["scope"] == "hooks"] and list(unit["scopes"]) == ["unit"], unit
     assert "unit-slow:" + U + "test_slow" in ids(unit), ids(unit)
     assert (p1.returncode, p2.returncode) == (1, 1), (p1.returncode, p2.returncode)
+
+
+def test_audit_scope_keeps_global_entries(git_repo):
+    # Given: 分层合规、每个测试文件恰属一层，本机没有账本也没有探针
+    setup(git_repo, tiers(hooks_budget={"case_sec": 5}), extra_files=(UF, HF), ledger=False)
+
+    # When: 带 --scope hooks 体检；换成不完整的账本再体检；删掉分层文件再体检
+    p1, out1 = audit(git_repo, "--json", "--no-ledger", "--scope", "hooks")
+    setup(git_repo, tiers(hooks_budget={"case_sec": 5}), {U + "test_ok": 0.2, H + "test_ok": 1.0}, complete=False)
+    p2, out2 = audit(git_repo, "--json", "--scope", "hooks")
+    (git_repo / "openspec" / "test-tiers.json").unlink()
+    p3, out3 = audit(git_repo, "--json", "--no-ledger", "--scope", "hooks")
+
+    # Then: 全局未判（没有测量 / 来源账本不可判）与没有分层文件对每个范围都成立，不被 --scope 滤掉
+    assert None not in (out1, out2, out3), p1.stdout + p2.stdout + p3.stdout
+    assert p1.returncode == 3 and out1["verdict"] == "unjudged" and "unjudged:no-measure" in ids(out1), out1
+    assert "unjudged:ledger" in ids(out2) and out2["counts"]["unjudged"] >= 1, out2
+    assert p3.returncode == 1 and out3["verdict"] == "violations" and "no-tiers:" in ids(out3), out3

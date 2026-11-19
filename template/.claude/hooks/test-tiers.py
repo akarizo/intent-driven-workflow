@@ -507,6 +507,7 @@ AUDIT_RULES = {
     "unjudged": {"rule": None, "level": "unjudged", "fix": [], "title": "判不了"},
 }
 LEVEL_TEXT = {"violation": "不合规", "advice": "提示", "unjudged": "未判"}
+AUDIT_GLOBAL_IDS = ("no-tiers:", "unjudged:no-measure", "unjudged:ledger")
 
 
 def audit_item(cat, key, text, scope=None, case=None, file=None, sec=None, line=None):
@@ -800,8 +801,8 @@ def print_audit(rep, shown, code):
 def emit_audit(args, rep, prev=None, plan_items=None):
     """筛选（范围 → 类别）→ 计数与结论 → 对比 → 截断 → 输出；返回退出码。"""
     items = rep["items"]
-    if args.scope:
-        items = [it for it in items if it["scope"] in args.scope]
+    if args.scope:  # 没有分层文件与全局未判对每个范围都成立，不受 --scope 影响
+        items = [it for it in items if it["scope"] in args.scope or it["id"] in AUDIT_GLOBAL_IDS]
         rep["scopes"] = {sc: v for sc, v in rep["scopes"].items() if sc in args.scope}
     if args.category:
         items = [it for it in items if it["category"] in args.category]
