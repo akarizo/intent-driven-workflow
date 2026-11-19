@@ -23,14 +23,19 @@
 #   render     --probe PATH --plan PATH --out PATH
 #              按划分稿（{tiers, moves}）推算每个探针用例的落点与所属层（部件形态标「部件/unit」或区域名），
 #              写单文件审批页（内联 CSS、导出 Markdown / 复制）
-#   audit      [--openspec-root DIR] [--change-dir DIR | --ledger PATH | --no-ledger] [--probe PATH]... [--json] [--out PATH]
+#   audit      [--openspec-root DIR] [--change-dir DIR | --ledger PATH | --no-ledger] [--probe PATH]...
+#              [--scope 范围]... [--category 类别]... [--top N] [--json] [--out PATH] [--compare 之前的体检JSON [--plan 整改稿JSON]]
 #              只读体检（change test-audit）：分层文件 + 测试文件清单 + 一份测量（账本 ∪ 探针）按当前工作树重新归层，
-#              按 AUDIT_RULES 列出不合规项与提示；不跑测试、不取测试锁、不写分层文件与账本（--out 除外）
+#              按 AUDIT_RULES 列出不合规项、提示与未判项；不跑测试、不取测试锁、不写分层文件与账本（--out 除外）；
+#              筛选顺序：--scope → --category → 计数与结论 → --top（每类至多 N 条，只截明细）；--out 与 --json 同一个对象；
+#              --compare 按条目 id 比不合规项（已解决 / 仍在 / 新增），--plan 把稿里去向不是 keep 的旧不合规项当本轮目标
 #
 # 退出码：0 成立 / 无问题；1 有问题（run unit 有部件非 0、check 点名、canary 未通过、render 落点不合规、audit 有不合规项）；
 #         2 输入不可用（分层文件缺失或不合法、部件不存在或没有 probe、probe.cmd 里没有仓库内文件、探针不可度量、
-#         理由为空、--limit-sec / --expires 不合法、文件读不了；audit 的分层文件不合法、账本 / 探针 / change 目录读不了）；
-#         3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）。
+#         理由为空、--limit-sec / --expires 不合法、文件读不了；audit 的分层文件不合法、账本 / 探针 / change 目录读不了、
+#         --compare / --plan 读不了或形状不对、--plan 没带 --compare）；
+#         3 allow-slow 缺人类放行证据（找不到转录 / 最新人类消息未放行）；audit 没有不合规项但有未判项。
+#         audit 带 --compare 时：有新增或有目标未解决 → 1；否则有未判项 → 3（未能确认）；否则 0（不在目标里的旧债不算失败）。
 #
 # 复用 slice-gate.py 与 takeoff-gate.py 的判定（按路径加载），只读不改它们。兼容 Python 3.8+，只用标准库。
 import argparse
@@ -602,7 +607,7 @@ def audit_report(top, tiers, led, probes):
     like = {"cases": {cid: {"s": c["s"], "t": c["t"], "m": 1} for cid, c in table.items()},
             "id_form": form, "complete": True, "mode": "full"}
     items = []
-    _, _, problems = layering(top, tiers, listed_files(top))
+    _, placed, problems = layering(top, tiers, listed_files(top))
     items.extend(audit_item("layering", f, text, file=f) for f, text in problems)
     for v in tl.violations(like, budgets, scope_of, aview):
         cat = "unit-slow" if v["kind"] == "unit" else "region-slow"
@@ -625,7 +630,11 @@ def audit_report(top, tiers, led, probes):
         scopes[sc] = {"kind": tot["kind"], "cases": tot["cases"], "sec": tot["sec"], "no_sec": tot["no_sec"],
                       "case_sec": budgets[sc]["case_sec"], "total_sec": tot["budget"], "over": tot["over"],
                       "p50": _rank(xs, 0.5), "p95": _rank(xs, 0.95), "max": xs[-1] if xs else None}
-        if tot["over"]:
+    unjudged, ledger_bad = audit_unjudged(table, placed, scopes, scope_of, led, probes)
+    items.extend(unjudged)
+    for sc in sorted(b["totals"]):
+        tot = b["totals"][sc]
+        if tot["over"] and not ledger_bad and "unjudged:scope:" + sc not in {it["id"] for it in unjudged}:
             label = "区域 %s" % sc if tot["kind"] == "region" else tl._part_label(sc)
             items.append(audit_item("total-over", sc, "%s 合计 %.1fs，超过总量预算 %ss"
                                     % (label, tot["sec"], tl._g(tot["budget"])),
@@ -641,12 +650,21 @@ def audit_report(top, tiers, led, probes):
         elif a["limit"] is None or a["expires"] is None:
             miss = "、".join(n for n, v in (("limit_sec", a["limit"]), ("expires", a["expires"])) if v is None)
             cat, text = "allow-unbounded", "放行 %s 缺 %s" % (key, miss)
-        elif a["soon"]:
-            cat, text = "allow-soon", "放行 %s 将于 %s 到期" % (key, a["expires"])
         else:
-            continue
-        items.append(audit_item(cat, key, text, scope=scope_of(key, c["t"]) if c else None, case=key,
-                                file=c["file"] if c else None, sec=c["s"] if c else None))
+            cat = None
+        sc = scope_of(key, c["t"]) if c else None
+        found = [(cat, text)] if cat else []
+        if not cat:  # 有效放行：快到期、已回到线内各自一条提示
+            if a["soon"]:
+                found.append(("allow-soon", "放行 %s 将于 %s 到期" % (key, a["expires"])))
+            line = (budgets.get(sc) or {}).get("case_sec")
+            if c and c["s"] is not None and line is not None \
+                    and (c["s"] < line if budgets[sc]["kind"] == "unit" else c["s"] <= line):
+                found.append(("allow-unneeded", "放行 %s 的用例 %.1fs 已回到单条上限 %ss 内，可撤销放行"
+                              % (key, c["s"], tl._g(line))))
+        for cat, text in found:
+            items.append(audit_item(cat, key, text, scope=sc, case=key, file=c["file"] if c else None,
+                                    sec=c["s"] if c else None))
     if probes:
         pure = {}
         for cid in sorted(table):
@@ -667,19 +685,145 @@ def audit_report(top, tiers, led, probes):
     else:
         items.append(audit_item("purity-unchecked", "", "没有探针结果，单元层纯度未在体检里核对"
                                                         "（可加 --probe <test-tiers.py probe --json 的结果>）"))
-    order = list(AUDIT_RULES)
-    items.sort(key=lambda it: order.index(it["category"]))
+    gwt = sg.gwt_violations(top, [f for f in placed if f.endswith(".py")])
+    if gwt:
+        it = audit_item("gwt-missing", "", "%d 条用例缺 Given / When / Then 注释（如 %s）"
+                        % (len(gwt), gwt[0].split(": ", 1)[-1]))
+        it["count"] = len(gwt)
+        items.append(it)
+    items.sort(key=audit_sort_key)
     return items, scopes, b["allow"], len(table), len(dropped)
 
 
-def emit_audit(args, rep):
-    counts = {lv: sum(1 for it in rep["items"] if it["level"] == lv) for lv in LEVEL_TEXT}
+def audit_unjudged(table, placed, scopes, scope_of, led, probes):
+    """未判三种 → ([条目], 来源账本是否不可判总量)。scopes 是已算好的各范围分布。"""
+    if led is None and not probes:
+        return [audit_item("unjudged", "no-measure", "没有测量：本机没有账本，也没给 --probe；时间类规则都判不了")], False
+    out = []
+    ledger_bad = led is not None and (led.get("complete") is False or led.get("mode") == "impacted")
+    if ledger_bad:
+        why = "不完整" if led.get("complete") is False else "来自选测（gate.impacted），只跑了部分用例"
+        out.append(audit_item("unjudged", "ledger", "来源账本%s：各范围合计不可比，不判总量预算" % why))
+    measured = {c["file"] for c in table.values() if c["file"]}
+    fileless = {scope_of(cid, c["t"]) for cid, c in table.items() if c["file"] is None}
+    missing = {}
+    for f in sorted(placed):
+        sc = scope_of(f + "::x", placed[f])
+        if f not in measured and sc not in fileless:
+            missing.setdefault(sc, []).append(f)
+    for sc in sorted(set(missing) | set(scopes)):
+        why = []
+        if missing.get(sc):
+            why.append("%d 个测试文件没有测量（如 %s）" % (len(missing[sc]), missing[sc][0]))
+        s = scopes.get(sc)
+        if s and s["cases"] > 0 and s["no_sec"] / s["cases"] > tl.NO_SEC_RATIO:
+            why.append("%d 条用例无耗时（共 %d 条）" % (s["no_sec"], s["cases"]))
+        if why:
+            out.append(audit_item("unjudged", "scope:" + sc, "范围 %s 判不全：%s" % (sc, "；".join(why)), scope=sc))
+    return out, ledger_bad
+
+
+LEVEL_ORDER = {"violation": 0, "unjudged": 1, "advice": 2}
+
+
+def audit_sort_key(it):
+    """级别（不合规 → 未判 → 提示）、类别、耗时由大到小、id。"""
+    return LEVEL_ORDER[it["level"]], list(AUDIT_RULES).index(it["category"]), -(it["sec"] or 0.0), it["id"]
+
+
+def load_compare(args):
+    """--compare / --plan 的输入 → (之前的体检, 整改稿 items | None)；不可用 → 退出 2。"""
+    if args.plan and not args.compare:
+        fail("--plan 要与 --compare 一起用")
+    if not args.compare:
+        return None, None
+    prev = read_json(args.compare, "之前的体检")
+    if not isinstance(prev, dict) or not isinstance(prev.get("items"), list):
+        fail("之前的体检 %s 不是含 items 数组的体检 JSON" % args.compare)
+    if not args.plan:
+        return prev, None
+    plan = read_json(args.plan, "整改稿")
+    if not isinstance(plan, dict) or not isinstance(plan.get("items"), dict):
+        fail("整改稿 %s 不是含 items 对象的 JSON" % args.plan)
+    return prev, plan["items"]
+
+
+def audit_compare(prev, plan_items, now):
+    was = {it.get("id") for it in prev["items"] if isinstance(it, dict) and it.get("level") == "violation"}
+    targets = {k for k, v in (plan_items or {}).items()
+               if k in was and (v if isinstance(v, dict) else {}).get("action") != "keep"}
+    return {"before": {"at": prev.get("at"), "head": prev.get("head")}, "resolved": sorted(was - now),
+            "remaining": sorted(was & now), "new": sorted(now - was), "targets": len(targets),
+            "targets_remaining": sorted(targets & now)}
+
+
+def _secs(v):
+    return "-" if v is None else "%gs" % v
+
+
+def print_audit(rep, shown, code):
+    counts, src, led = rep["counts"], rep["source"], rep["source"]["ledger"]
+    print("测试体检：不合规 %d 条 · 提示 %d 条 · 未判 %d 项" % (counts["violation"], counts["advice"], counts["unjudged"]))
+    if led is None and not src["probes"]:
+        print("测量来源：没有测量")
+    else:
+        where = ("账本 %s · %s · %s · %s · %s" % (led["change"], led["phase"], (led["commit"] or "-")[:10], led["at"],
+                                                 led["mode"]) if led else "无账本")
+        print("测量来源：%s；探针 %d 份；用例 %d 条；丢弃 %d 条" % (where, src["probes"], src["cases"], src["dropped"]))
+    for cat in dict.fromkeys(it["category"] for it in shown):  # 沿用 audit_sort_key 的次序
+        rows = [it for it in shown if it["category"] == cat]
+        n, r = counts["by_category"][cat], AUDIT_RULES[cat]
+        more = "，列出 %d 条" % len(rows) if len(rows) < n else ""
+        print("\n== %s %s（%d 条%s · %s）" % (cat, r["title"], n, more, r["rule"] or LEVEL_TEXT[r["level"]]))
+        for it in rows:
+            print("[%s] %s  %s" % (LEVEL_TEXT[it["level"]], it["id"], it["text"]))
+    if rep["scopes"]:
+        print()
+    for sc, s in rep["scopes"].items():
+        print("范围 %s（%s）：用例 %d 条 · 合计 %s · 单条上限 %s · 总量预算 %s · p50 %s / p95 %s / 最慢 %s"
+              % (sc, "单元层" if s["kind"] == "unit" else "区域", s["cases"], _secs(s["sec"]), _secs(s["case_sec"]),
+                 _secs(s["total_sec"]), _secs(s["p50"]), _secs(s["p95"]), _secs(s["max"])))
+    cmp_ = rep.get("compare")
+    if cmp_ is None:
+        print("结论：%s" % {0: "合规", 1: "不合规", 3: "判不全"}[code])
+        return
+    print("前后对比：已解决 %d 条 · 仍在 %d 条 · 新增 %d 条；本轮目标 %d 条 · 未解决 %d 条（之前 %s · %s）"
+          % (len(cmp_["resolved"]), len(cmp_["remaining"]), len(cmp_["new"]), cmp_["targets"],
+             len(cmp_["targets_remaining"]), cmp_["before"]["at"], (cmp_["before"]["head"] or "-")[:10]))
+    for i in cmp_["new"]:
+        print("  新增：%s" % i)
+    for i in cmp_["targets_remaining"]:
+        print("  未解决的目标：%s" % i)
+    print("结论：%s" % {0: "整改达标", 1: "整改未达标", 3: "未能确认（有未判项）"}[code])
+
+
+def emit_audit(args, rep, prev=None, plan_items=None):
+    """筛选（范围 → 类别）→ 计数与结论 → 对比 → 截断 → 输出；返回退出码。"""
+    items = rep["items"]
+    if args.scope:
+        items = [it for it in items if it["scope"] in args.scope]
+        rep["scopes"] = {sc: v for sc, v in rep["scopes"].items() if sc in args.scope}
+    if args.category:
+        items = [it for it in items if it["category"] in args.category]
+    counts = {lv: sum(1 for it in items if it["level"] == lv) for lv in LEVEL_TEXT}
     by_cat = {}
-    for it in rep["items"]:
+    for it in items:
         by_cat[it["category"]] = by_cat.get(it["category"], 0) + 1
     counts["by_category"] = by_cat
     rep["counts"] = counts
-    rep["verdict"] = "violations" if counts["violation"] else "compliant"
+    rep["verdict"] = "violations" if counts["violation"] else ("unjudged" if counts["unjudged"] else "compliant")
+    code = {"violations": 1, "unjudged": 3, "compliant": 0}[rep["verdict"]]
+    if prev is not None:
+        cmp_ = rep["compare"] = audit_compare(prev, plan_items, {it["id"] for it in items if it["level"] == "violation"})
+        code = 1 if cmp_["new"] or cmp_["targets_remaining"] else (3 if counts["unjudged"] else 0)
+    if args.top is not None:  # items 已按 audit_sort_key 排好：每类留前 N 条
+        seen, shown = {}, []
+        for it in items:
+            seen[it["category"]] = seen.get(it["category"], 0) + 1
+            if seen[it["category"]] <= args.top:
+                shown.append(it)
+        items = shown
+    rep["items"] = items
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             json.dump(rep, fh, ensure_ascii=False, indent=2)
@@ -687,19 +831,13 @@ def emit_audit(args, rep):
     if args.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
-        led = rep["source"]["ledger"]
-        print("测试体检：不合规 %d 条 · 提示 %d 条 · 未判 %d 项" % (counts["violation"], counts["advice"], counts["unjudged"]))
-        print("测量来源：%s；探针 %d 份；用例 %d 条；丢弃 %d 条"
-              % ("账本 %s · %s · %s" % (led["change"], led["phase"], led["at"]) if led else "无账本",
-                 rep["source"]["probes"], rep["source"]["cases"], rep["source"]["dropped"]))
-        for it in rep["items"]:
-            print("[%s] %s  %s" % (LEVEL_TEXT[it["level"]], it["id"], it["text"]))
-        print("结论：%s" % ("不合规" if counts["violation"] else "合规"))
-    return 1 if counts["violation"] else 0
+        print_audit(rep, items, code)
+    return code
 
 
 def cmd_audit(args):
     top = sg.toplevel()
+    prev, plan_items = load_compare(args)
     led, change, phase = pick_ledger(args, top)
     probes = load_probes(args)
     meta = None if led is None else dict({"change": change, "phase": phase},
@@ -710,12 +848,12 @@ def cmd_audit(args):
     path = tiers_path(args)
     if not os.path.isfile(path):
         rep["items"] = [audit_item("no-tiers", "", "没有测试分层文件 %s：先跑 /test-tiers 划分测试层" % path)]
-        return emit_audit(args, rep)
+        return emit_audit(args, rep, prev, plan_items)
     _, tiers = load_tiers(args)
     rep["form"] = "parts" if sg.tiers_is_parts(tiers) else "shorthand"
     rep["items"], rep["scopes"], rep["allow"], rep["source"]["cases"], rep["source"]["dropped"] = \
         audit_report(top, tiers, led, probes)
-    return emit_audit(args, rep)
+    return emit_audit(args, rep, prev, plan_items)
 
 
 def main(argv=None):
