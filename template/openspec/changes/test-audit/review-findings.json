@@ -1,21 +1,6 @@
 {
   "blocked": [],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/hooks/test-tiers.py",
-      "line": 803,
-      "summary": "给了 --scope 时会把没有 scope 的全局条目一并滤掉（no-tiers、unjudged:no-measure、unjudged:ledger），计数和结论随后按剩下的条目算，结果是误报合规。我做了一次定向抽查：没有账本、没有探针时，`audit --no-ledger` 退出 3（unjudged）；加上 `--scope hooks` 后 items 为空，退出 0，verdict 为 compliant。删掉分层文件再跑 `audit --no-ledger --scope hooks`，末行是「结论：合规」，退出 0，R1 被吞掉了。unjudged:ledger 有同样的问题：账本不完整或来自选测时，total-over 已被压掉，再加 --scope 就连未判也看不到。实现确实照切片包第 4 步「没有 scope 的条目在给了 --scope 时不出现」字面做了，但这和 D5 / spec「未判单独一档」的语义冲突，属于规格缺口，需进一步确认后修 spec。",
-      "fix": "这三类条目对每个范围都成立，筛选时应保留。可以在 emit_audit 的 scope 过滤里加例外：`items = [it for it in items if it[\"scope\"] in args.scope or it[\"category\"] in (\"no-tiers\",) or it[\"id\"] in (\"unjudged:no-measure\", \"unjudged:ledger\")]`。layering / gwt-missing 等仍按 spec 滤掉。同时在 spec 的「体检的输出与筛选」里补一句：全局不可判与没有分层文件不受 --scope 影响。再加一条测试：`--no-ledger --scope hooks` 退出 3。这样不需要改现有骨架断言，test_audit_filters_by_scope_category_top 只断言没有 hooks 范围的条目，不受影响。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "template/.claude/commands/test-audit.md",
-      "line": 51,
-      "summary": "按文档走「大仓库分批」流程时，第 5 步的对比必然误报失败。第 1 步（34 行）建议用 `--scope` / `--category` / `--top N` 取一批，再用 `--out` 存档；第 5 步的 `audit --probe … --compare <存档> --plan …` 却没有带同样的筛选参数。看 `test-tiers.py` 的 `emit_audit`：`now` 取的是按 scope/category 筛选后、`--top` 截断前的全部不合规项；而存档里的 items 是筛选并截断之后才写进 `--out` 的（spec 规定 `--out` 写同一个对象）。于是 `audit_compare` 会把本批以外的所有旧不合规项都算进 `new`，退出码恒为 1，文档对它的解释还是「改出了新的不合规」。spec 设计里分批收债靠的正是 `--compare --plan`（design.md D5），文档推荐的这条路径因此闭不了环。",
-      "fix": "第 1 步写明：存档那次只能用 `--scope` / `--category` 筛选，不要带 `--top`（`--top` 只用于另跑一次只看不存的体检，或者在整改稿里自行挑条目）。第 5 步的对比命令写明：必须带上与第 1 步相同的 `--scope` / `--category`。也可以改成不筛选地存全量档，分批只体现在整改稿的 items 里，因为 `--plan` 下不在目标里的旧项仍在不算失败。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "LOW",

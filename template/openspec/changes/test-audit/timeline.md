@@ -26,3 +26,6 @@
 2026-11-19T03:12:24Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
 2026-11-19T03:12:36Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
 2026-11-19T03:13:21Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/24
+2026-11-19T03:31:21Z	final	增量（锚点 c73f0df51d，重跑 13 个文件 / 沿用 746 个用例） 测试 102.8s · 检查 schema-validate 2.3s · 用例 +4/-0（新增 1.2s） · 排队 0.0s · 负载 4.5→3.0/18 ok
+2026-11-19T03:31:21Z	ship	ready
+2026-11-19T03:31:29Z	pr-ready	https://github.com/akarizo/intent-driven-workflow/pull/24
