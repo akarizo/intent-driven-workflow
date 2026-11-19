@@ -77,3 +77,9 @@ test-audit.py verify --plan 整改稿JSON --base COMMIT [--openspec-root DIR] [-
 - `render` 的 stdout 末行：`{"tracks": {"mechanical", "human", "change", "keep", "unplanned"}, "problems": N, "out": 路径}`；问题逐条进 stderr；退出码 0 / 1 / 2。
 - `verify --json` 的 stdout：`{"ok", "violations": [文本], "unchecked": [路径], "changed": {"tests": N, "support": [路径], "tiers": bool}, "budget_changes": [文本]}`；退出码 0 / 1 / 2。
 - `test-audit.py` 不依赖 `test-tiers.py`：它只读体检 JSON 里每条的 `fix`，不引用 `AUDIT_RULES`。两个常量的一致性由 S7 的对账测试守。
+
+## S6 · 文档（已合回）
+
+- `template/.claude/flight-runner-contract.md` 新增「测试套件合规标准」一节；`template/.claude/commands/test-tiers.md` 加体检指针。无代码符号；测试从 `tests/test_audit_standard_docs.py` 的 `standard_section` / `TITLE` 取节。
+
+> 已合回核对：S1 `violations(ledger, budgets, scope_of, allow=None)`（test-ledger.py:394）、S4 `cmd_render(args)` / `main(argv=None)`（test-audit.py:152/206），与上文签名一致。
