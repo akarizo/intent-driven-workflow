@@ -1,10 +1,8 @@
 """merged-cleanup.py 识别执行体临时 worktree：被合进其他分支（landed）与已落地 change 的作废尝试（dead-attempt）
 （scenario: merged-cleanup-agent-worktrees#cleanup-removes-worktree-merged-into-change-branch、#cleanup-keeps-worktree-only-forked-from、
 #cleanup-removes-dead-attempt-of-landed-change、#cleanup-defers-detached-dead-attempt、#cleanup-treats-archived-change-as-landed，共 5 条）。
-骨架：strict xfail，断言是真实的；切片 S2 实现后去掉标记即解锁。"""
+切片 S2 已实现，骨架标记已去。"""
 import json
-
-import pytest
 
 from conftest import write
 from test_merged_cleanup import apply, commit, feature, g, has_reason, has_ref, item, plan, srv, sync, w  # noqa: F401  w 是 fixture
@@ -22,7 +20,6 @@ def reasons_with(it, tag):
     return [r for r in it["reasons"] if r.startswith(tag)]
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-removes-worktree-merged-into-change-branch")
 def test_cleanup_removes_worktree_merged_into_change_branch(w):
     # Given: change 分支 worktree-c（.worktrees/c）未合入 main；临时 worktree .claude/worktrees/wf_1 从它派生、提交后被 --no-ff 合进 worktree-c；
     #        wf_1 里只剩飞行记录改动（已跟踪的 timeline.md 被追加）
@@ -46,7 +43,6 @@ def test_cleanup_removes_worktree_merged_into_change_branch(w):
     assert has_ref(w.main, "refs/heads/worktree-c") and home.is_dir()
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-keeps-worktree-only-forked-from")
 def test_cleanup_keeps_worktree_only_forked_from(w):
     # Given: .claude/worktrees/base（游离 HEAD）停在 worktree-c 的某个提交上、没有独有提交；
     #        临时 worktree .claude/worktrees/wf_1 从同一提交派生、提交后被 --no-ff 合进 worktree-c；worktree-c 未合入 main
@@ -66,7 +62,6 @@ def test_cleanup_keeps_worktree_only_forked_from(w):
     assert not reasons_with(it, "landed:"), it
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-removes-dead-attempt-of-landed-change")
 def test_cleanup_removes_dead_attempt_of_landed_change(w):
     # Given: main 树里有 openspec/changes/c/；临时 worktree .claude/worktrees/wf_2 在自己的分支上有一个没进任何其他分支的提交，
     #        未提交改动只有 openspec/changes/c/ 下未跟踪的 gate-report.md
@@ -85,7 +80,6 @@ def test_cleanup_removes_dead_attempt_of_landed_change(w):
     assert item(out, "branch", "worktree-wf_2")["tier"] == "keep"
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-defers-detached-dead-attempt")
 def test_cleanup_defers_detached_dead_attempt(w):
     # Given: main 树里有 openspec/changes/c/；一间游离 HEAD 的临时 worktree .claude/worktrees/wf_d 带一个只存在于它自己的提交，
     #        切片标记指向 change c
@@ -106,7 +100,6 @@ def test_cleanup_defers_detached_dead_attempt(w):
     assert dead and "丢失" in dead[0], it
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-treats-archived-change-as-landed")
 def test_cleanup_treats_archived_change_as_landed(w):
     # Given: main 树里没有 openspec/changes/c/，但有 openspec/changes/archive/2026-11-19-c/；
     #        本地有 refs/flight/c/S1，以及一间属于 c、在自己分支上的作废尝试 .claude/worktrees/wf_3（只剩 c 的飞行记录改动）
