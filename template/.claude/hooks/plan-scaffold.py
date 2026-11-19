@@ -21,6 +21,8 @@ import subprocess
 import sys
 
 PLACEHOLDER = "PLAN-SCAFFOLD-PLACEHOLDER"
+# 只认 render_func 生成的那一行占位断言，与 slice-gate.py 的 SCAFFOLD_PLACEHOLDER_RE 同一判定
+PLACEHOLDER_RE = re.compile(r"^\s*assert\s+False\s*,\s*[\"']" + re.escape(PLACEHOLDER), re.M)
 STEP = re.compile(r"^\s*-\s*\*\*(GIVEN|WHEN|THEN|AND|BUT)\*\*\s*(.*?)\s*$", re.IGNORECASE)
 
 
@@ -207,7 +209,7 @@ def placeholder_funcs(full, funcs):
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in funcs:
             end = getattr(node, "end_lineno", None) or node.lineno
-            if PLACEHOLDER in "\n".join(lines[node.lineno - 1:end]) and node.name not in hit:
+            if PLACEHOLDER_RE.search("\n".join(lines[node.lineno - 1:end])) and node.name not in hit:
                 hit.append(node.name)
     return hit
 
