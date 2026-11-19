@@ -1,0 +1,156 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 226,
+      "summary": "cmd_pin 每次都无条件重写 slices.json，routing 没变也一样。takeoff-gate.py:212 按 PLAN_FILES 的最大 mtime 判新鲜度，所以重复 pin（例如 propose 重跑，或按 resolve 的提示再 pin 一次）会悄悄让已有批准过期。此时 stderr 不会打「routing 已改，批准将过期」提示（old == routing 时不进该分支），用户只会在 takeoff-gate 处莫名停飞。",
+      "fix": "old == routing 时跳过 path.write_text，只打印钉住的 7 个键，保持 slices.json 的 mtime 不变；可加一条测试：先 pin 两次，再断言第二次前后 mtime 一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 190,
+      "summary": "source_label 在 git 不可用或配置文件不在 git 仓库内时，回落为 str(full) 绝对路径，会把本机路径（含用户名）写进要提交的 slices.json.routing.source。",
+      "fix": "回落时改写为相对 openspec 根的路径（如 'openspec/model-routing.json'）或 root / CONFIG_NAME 的原始相对形式，避免写入绝对路径。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 147,
+      "summary": "load_slices 不校验顶层类型：slices.json 是合法 JSON 但不是对象（如 []）时，cmd_pin 的 plan.get 和 cmd_resolve / cmd_get 的 (plan or {}).get 会抛 AttributeError 并打出 traceback，不会按约定退出（pin 应为 2，resolve 应为 3）。",
+      "fix": "在 load_slices 中加判断：解析结果不是 dict 时，调用 die(EXIT_INVALID, ['%s 顶层必须是对象' % path])。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 256,
+      "summary": "cmd_get 遇到钉住的值不合法（如 model='main'）时，静默回落到 repo / builtin，没有任何提示。同样的 routing，resolve 会判 exit 3。两边对同一份钉住数据处理不一致，legacy 路径（D7 用 get flight.* --change-dir）可能在用户不知情时绕开钉住的值。是否属于有意设计，需进一步确认。",
+      "fix": "钉住的值存在但 check_value 报错时，至少往 stderr 打一条警告并点名「组.键」；也可以直接 exit 2，与 show / pin 的校验口径对齐。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "tests/test_workflow_routing_roles.py",
+      "line": 50,
+      "summary": "spec 规定 wave 跨片修复（label fix:w<i>，以及它的 :retry）也要走 models.fixer / efforts.fixer，实现第 276 行确实这样做了，但 4 条测试只覆盖了批量修复 label 'fix'，fix:w<i> 这条路径没有行为测试。test_agents_workflow 里那条文本正则只检查 'models.fixer' 在文件里出现过，以后有人把第 276 行改回 models.executor，测试仍会通过。",
+      "fix": "在 test_workflow_routes_fixes_to_fixer 里加一种情形（或单独写一个测试）：让 wave-check 返回红，触发 fix:w1 派发，再断言 calls['fix:w1'] 的 (model, effort) == ('fable','high')。可以复用 test_agents_workflow 里现有的 wave 修复夹具和回复。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/workflows/opsx-apply.js",
+      "line": 62,
+      "summary": "executor-large / fixer 用 falsy 判断（!efforts[role]）决定是否回落；args.efforts 里显式传 null 的已有角色（比如 reviewer: null），会经 Object.assign 覆盖缺省值，随后在校验处抛出 'args.efforts.reviewer = null 不合法'。行为可以接受（拒绝起飞的方向是对的），但与 executor-large / fixer 的缺省语义不一致，注释里也没写。",
+      "fix": "可选：在第 59 行合并 efforts 之前，先过滤掉 args.efforts 里值为 null 或 undefined 的键；或者在文件头的参数说明里写明“显式传空值视为非法”。改不改不影响本切片放行。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 309,
+      "summary": "--expect-efforts 只检查是否为合法 JSON，没有检查是否为 role→effort 的对象。同一个 commit 给 --turns 加了 isinstance(dict) 校验，这里却漏了。传 '[\"executor\"]' 时，role_for 的 `role not in expect` 对 list 照常成立，随后 audit_efforts 执行 expect[role] 抛 TypeError，以裸栈 exit 1 退出，和对账不符的 exit 3 混在一起分不清。--expect-models 原有同样的问题，此前评审已报过（mechanical-takeoff-gates review-findings）。",
+      "fix": "json.loads 之后补一句：`if not isinstance(efforts, dict): ap.error(\"--expect-efforts 须是 JSON 对象（角色 → effort）\")`，与 --turns 的写法一致。要不要顺带给 --expect-models 补同样的校验，由 owner 决定（不在本切片 scenario 内）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 27,
+      "summary": "切片包第 2.3 步要求把 AGENT_ROLE 里 slice-executor-large 的映射改为 executor-large。实现没有改，而是在 role_for 的 elif 里写死 `atype == \"slice-executor-large\"`，于是这条映射成了永远走不到的死数据，读表的人会误以为它判为 executor。行为本身与 spec 一致，只是判定分散在两处。",
+      "fix": "把 AGENT_ROLE 的值改为 \"executor-large\"，删掉 role_for 里的 `or atype == \"slice-executor-large\"`。回落到 executor 的逻辑由函数末尾的 OPTIONAL_ROLES 判断统一处理，结果不变。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 25,
+      "summary": "顶部注释仍写「角色判定三级顺序：agentType → label 前缀 → 阶段」，但 role_for 现在先判 fix 标签和 --turns 的 large 档，再走这三级，注释已经过时。",
+      "fix": "改为「角色判定顺序：fix / fix:* → fixer；--turns large 或 slice-executor-large → executor-large；其余 agentType → label 前缀 → 阶段；可选角色不在期望表时回落 executor（见 role_for）」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/session-decompose.py",
+      "line": 349,
+      "summary": "只传 --expect-efforts、不传 --expect-models，且 effort 全部一致时，不会打印任何「effort 对账一致」的确认行，收口飞行记录里看不出 effort 对账跑过、而且通过了。只有全部缺字段的跳过分支有输出。",
+      "fix": "在 audit_efforts 返回空列表时打印一行「  effort 对账：✅ 一致」（同时给了 --expect-models 时也可以并入路由对账那一行）。如果要钉住这句文案，测试改动需并入 owns。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 717,
+      "summary": "`routing` 本身是 dict、但 `routing.flight` / `routing.ship` 是真值的非 dict（比如手改成 list 或字符串）时，`entries.get(key)` 会抛 AttributeError；`model` / `effort` 是非字符串（比如数字）时，`esc()` 里的 `html.escape` 也会抛 TypeError。结果是整页 spec.html 渲染失败，而不是降级显示。按 pin 写入的正常数据不会触发，所以只算健壮性问题。（需进一步确认：render_flight 外层有没有统一兜底异常。）",
+      "fix": "把 `entries = routing.get(group) or {}` 改成 `entries = routing.get(group); entries = entries if isinstance(entries, dict) else {}`；单元格改用 `esc(str(entry.get(\"model\", \"\")))`，effort 同样处理。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/spec_html.py",
+      "line": 711,
+      "summary": "只按 `isinstance(routing, dict)` 判断有没有钉住路由。`routing` 为 `{}`，或者 flight / ship 两组全缺时，页面只有表头和空表、没有任何提示，审批人看不出本次飞行其实没有钉住任何模型。",
+      "fix": "`rows` 为空时，在空表之外再输出同一条 placeholder 提示（或写明「routing 为空，起飞会被拒绝」），让空路由和缺路由在页面上一样醒目。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 62,
+      "summary": "起飞时打印路由表用的是 `model-routing.py show --change-dir`，但 cmd_show 只读 openspec/model-routing.json 的当前生效配置（10 键，source=repo/builtin），并不读取 slices.json.routing 里钉住的值。pin 之后如果有人改了配置却没重新 pin，打印出来的表会和 resolve 实际派发的 models/efforts 对不上，人类看到的「起飞路由」也就不是真正用的那份。按 spec「在起飞时打印路由表」的本意，这里应打印钉住的路由。openspec-apply-change/SKILL.md:70 有同样问题。实现照搬了切片包的写法，属于规格层面的缺口，需进一步确认。",
+      "fix": "二选一：(a) 文档改为直接打印 resolve 的 stdout（就是实际派发用的 5 个角色），或逐个执行 `get flight.<role> --change-dir`（source=pinned）后打印；(b) 给 show 加个模式，传 --change-dir 且 slices.json 有 routing 时打印钉住的值。命令和 skill 要一起改。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/skills/legacy/openspec-subagent-apply-change/SKILL.md",
+      "line": 171,
+      "summary": "4c 修复 subagent 派发前要先跑 `get flight.fixer`，但没写 exit 非 0 时怎么处理；同文件 4a、4b 和复核那几处都写了「exit 非 0 → 停下把 stderr 原样交人工，禁模型自述」，这一处漏了，模型可能拿空值或自己编的值去派发。",
+      "fix": "在这一处补上与 4a/4b 相同的失败处置：「exit 非 0 → 停下把 stderr 原样交人工，禁模型自述」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "docs/WORKFLOW_zh.md",
+      "line": 181,
+      "summary": "收口对账只写了 `session-decompose.py --expect-models` 对账实际模型，没提 `--expect-efforts`；铁律 11（CLAUDE.md / snippet）和 README 第 348 行都写了 `--expect-models` + `--expect-efforts`，三份文档对收口契约的描述对不上。同一句「`/opsx-apply` 以 `args.models` 显式传入」也漏了 `args.efforts`（opsx-apply.md:72 实际两者都传）。",
+      "fix": "把这句改为「`/opsx-apply` 以 `args.models` / `args.efforts` 显式传入……收口 `session-decompose.py --expect-models` + `--expect-efforts` 机械对账各 agent 实际模型与 effort」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "README.md",
+      "line": 346,
+      "summary": "「`/opsx-apply` 把路由表以 `args.models` 显式传给工作流」没跟着更新：resolve 输出 models 和 efforts 两部分，opsx-apply.md:72 也把 `efforts` 一起传给工作流，README 这里只写了 models。",
+      "fix": "改为「以 `args.models` / `args.efforts` 显式传给工作流」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/CLAUDE.md.snippet",
+      "line": 49,
+      "summary": "段标题还是「## Model 路由（按角色显式声明）」，铁律 11 和 README 已改成按派发用途、由配置驱动；段内第一条也还叫「飞行角色」，但内容已改为按 model-routing.json 的键路由，标题和内容口径不一致。",
+      "fix": "标题改为「## Model 路由（按派发用途显式声明，配置驱动）」，与 README 第 325 行一致；「飞行角色」可改为「执行层派发点」。"
+    }
+  ],
+  "fix": null,
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "rerun_tests": 184,
+        "est_sec": 87.3,
+        "sec": 115,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "rerun_tests": 280,
+        "est_sec": 91.7,
+        "sec": 111.3,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}
