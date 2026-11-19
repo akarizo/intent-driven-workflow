@@ -302,7 +302,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 - **GWT 注释先于代码**：测试函数体首行是 `// Given:`（Python 用 `#`）、`When:`、`Then:` 三段中文注释，之后才是 setup / mock / 被测调用 / 断言
 - 一个测试只触发一个被测动作（When 块单一）
 - 测试运行由 hook 留痕（`evidence.log`），**不接受自述**；反模式（mock 滥用、生产类塞测试方法、不懂依赖就 mock、不完整 mock、测试事后补救）在 `testing-anti-patterns.md` 列出
-- **切片留痕与临时 worktree 回收**：切片执行体的测试留痕先写 `<git common dir>/flight-evidence/<change>/<切片>.log`，integrator 记录门禁结论时并进分支上的 `evidence.log`；`slice-gate.py merge` 合回后回收提交已合回、没有其他未提交内容的切片临时 worktree，收不掉的留着并在 `warnings` 里说明，存量仍走 `/clean-after-merged`
+- **切片留痕与临时 worktree 回收**：切片执行体的测试留痕先写 `<git common dir>/flight-evidence/<change>/<切片>.log`，integrator 记录门禁结论时并进分支上的 `evidence.log`；`slice-gate.py merge` 合回后回收提交已合回、没有其他未提交内容的切片临时 worktree，收不掉的留着并在 `warnings` 里说明；`/opsx-apply` 收口再跑 `slice-gate.py reap` 回收本次飞行的临时 worktree（已落地的直接删，作废尝试先归档到 `refs/flight/<change>/attic/` 再删，锁定的不碰）；存量走 `/clean-after-merged`，它现在会认出 `landed`（已合进另一个本地分支）与 `dead-attempt`（已落地 / 已归档 change 的作废尝试）
 
 #### 运行器契约
 

@@ -1,8 +1,6 @@
 """收口回收的文档与铁律（scenario: flight-close-reap#apply-close-runs-reap、#iron-rule-names-close-reap、
 merged-cleanup-agent-worktrees#cleanup-doc-explains-new-reasons，共 3 条）。
-骨架：strict xfail，断言是真实的；切片 S3 实现后去掉标记即解锁。"""
-import pytest
-
+切片 S3 已解锁（去掉 strict xfail 标记）。"""
 from conftest import ROOT
 from test_clean_after_merged_docs import iron6
 
@@ -14,7 +12,6 @@ def read(p):
     return p.read_text(encoding="utf-8")
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#apply-close-runs-reap")
 def test_apply_close_runs_reap():
     # Given: opsx-apply.md 与 openspec-apply-change/SKILL.md
     docs = [read(CMD / "opsx-apply.md"), read(SKILL)]
@@ -31,7 +28,6 @@ def test_apply_close_runs_reap():
         assert "invalid choice" in seg and "回收" in seg, seg
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: flight-close-reap#iron-rule-names-close-reap")
 def test_iron_rule_names_close_reap():
     # Given: 根 CLAUDE.md 与 template/CLAUDE.md.snippet
     root = read(ROOT / "CLAUDE.md")
@@ -50,7 +46,6 @@ def test_iron_rule_names_close_reap():
     assert len(snippet.encode("utf-8")) <= 8 * 1024
 
 
-@pytest.mark.xfail(strict=True, reason="scenario: merged-cleanup-agent-worktrees#cleanup-doc-explains-new-reasons")
 def test_cleanup_doc_explains_new_reasons():
     # Given: template/.claude/commands/clean-after-merged.md
     text = read(CMD / "clean-after-merged.md")
