@@ -48,7 +48,6 @@ def base_wf(tmp_path, executor_effort="medium", effort=True):
 MODELS3 = {"executor": "opus", "reviewer": "opus", "integrator": "sonnet"}
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_audit_flags_effort_mismatch(tmp_path):
     # Given: S1 实际 opus·high，评审 opus·high，integrate sonnet·low
     base_wf(tmp_path, executor_effort="high")
@@ -62,7 +61,6 @@ def test_audit_flags_effort_mismatch(tmp_path):
     assert "high" in line, p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_audit_maps_fix_labels_to_fixer(tmp_path):
     # Given: S1 opus·medium；fix:w1 fable·high；评审与 integrate 与期望一致
     wf = base_wf(tmp_path)
@@ -77,7 +75,6 @@ def test_audit_maps_fix_labels_to_fixer(tmp_path):
     assert "路由对账：✅" in p.stdout and "fixer=fable" in p.stdout, p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_audit_maps_large_slices_by_turns(tmp_path):
     # Given: S2（Implement，agentType workflow-subagent）实际 fable，其余与期望一致
     wf = base_wf(tmp_path)
@@ -93,7 +90,6 @@ def test_audit_maps_large_slices_by_turns(tmp_path):
     assert "executor-large=fable" in p.stdout, p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_audit_skips_undispatched_optional_roles(tmp_path):
     # Given: 只有执行体、评审、integrator，取值都与期望一致
     base_wf(tmp_path)
@@ -107,7 +103,6 @@ def test_audit_skips_undispatched_optional_roles(tmp_path):
     assert "未采样到角色 fixer" not in p.stdout and "未采样到角色 executor-large" not in p.stdout
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_audit_warns_when_effort_unrecorded(tmp_path):
     # Given: 所有 assistant 行都没有 effort 字段，模型与期望一致
     base_wf(tmp_path, effort=False)

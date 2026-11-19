@@ -8,6 +8,9 @@
 #   <task-notification>       → 等子 agent
 #   人类消息                  → 等人 / 会话空闲
 # 子 agent：默认读 <session 同名目录>/subagents/agent-*.jsonl，按 description 关键词分 impl / review / fix / other。
+# 收口对账（需 --workflow）：--expect-models 对账各角色实际模型；--expect-efforts 对账 effort（取 assistant 行顶层
+#   effort 字段，全无则跳过）；--turns 为 slice-gate.py turns 的输出，档为 large 的切片判 executor-large。
+#   fix / fix:* 标签判 fixer；fixer 与 executor-large 未派发不算零覆盖，期望表缺这两键时按 executor 对账。
 # 只读，不改任何文件。兼容 Python 3.8+，只用标准库。
 import argparse
 import glob
@@ -26,7 +29,9 @@ AGENT_ROLE = {"slice-executor": "executor", "slice-executor-large": "executor", 
 LABEL_ROLE = (("integrate:", "integrator"), ("final-gate", "integrator"), ("review:", "reviewer"))
 # 阶段 → 路由角色（兜底：agentType 缺失且 label 不匹配显式格式）
 PHASE_ROLE = {"Implement": "executor", "Fix": "executor", "Review": "reviewer", "Finalize": "integrator"}
-ROLE_ORDER = ("executor", "reviewer", "integrator")
+ROLE_ORDER = ("executor", "executor-large", "fixer", "reviewer", "integrator")
+# 可选角色：没派发是常态，不算零覆盖；期望表没有该键时回落到 executor 对账
+OPTIONAL_ROLES = ("fixer", "executor-large")
 EXIT_ROUTE_MISMATCH = 3
 
 STRIP_RE = re.compile(
@@ -172,18 +177,21 @@ def fmt_h(sec):
 
 
 def workflow_agents(wf_dir):
-    """读 Workflow journal 目录里每个 agent 的标签 / 实际模型 / 轮次 / wall，供收口对账路由表。"""
+    """读 Workflow journal 目录里每个 agent 的标签 / 实际模型 / 轮次 / wall / agentType / effort，供收口对账路由表。
+    effort 取第一条带顶层 effort 字段的 assistant 行，没有则为 None。"""
     out = []
     for sp in sorted(glob.glob(os.path.join(wf_dir, "agent-*.jsonl"))):
         rows = load(sp)
         if not rows:
             continue
-        model, reqs = None, set()
+        model, effort, reqs = None, None, set()
         for r in rows:
             if r.get("type") != "assistant":
                 continue
             m = r.get("message") or {}
             model = model or m.get("model")
+            if effort is None:
+                effort = r.get("effort")
             reqs.add(r.get("requestId") or m.get("id"))
         meta = {}
         try:
@@ -193,7 +201,7 @@ def workflow_agents(wf_dir):
             pass
         wall = (ts(rows[-1]["timestamp"]) - ts(rows[0]["timestamp"])).total_seconds()
         out.append((meta.get("description") or os.path.basename(sp)[6:14], meta.get("workflowPhase") or "-",
-                    model or "?", len(reqs), wall, meta.get("agentType")))
+                    model or "?", len(reqs), wall, meta.get("agentType"), effort))
     return out
 
 
@@ -219,13 +227,31 @@ def label_role(label):
     return None
 
 
-def audit_routes(agents, expect, alias_of):
-    """角色按 agentType → label 前缀 → 阶段 三级判定（前一级判不出才看后一级），比对别名（比别名不比原始 id）。
-    返回 (不符项, 已对账角色→期望别名, 未采样到的角色, 空 attempt)——零覆盖必须红，不能当一致。
+def role_for(label, phase, atype, expect, turns):
+    """路由角色：fix / fix:* → fixer；--turns 档 large 或 agentType slice-executor-large → executor-large；
+    其余 agentType → label 前缀 → 阶段。fixer / executor-large 不在期望表时回落 executor。"""
+    base = label or ""
+    if base.endswith(":retry"):
+        base = base[:-len(":retry")]
+    if base == "fix" or base.startswith("fix:"):
+        role = "fixer"
+    elif (turns or {}).get(base) == "large" or atype == "slice-executor-large":
+        role = "executor-large"
+    else:
+        role = AGENT_ROLE.get(atype) or label_role(label) or PHASE_ROLE.get(phase)
+    if role in OPTIONAL_ROLES and role not in expect:
+        role = "executor"
+    return role
+
+
+def audit_routes(agents, expect, alias_of, turns=None):
+    """角色按 role_for 判定（fixer / executor-large 优先，其余 agentType → label 前缀 → 阶段），比对别名（比别名不比原始 id）。
+    返回 (不符项, 已对账角色→期望别名, 未采样到的角色, 空 attempt)——核心角色零覆盖必须红，不能当一致；
+    可选角色（OPTIONAL_ROLES）未派发不算零覆盖。
     没有 assistant 轮次的转录（被重试掉的空 attempt，模型为 "?"）不算跑错模型，只作未采样告警。"""
     bad, seen, empty = [], {}, []
-    for label, phase, model, _turns, _wall, atype in agents:
-        role = AGENT_ROLE.get(atype) or label_role(label) or PHASE_ROLE.get(phase)
+    for label, phase, model, _turns, _wall, atype, _effort in agents:
+        role = role_for(label, phase, atype, expect, turns)
         if role is None or role not in expect:
             continue
         if not model or model == "?":
@@ -236,8 +262,25 @@ def audit_routes(agents, expect, alias_of):
         if got != want:
             bad.append((label, phase, want, model))
     ordered = [r for r in ROLE_ORDER if r in expect] + [r for r in expect if r not in ROLE_ORDER]
-    missing = [r for r in ordered if r not in seen]
+    missing = [r for r in ordered if r not in seen and r not in OPTIONAL_ROLES]
     return bad, seen, missing, empty
+
+
+def audit_efforts(agents, expect, turns=None):
+    """按 role_for 判角色后比对 effort。所有 agent 都无 effort 字段时返回 None（调用方告警跳过）；
+    否则返回不符项 [(label, phase, want, got)]，单个 agent 无 effort 时只跳过它。"""
+    if all(a[6] is None for a in agents):
+        return None
+    bad = []
+    for label, phase, _model, _turns, _wall, atype, effort in agents:
+        if effort is None:
+            continue
+        role = role_for(label, phase, atype, expect, turns)
+        if role is None or role not in expect:
+            continue
+        if effort != expect[role]:
+            bad.append((label, phase, expect[role], effort))
+    return bad
 
 
 def main():
@@ -246,8 +289,10 @@ def main():
     ap.add_argument("--subagents", help="子 agent 转录目录（缺省：<session 同名目录>/subagents）")
     ap.add_argument("--workflow", help="Workflow 运行的 Transcript dir（含 agent-*.jsonl 与 .meta.json），打印各 agent 实际模型")
     ap.add_argument("--expect-models", help='路由表 JSON，如 \'{"executor":"opus","reviewer":"opus","integrator":"sonnet"}\'；不符 exit 3')
+    ap.add_argument("--expect-efforts", help='角色 → effort JSON，如 \'{"executor":"medium","reviewer":"high","integrator":"low"}\'；需 --workflow，不符 exit 3')
+    ap.add_argument("--turns", default="{}", help='slice-gate.py turns 的输出 JSON，如 \'{"S2":"large"}\'；档为 large 的切片判 executor-large（缺省 {}）')
     args = ap.parse_args()
-    expect = None
+    expect = efforts = None
     if args.expect_models:
         if not args.workflow:
             ap.error("--expect-models 需要同时给 --workflow（否则无实际模型可对账）")
@@ -255,6 +300,19 @@ def main():
             expect = json.loads(args.expect_models)
         except ValueError as exc:
             ap.error("--expect-models 不是合法 JSON：%s" % exc)
+    if args.expect_efforts:
+        if not args.workflow:
+            ap.error("--expect-efforts 需要同时给 --workflow（否则无实际 effort 可对账）")
+        try:
+            efforts = json.loads(args.expect_efforts)
+        except ValueError as exc:
+            ap.error("--expect-efforts 不是合法 JSON：%s" % exc)
+    try:
+        turns = json.loads(args.turns)
+    except ValueError as exc:
+        ap.error("--turns 不是合法 JSON：%s" % exc)
+    if not isinstance(turns, dict):
+        ap.error("--turns 须是 JSON 对象（切片 → 轮次档）")
     rows = load(args.session)
     if not rows:
         print("转录为空")
@@ -281,16 +339,24 @@ def main():
     if args.workflow:
         agents = workflow_agents(args.workflow)
         print("Workflow agent %d 个（标签 · 阶段 · 实际模型 · 轮次 · wall）：" % len(agents))
-        for label, phase, model, turns, wall, _atype in agents:
-            print("  %-16s %-10s %-20s %4d  %s" % (label, phase, model, turns, fmt_h(wall)))
+        for label, phase, model, nturns, wall, _atype, _effort in agents:
+            print("  %-16s %-10s %-20s %4d  %s" % (label, phase, model, nturns, fmt_h(wall)))
         models = Counter(a[2] for a in agents)
         print("  模型分布：%s" % dict(models))
+        ebad = []
+        if efforts is not None:
+            ebad = audit_efforts(agents, efforts, turns)
+            if ebad is None:
+                print("  ⚠ 转录无 effort 字段，effort 对账跳过")
+                ebad = []
+            for label, phase, want, got in ebad:
+                print("  ❌ %s · %s · 期望 effort %s · 实际 %s" % (label, phase, want, got))
         if expect is not None:
             alias_of = load_alias_of()
             if alias_of is None:
                 print("  ⚠ 无法加载 session-model.py 的 alias_of，路由对账跳过（只打印）")
             else:
-                bad, seen, missing, empty = audit_routes(agents, expect, alias_of)
+                bad, seen, missing, empty = audit_routes(agents, expect, alias_of, turns)
                 for label, phase in empty:
                     print("  ⚠ 未采样 %s · %s（无 assistant 轮次，多半是被重试掉的空 attempt，不参与对账）" % (label, phase))
                 if bad or missing:
@@ -299,8 +365,11 @@ def main():
                     for role in missing:
                         print("  ❌ 未采样到角色 %s（期望 %s）——零覆盖不算一致" % (role, expect[role]))
                     return EXIT_ROUTE_MISMATCH
-                print("  路由对账：✅ 一致（%s）" % " · ".join(
-                    "%s=%s" % (role, seen[role]) for role in ROLE_ORDER if role in seen))
+                if not ebad:
+                    print("  路由对账：✅ 一致（%s）" % " · ".join(
+                        "%s=%s" % (role, seen[role]) for role in ROLE_ORDER if role in seen))
+        if ebad:
+            return EXIT_ROUTE_MISMATCH
 
 
 if __name__ == "__main__":
