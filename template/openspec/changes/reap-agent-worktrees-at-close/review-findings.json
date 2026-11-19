@@ -1,0 +1,120 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5731,
+      "summary": "有个常见情形没覆盖：执行体从派发时的 change HEAD 起步，没提交过就中断，未提交的半成品留在 worktree 里。它的 HEAD 是 change 家 HEAD 的祖先，所以进的是“已落地”分支。_reap_one 看到有未提交改动就拒绝回收，结果只写进 kept「有未提交改动」，既不归档也不回收。D4 说要归档的“未交回执行体的半成品”，正是这种情况。scenario close-reap-archives-uncommitted-work 的测试用 slice_worktree 先 commit 了一次（HEAD 不是祖先），所以没测到。不会丢数据，但达不到 Goals 里“一间不剩”。spec 的 Requirement 把作废尝试定义成“HEAD 不是祖先”，这个缺口在规格层就有，不全是执行体的问题。",
+      "fix": "已落地分支里，先算 keep（非 gitlink、非 _flight_dirt 的条目）。keep 不为空时同样走 _attic 归档并丢弃，再 _reap_one。HEAD 已落地，分支照常 -d。成功后同时写 reaped 和 archived。再补一条测试：worktree 用 --detach 从 worktree-c 开出，不提交，只改 src/a.py 并加一个未跟踪文件。spec 的 Requirement 措辞同步改成“有未提交改动的也先归档”。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5749,
+      "summary": "作废尝试先写 attic ref，然后把未提交改动从 worktree 里丢掉，最后才调 _reap_one。_reap_one 失败时（例如借出的子仓 HEAD 未并入、子仓有脏改动、worktree remove 失败），这间进 kept，why 只写子仓等原因，ref 不出现在 archived，也不出现在 kept/warnings。用户看到的是一间被保留、但改动已经没了的 worktree，没有任何指针告诉他改动存进了 refs/flight/<change>/attic/...，容易以为丢了。",
+      "fix": "任选一种：① _reap_one 失败时，kept 的 why 末尾加上「改动已归档到 <ref>」，或者照样 archived.append({path, ref})；② 把借出子仓的前置校验（未填充、HEAD 未并入、子仓脏）提到丢弃改动之前做，能预判失败时就不丢、不写 ref，直接进 kept。①改动最小。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5748,
+      "summary": "丢弃已跟踪改动用的是 `git checkout -- p`，它是从索引恢复，不是从 HEAD 恢复。已暂存的改动（XY 为 'M '/'A '/'D '/'R '，比如执行体 git add 后还没 commit 就中断）丢不掉，_reap_one 随后报「有未提交改动」，这间进 kept。改动已归档、不会丢，但这间回收不了。另外遇到暂存重命名时，_status_entries 只取新路径，attic 树里会同时留着旧路径（HEAD 版本）和新路径。",
+      "fix": "丢弃前对已跟踪的 keep 路径先跑 `git -C wt reset -q -- <paths>`，再 checkout 或删未跟踪文件。或者丢弃这一步直接用 `git -C wt checkout HEAD -- <在 HEAD 中存在的路径>`，HEAD 里没有的新增路径用 rm --cached 加删文件。重命名可以让 _status_entries 在 attic 场景里把旧路径也带上，交给 add -A。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5661,
+      "summary": "`git update-ref ref tip` 会无条件覆盖。原 ref 被占用时改用 `<ref>-<HEAD7>`，但没检查这个带后缀的 ref 是否也已存在、指向别的提交。目录名和 HEAD 都相同、未提交内容不同的两次归档，后一次会悄悄覆盖前一次。refs/flight/* 默认没有 reflog，被覆盖的 attic 提交会变成不可达，之后被 gc 掉。概率低（目录名一般带运行 id），但和“不丢内容”的目标冲突。",
+      "fix": "创建 ref 时加上旧值为空的约束：`git update-ref <ref> <tip> \"\"`，ref 已存在就失败。失败时再换一个后缀（比如追加 tip 前 7 位或序号），或者直接抛异常进 kept，不要覆盖。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5679,
+      "summary": "timeline_record 写在 try 块的正常路径末尾。git(root, 'rev-parse', 'HEAD') 或 worktree list 抛异常时（例如仓库还没有提交），change 目录明明存在，timeline 却不追加 reap 事件。spec 要求“每次运行 SHALL 追加一条 reap 事件，N 为 0 时也写”。",
+      "fix": "timeline_record 挪进 finally（或放到外层 except 之后），条件是 change 目录存在；计数用当时已累积的 reaped/archived/kept/freed。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_close_reap.py",
+      "line": 4,
+      "summary": "去掉 xfail 后有两处遗留：模块 docstring 还写着「骨架：strict xfail……实现后去掉标记即解锁」，已经过时；删 `import pytest` 后第 8–9 行留下两个连续空行。",
+      "fix": "把 docstring 最后一句改成描述现状（或者删掉）；第 8–9 行的空行合并成一个。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 264,
+      "summary": "`fresh` 状态也跑 landed 判据，会误报（需进一步确认，因为 spec 字面上包含 fresh）。fresh 表示 HEAD 在 target 的 first-parent 链上、W 没有独有提交，所以 landed_into 命中只可能是因为某个本地分支 B 把 target 合进了自己（比如本仓库规定的「PR 前预合并 main」）。这时 B 合进去的是 main 上的提交，并不是 W 的工作。结果是：一间刚从 main tip 新建、干净的 `.claude/worktrees/` worktree（例如 EnterWorktree 开的人工会话）会被标成「landed: 已合进本地分支 B」，从 keep 改判为 safe，在 /clean-after-merged apply 时被删。提交不会丢，但这条原因是错的，还会收走正在使用的工作目录。这与 D8 排除 first-parent 的初衷（只认被合入的、不认被派生的）相违。",
+      "fix": "landed 判据只对 `state == \"unmerged\"` 生效，即把第 264 行改为 `if state == \"unmerged\" and under(...)`，dead-attempt 分支随之简化。如果坚持保留 fresh，就额外要求 HEAD 不在 target 的历史里，事实上等于排除 fresh。同时请 spec/design 的作者确认，把 Requirement 里的「fresh 或 unmerged」改成只写 unmerged，并补一条用例：B 预合并 main 之后，从 main tip 新建的 `.claude/worktrees/x` 仍落 keep。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 376,
+      "summary": "本切片新增了 `Ctx.landed()` 缓存，但 compute() 处理 refs/flight 时仍直接调 `landed_changes(ctx)`，同一次 plan 里 `ls-tree -r` 会跑两遍，缓存只用上一半。",
+      "fix": "把第 376 行改为 `landed = ctx.landed()`。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/merged-cleanup.py",
+      "line": 272,
+      "summary": "投影字段不一致：landed 命中时把 `item[\"merged\"]` 改写成 \"branch\"，dead-attempt 命中时 `merged` 仍是 \"unmerged\"，但 tier 已经是 safe。读 JSON 的一方会看到「unmerged + safe」这种自相矛盾的组合。",
+      "fix": "dead-attempt 命中时同样写 `item[\"merged\"] = state`（取值 \"dead-attempt\"），或者在 clean-after-merged.md 里说明 merged 字段在这两种情况下的取值。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/opsx-apply.md",
+      "line": 86,
+      "summary": "文档要求「原样打印它在 timeline 里记下的那一行」，但没有哪条命令会输出这一行。`slice-gate.py reap` 的 stdout 只有 JSON（slice-gate.py:7504），那一行只写进 timeline（slice-gate.py:5690）；`timeline.py report` 在 reap 之前就跑完了，所以执行体无法照原样打印，只能自己拼，等于自述。另外实际那一行还有「· 保留 K 个」，文档里漏了。SKILL.md:93 同样有这个问题。",
+      "fix": "两处同改：改成「原样打印 reap 输出的 JSON（reaped / archived / kept / freed_kb / warnings）」；如果要保留打印那一行的写法，就补上「· 保留 K 个」，并写明从哪里取（例如再跑一次 `timeline.py report`，或让 reap 往 stderr 也打印这一行，后者属于 S1 范围）。命令与 SKILL 措辞保持一致。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "CLAUDE.md",
+      "line": 12,
+      "summary": "铁律 6 没有按 design D9 的「现有措辞全部保留」和切片包「在 merge 那句之后补一句」来改，而是把整行重写了：「一间」改成「一」，「已合回且无未合回改动的切片临时 worktree」改成「切片临时 worktree 已合回且无残留改动」，「授权其 safe 档」改成「授权 safe 档」；切片包要求写入的 `refs/flight/<change>/attic/` 路径也没写。被测试钉住的关键词都还在，语义也基本不变，但这是零容忍铁律，改写与设计约束相悖，也没有申报。原因很可能是 memory-lint 每行 400 字节的告警线（LINE_WARN，按字节计），现在这行正好 399 字节。",
+      "fix": "在提交说明或切片 summary 里申报这次改写及原因（memory-lint 的 LINE_WARN=400 字节）；或者恢复原措辞，把收口 reap 的例外拆成铁律 6 下的一条缩进子项（形式同「命令即授权」子项），这样既不超线，也满足 D9 的「现有措辞全部保留」。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/clean-after-merged.md",
+      "line": 42,
+      "summary": "原因标记表原来缩进 3 格，属于第 4 步列表项；现在被提到第 0 列，第 4 步的列表项在表前就断开了，第 5 步「验证」会被渲染成一个新的有序列表。这个缩进改动是被预置骨架测试 `test_cleanup_doc_explains_new_reasons` 逼出来的：它用 `line.startswith(\"| `landed`\")` 匹配，必须顶格。另外，与本次无关的 5 行旧表格也跟着改了缩进。",
+      "fix": "让测试先 `lstrip()` 再匹配，例如 `line.lstrip().startswith(...)`，然后把表格恢复为 3 格缩进，留在第 4 步列表项里。如果不打算改测试，至少在切片 summary 里申报这个渲染副作用。"
+    }
+  ],
+  "fix": null,
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 453.0 秒（69 个文件），超过预算 120 秒，留给 final",
+        "rerun_tests": null,
+        "est_sec": 453,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 453.6 秒（92 个文件），超过预算 120 秒，留给 final",
+        "est_sec": 453.6,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}

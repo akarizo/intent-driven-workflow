@@ -11,3 +11,6 @@
 2026-11-19T11:42:04Z	review	findings=12 blocking=0 deferred=12
 2026-11-19T11:54:15Z	final	增量（锚点 100e015188，重跑 92 个文件 / 沿用 218 个用例） 测试 719.7s · 检查 schema-validate 1.4s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 7.5→6.6/18 ok
 2026-11-19T11:54:45Z	apply-done	blocked=0 blocking=0
+2026-11-19T11:55:14Z	apply-done	
+2026-11-19T11:55:24Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
+2026-11-19T11:56:05Z	ship	ready
