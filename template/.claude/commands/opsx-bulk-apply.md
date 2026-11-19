@@ -49,7 +49,7 @@ Apply multiple active OpenSpec changes concurrently.
 
    - Run OpenSpec git discipline checks before apply.
    - Create isolated worktrees under `.worktrees/<change>` on branch `worktree-<change>` (authoritative path/naming from `.claude/skills/openspec-git-discipline/`) unless another root is requested.
-   - Dispatch one subagent per change.
+   - Dispatch one subagent per change. Before dispatching, run `python3 .claude/hooks/model-routing.py get bulk.apply` and pass its `model` and `effort` explicitly on every subagent dispatch (never leave `model` empty).
    - Run `/opsx-apply <change> --no-confirm` and `/opsx-verify <change>` in each subagent. The `--no-confirm` flag suppresses the per-change confirmation (batch was already approved in step 3).
    - Collect normalized apply and verify reports.
    - Report results without merging or archiving.

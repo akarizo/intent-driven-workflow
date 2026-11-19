@@ -1,10 +1,8 @@
 """命令与 skill 的派发从路由配置取值；规划期不进路由
 （scenario: routing-docs#apply-docs-resolve-routing-from-pin、#propose-docs-pin-routing、
 #auxiliary-dispatches-read-routing、#planning-docs-carry-no-routing，共 4 条）。
-骨架：strict xfail，断言是真实的；切片 S5 实现后去掉标记即解锁。"""
+S5 已解锁。"""
 import re
-
-import pytest
 
 from conftest import ROOT, load_hook
 
@@ -26,7 +24,6 @@ def frontmatter(t):
     return m.group(1) if m else ""
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现")
 def test_apply_docs_resolve_routing_from_pin():
     # Given: opsx-apply.md 与 openspec-apply-change/SKILL.md
     docs = [read(CMD / "opsx-apply.md"), read(SKILLS / "openspec-apply-change" / "SKILL.md")]
@@ -41,7 +38,6 @@ def test_apply_docs_resolve_routing_from_pin():
         assert "effort" in fb and "model-routing" in fb, fb
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现")
 def test_propose_docs_pin_routing():
     # Given: opsx-propose.md 与 openspec-propose/SKILL.md
     docs = [read(CMD / "opsx-propose.md"), read(SKILLS / "openspec-propose" / "SKILL.md")]
@@ -64,7 +60,6 @@ AUX = {
 }
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现")
 def test_auxiliary_dispatches_read_routing():
     # Given: 7 个辅助派发点文件
     # When: 逐个读取
@@ -80,7 +75,6 @@ def test_auxiliary_dispatches_read_routing():
 PLANNING_SKILLS = ("openspec-explore", "openspec-new-change", "openspec-continue-change", "openspec-propose")
 
 
-@pytest.mark.xfail(strict=True, reason="S5 未实现")
 def test_planning_docs_carry_no_routing():
     # Given: model-routing.py 登记的规划期组名，以及由它们得到的 5 个命令与 4 个规划类 skill
     groups = set(load_hook("model-routing").PLANNING_GROUPS)

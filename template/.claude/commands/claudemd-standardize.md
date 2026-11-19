@@ -23,7 +23,7 @@ description: 按 claudemd-standard 全量对标——在正确层级(LCA)创建�
    - 缺 CLAUDE.md 的单元 → 创建候选;**已有一律跳过、不重建**(仅在第 3+ 步对其内容对标)。
    - 用 **AskUserQuestion** 确认创建清单;用户可剔除不该建的(避免给边角目录硬塞)。
 
-3. **证据调查**(每个目标文件;文件多时**并行子 agent**,每 agent 一文件;每个证据调查子 agent 用 `model: sonnet`——读文件核验真实路径,无需 Opus)
+3. **证据调查**(每个目标文件;文件多时**并行子 agent**,每 agent 一文件;每个证据调查子 agent 派发前先运行 `python3 .claude/hooks/model-routing.py get claudemd.evidence`,按其 stdout 的 `model` / `effort` 显式派发——读文件核验真实路径,取值见 `openspec/model-routing.json`)
    - 现存文件:逐条 claim / section 对照**真实代码/配置**核验,分类 `accurate` / `rotted`(与代码矛盾——引用已删文件、已改机制、过时签名)/ `derivable`(代码/cx 可推导的复述)/ `anchor`(锚点过时或缺 `path:line`)。
    - 新文件:读该单元代码,提炼「读完本单元全部代码仍会(搞错 / 不知如何扩展 / 找不到)」的不可复述知识。
    - ⚠ **反臆造硬规则(第一纪律)**:每条 `path:line`、每个扩展 seam、每个版本/端口/镜像 tag **写前必 `grep`/`read` 验真存在**,**禁编造**。不确定 → 软化为目录/文件指针(不钉易变值)或留空待核。(教训:曾把不存在的 `_DISPATCH`、错的 docker base 当事实写 → 必腐成误导。)

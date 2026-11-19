@@ -45,7 +45,7 @@ def test_pr_ship_single_review():
     assert "gate-report.md" in text and "evidence.log" in text and "不重跑测试" in text
     assert re.search(r"(至多|最多|≤)\s*2\s*轮", text)
     assert "水位线" not in text and "review-log" not in text
-    assert text.count('model: "<main>"') >= 2, "code-reviewer 派发（首审与复核）都必须显式带 model"
+    assert "ship.reviewer" in text and "ship.followup" in text, "code-reviewer 派发（首审与复核）都必须从路由配置取 model"
     assert "timeline.py record pr-open" in text and "review-findings.json" in text
 
 
@@ -119,28 +119,28 @@ def test_apply_resolves_main_model():
     cmd = read(CMD / "opsx-apply.md")
     skill = read(SKILLS / "openspec-apply-change" / "SKILL.md")
 
-    # When: 检查两份文件里 <main> 的来源与失败处置
+    # When: 检查两份文件里路由的来源与失败处置
     texts = [cmd, skill]
 
-    # Then: <main> 取自 session-model.py；判定失败停下报告并提示 --model=；.flight 记录路由与来源；收口带 --expect-models；不再有"看 /model"式自述
+    # Then: 路由取自 model-routing.py resolve；失败停下报告；.flight 记录 models 与 efforts；收口带 --expect-models 与 --expect-efforts；不再有 --model= 旗标与"看 /model"式自述
     for t in texts:
-        assert "session-model.py" in t
+        assert "model-routing.py resolve" in t
         assert "看 `/model`" not in t
-        assert "--expect-models" in t
-    assert "--model=" in cmd and "停下报告" in cmd
-    assert ".flight" in cmd and '"models"' in cmd
+        assert "--expect-models" in t and "--expect-efforts" in t
+        assert "--model=" not in t
+    assert "停下报告" in cmd
+    assert ".flight" in cmd and '"models"' in cmd and '"efforts"' in cmd
 
 
 def test_pr_ship_resolves_main_model():
     # Given: /pr-ship 命令
     text = read(CMD / "pr-ship.md")
 
-    # When: 检查两处 code-reviewer 派发的 <main> 来源
-    asks = text.count('model: "<main>"')
+    # When: 检查 code-reviewer 派发的 model 来源
 
-    # Then: 两处仍显式带 model；<main> 注明取自 session-model.py；不再有"看 /model"式自述
-    assert asks >= 2, asks
-    assert "session-model.py" in text
+    # Then: 首审取自 model-routing.py get ship.reviewer；不再有 <main> 与"看 /model"式自述
+    assert "model-routing.py get ship.reviewer" in text
+    assert "<main>" not in text
     assert "看 `/model`" not in text
 
 
@@ -251,9 +251,10 @@ def test_fallback_effort_from_frontmatter():
     # When: 取两者的回退路径段
     fallbacks = [fallback(t) for t in (cmd, skill)]
 
-    # Then: 回退段都不把 effort 写成 Agent 派发参数（无 effort: high / effort: low），并写明 effort 由 agent frontmatter 决定
+    # Then: 回退段的 effort 取自 model-routing（不写死 effort: high / effort: low）；保留旧版本由 agent frontmatter 兜底的说明
     for fb in fallbacks:
         assert "effort: high" not in fb and "effort: low" not in fb, fb
+        assert "effort" in fb and "model-routing" in fb, fb
         assert "frontmatter" in fb
 
 
@@ -345,9 +346,9 @@ def test_legacy_review_dispatch_names_model():
 
     paras = [para(at) for at in sites]
 
-    # Then: 三处都带 model: "<main>"，且写明 <main> 由 session-model.py 判定（或同 4b）；全文没有 flight: 前缀的 agent 名
+    # Then: 三处都写明 model 取自 model-routing.py get flight.reviewer（或同 4b）；全文没有 <main> 与 flight: 前缀的 agent 名
     assert len(paras) == 3, sites
     for p in paras:
-        assert 'model: "<main>"' in p, p
-        assert "session-model.py" in p or "同 4b" in p, p
+        assert "model-routing.py get flight.reviewer" in p or "同 4b" in p, p
+    assert "<main>" not in text
     assert "flight:" not in text
