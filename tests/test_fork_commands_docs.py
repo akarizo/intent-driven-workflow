@@ -2,7 +2,6 @@
 import json
 import re
 
-import pytest
 
 from conftest import ROOT, load_hook, run_hook
 
@@ -34,7 +33,6 @@ def docs():
     return sorted(CMD.glob("*.md")) + sorted(SKILLS.glob("**/SKILL.md"))
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_cleanup_command_runs_as_fork():
     # Given: 模板里的 `clean-after-merged.md` 与 `model-routing.py` 的内建默认
     mr = load_hook("model-routing")
@@ -54,7 +52,6 @@ def test_cleanup_command_runs_as_fork():
     assert "AskUserQuestion" not in text
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_only_fork_commands_carry_model():
     # Given: `template/.claude/commands/*.md` 与 `template/.claude/skills/**/SKILL.md`
     mr = load_hook("model-routing")
@@ -76,7 +73,6 @@ def test_only_fork_commands_carry_model():
         assert "context" not in frontmatter(read(f)), f
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_stale_model_advice_removed():
     # Given: 模板里的全部命令与 skill
     files = docs()
@@ -91,7 +87,6 @@ def test_stale_model_advice_removed():
     assert "不命中缓存" in NOTE
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_self_hosting_config_leaves_fork_keys():
     # Given: 本仓库的 `template/openspec/model-routing.json` 与模板命令
     mr = load_hook("model-routing")
@@ -106,7 +101,6 @@ def test_self_hosting_config_leaves_fork_keys():
     assert p.returncode == 0, p.stdout + p.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_docs_register_cleanup_runner():
     # Given: `README.md` 与 `docs/WORKFLOW_zh.md`
     readme = read(ROOT / "README.md")

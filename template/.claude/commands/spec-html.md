@@ -4,7 +4,7 @@ description: 渲染/刷新 openspec/changes/<change>/spec.html 意图审批面�
 
 把当前 OpenSpec change 的 markdown 工件渲染为 `openspec/changes/<change>/spec.html`，作为浏览器里的意图审批面板。
 
-> **模型建议**：本命令是低推理任务（读工件 + 模板占位块替换 + 一次 Write 渲染），主会话在 Opus 时建议先 `/model sonnet` 再跑，省约 5× token。需要复杂判断时自行保留 Opus。
+> **模型**：不要为本命令中途用 `/model` 切换模型：切换后的首个请求要把整段上下文重发给新模型、不命中缓存，切回来还要再付一次。
 
 **Input**: `/spec-html` 后的参数是 change-name (kebab-case)；不传则让用户选。
 
