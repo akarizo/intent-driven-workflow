@@ -1,10 +1,8 @@
-"""fork-mechanical-commands 的 scenario 骨架（strict xfail；切片 S2 实现后去掉标记即解锁）。"""
+"""fork-mechanical-commands 与 cleanup-fork-report 的 scenario 测试（已解锁）。"""
 import json
 import re
 
-
 from conftest import ROOT, load_hook, run_hook
-import pytest
 
 CMD = ROOT / "template" / ".claude" / "commands"
 SKILLS = ROOT / "template" / ".claude" / "skills"
@@ -131,7 +129,6 @@ def test_cleanup_fork_guards_session_cwd():
     assert len(rows) == 1, rows
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_cleanup_final_reply_carries_plan_result_verify():
     # Given: 模板的 `/clean-after-merged` 命令文件
     # When: 读取它对最后一条回复的约定，以及 step 2 与 step 5 对输出的要求
@@ -151,7 +148,6 @@ def test_cleanup_final_reply_carries_plan_result_verify():
     assert "最后一条回复" in step5, step5
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_cleanup_doc_states_cwd_basis():
     # Given: 模板的 `/clean-after-merged` 命令文件
     # When: 读取运行方式一节与原因表
