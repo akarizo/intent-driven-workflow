@@ -35,10 +35,10 @@ def test_routing_builtin_defaults_without_config(tmp_path):
     # When: 运行 show --json
     p = routing("show", "--json", "--openspec", str(tmp_path / "openspec"))
 
-    # Then: 退出 0，输出 10 个键；executor opus·high、integrator sonnet·low、bulk.apply opus·medium，来源都是 builtin
+    # Then: 退出 0，输出 11 个键；executor opus·high、integrator sonnet·low、bulk.apply opus·medium，来源都是 builtin
     assert p.returncode == 0, p.stderr
     table = json.loads(p.stdout)
-    assert len(table) == 10, table
+    assert len(table) == 11, table
     assert table["flight.executor"] == {"model": "opus", "effort": "high", "source": "builtin"}
     assert table["flight.integrator"] == {"model": "sonnet", "effort": "low", "source": "builtin"}
     assert table["bulk.apply"] == {"model": "opus", "effort": "medium", "source": "builtin"}

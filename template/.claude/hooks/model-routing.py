@@ -6,6 +6,7 @@
 #   model-routing.py pin     --change-dir D
 #   model-routing.py resolve --change-dir D
 #   model-routing.py get     <组.键> [--change-dir D | --openspec DIR]
+#   model-routing.py frontmatter [--check] [--openspec DIR] [--commands DIR]   把路由值渲染进 fork 命令的 frontmatter
 #
 # 配置：<openspec 根>/model-routing.json，两级「组.键」→ {"model","effort"}；文件缺失视为 {}，缺的键走内建默认。
 #   openspec 根：--openspec 优先 > <change-dir>/../.. > ./openspec。
@@ -18,6 +19,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +37,7 @@ REGISTRY = {
     "archive": ("sync",),
     "claudemd": ("evidence",),
     "bulk": ("apply",),
+    "cleanup": ("runner",),
 }
 _OPUS_HIGH = {"model": "opus", "effort": "high"}
 _SONNET_LOW = {"model": "sonnet", "effort": "low"}
@@ -49,8 +52,12 @@ BUILTIN = {
     "archive.sync": _SONNET_LOW,
     "claudemd.evidence": _SONNET_LOW,
     "bulk.apply": {"model": "opus", "effort": "medium"},
+    "cleanup.runner": _SONNET_LOW,
 }
 PINNED_GROUPS = ("flight", "ship")
+# fork 命令的唯一登记处：路由键 → 命令文件名（frontmatter 的 model / effort 由 frontmatter 子命令渲染）
+FORK_COMMANDS = {"cleanup.runner": "clean-after-merged.md"}
+FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.S)
 ENV_OVERRIDES = ("CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE")
 
 
@@ -126,7 +133,7 @@ def validate(cfg):
 
 
 def effective(root):
-    """返回 (10 键表 {组.键: {model, effort, source}}, errors)。"""
+    """返回 (11 键表 {组.键: {model, effort, source}}, errors)。"""
     cfg, errs = load_config(root)
     errs = errs or validate(cfg)
     if errs:
@@ -258,6 +265,58 @@ def cmd_get(args):
     print(json.dumps(table[name]))
 
 
+def render_frontmatter(text, model, effort):
+    """返回 (新文本, 实际值 {model, effort})；非 fork 形态返回 (None, None)。块外与块内其他行逐字保留。"""
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return None, None
+    lines = m.group(1).split("\n")
+    if not any(l.strip() == "context: fork" for l in lines):
+        return None, None
+    want = {"model": model, "effort": effort}
+    actual = {}
+    out = []
+    for line in lines:
+        field = next((f for f in ("model", "effort") if line.startswith(f + ":")), None)
+        if field is None:
+            out.append(line)
+            continue
+        actual[field] = line.split(":", 1)[1].strip()
+        out.append("%s: %s" % (field, want[field]))
+    out.extend("%s: %s" % (f, want[f]) for f in ("model", "effort") if f not in actual)
+    return "---\n%s\n---\n%s" % ("\n".join(out), text[m.end():]), actual
+
+
+def cmd_frontmatter(args):
+    table, errs = effective(openspec_root(args))
+    if errs:
+        die(EXIT_INVALID, errs)
+    commands = Path(args.commands) if args.commands else Path(__file__).resolve().parent.parent / "commands"
+    plans = []
+    for name, filename in FORK_COMMANDS.items():
+        path = commands / filename
+        if not path.is_file():
+            die(EXIT_INVALID, ["%s：命令文件 %s 不存在" % (name, path)])
+        text = path.read_text(encoding="utf-8")
+        v = table[name]
+        new, actual = render_frontmatter(text, v["model"], v["effort"])
+        if new is None:
+            die(EXIT_INVALID, ["%s：%s 不是 fork 形态（首个 --- 块里没有 context: fork）" % (name, path)])
+        plans.append((path, text, new, actual, v))
+    if args.check:
+        drift = ["%s：%s 期望 %s 实际 %s" % (path.name, f, v[f], actual.get(f, "（缺）"))
+                 for path, _, _, actual, v in plans for f in ("model", "effort") if actual.get(f) != v[f]]
+        if drift:
+            print("\n".join(drift))
+            sys.exit(1)
+        print("frontmatter 与路由一致")
+        return
+    for path, text, new, _, v in plans:
+        if new != text:
+            path.write_text(new, encoding="utf-8")
+        print("%s  %s · %s" % (path.name, v["model"], v["effort"]))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="model-routing.py", description="执行层路由配置")
     sub = p.add_subparsers(dest="cmd")
@@ -284,6 +343,12 @@ def main(argv=None):
     loc.add_argument("--change-dir")
     loc.add_argument("--openspec")
     s.set_defaults(func=cmd_get)
+
+    s = sub.add_parser("frontmatter")
+    s.add_argument("--check", action="store_true")
+    s.add_argument("--openspec")
+    s.add_argument("--commands")
+    s.set_defaults(func=cmd_frontmatter)
 
     args = p.parse_args(argv)
     args.func(args)
