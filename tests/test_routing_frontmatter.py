@@ -1,8 +1,6 @@
 """routing-frontmatter 的 scenario 测试（切片 S1 已解锁）。"""
 import json
 
-import pytest
-
 from conftest import run_hook, write
 
 CLEAN_ENV = {"CLAUDE_CODE_EFFORT_LEVEL": "", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": ""}

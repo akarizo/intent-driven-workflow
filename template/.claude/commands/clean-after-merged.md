@@ -13,8 +13,8 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 
 - **只认参数**：调用时的参数附在末尾的 `ARGUMENTS:` 行（可为空）；对话里说过的内容这里看不到。
 - **不问询**：删不删、带不带 `--force`、用 `-d` 还是 `-D`，全部由脚本判定。
-- **`cd` 不跨调用保留**：子 agent 的每条 Bash 都写成 `cd "<主 worktree 根>" && <命令>`。起始 CWD 就是主会话所在目录，主会话的 CWD 不会随子 agent 移动；plan 与 apply 都带 `--protect "<起始 CWD>"`，由脚本把主会话所在的 worktree 降为 manual（`session-cwd`），不删它。
-- **最后一条回复就是交给用户的全部汇报**（step 4 的 `done` / `failed` 与 manual 档代码块），主会话不再复述。
+- **`cd` 不跨调用保留**：子 agent 的每条 Bash 都写成 `cd "<主 worktree 根>" && <命令>`。起始 CWD 是主会话当前所在目录：主会话 `cd` 过也一样（2026-11-20 探针实测：主会话 `cd` 进子目录后，普通子 agent 与 fork 子 agent 的首条 `pwd` 都是该子目录），主会话的 CWD 不会随子 agent 移动；plan 与 apply 都带 `--protect "<起始 CWD>"`（传绝对路径，即 step 1 `pwd` 的输出），由脚本把主会话所在的 worktree 降为 manual（`session-cwd`），不删它。
+- **最后一条回复就是交给用户的全部汇报**，依次包含 step 2 的计划原文、step 4 的 `done` / `failed` 与 manual 档代码块、step 5 的验证输出；主会话不再复述。
 
 **Input**：可选指定 target branch，缺省为远端默认分支（`<remote>/HEAD`），再缺省为 `main`。例如 `/clean-after-merged develop`。
 
@@ -38,7 +38,7 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
    python3 .claude/hooks/merged-cleanup.py plan --markdown --fetch --protect "<起始 CWD>" [--target <T>]
    ```
 
-   输出（safe / manual / keep 三段）原样展示，不改写、不删减。
+   输出（safe / manual / keep 三段）原样放进最后一条回复，不改写、不删减。
 
 3. **执行 safe 档**
 
@@ -59,7 +59,7 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 | `dirty` | worktree 有未提交改动，先看清改动再决定 |
 | `locked` | worktree 被锁定，确认没有运行中的 agent |
 | `outside` | worktree 在仓库目录外，确认后再删 |
-| `session-cwd` | 主会话 CWD 在此 worktree 内，主会话先回主仓库根再删 |
+| `session-cwd` | 主会话 CWD 在此 worktree 内；只保护 `--protect` 传入的路径。主会话先回主仓库根再删 |
 | `landed` | 临时 worktree 的提交已被 merge 进另一个本地分支（如 change 分支），删目录不丢内容 |
 | `dead-attempt` | 属于已落地 / 已归档 change 的作废尝试；有自己分支的进 safe，游离 HEAD 的进 manual（删了会丢提交） |
 | 远端分支 | `git push <R> --delete <branch>`，确认后自己执行 |
@@ -70,6 +70,8 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
    git worktree list
    git branch --list 'worktree-*'
    ```
+
+   两条命令的输出原样放进最后一条回复。
 
 **退出码**：0 = 无失败；1 = 有失败（`failed` 逐条打印）；2 = 拒绝运行（不在主 worktree 等）→ 说明原因并停下，不改走其它路径。
 

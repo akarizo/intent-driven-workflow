@@ -12,6 +12,7 @@
 #   openspec 根：--openspec 优先 > <change-dir>/../.. > ./openspec。
 # 退出码：
 #   exit 0  成功
+#   exit 1  frontmatter --check 发现漂移（逐条点名「文件：字段 期望 x 实际 y」）
 #   exit 2  配置非法（逐条点名「组.键」）/ 未登记的键 / pin 时 slices.json 缺失
 #   exit 3  resolve 停飞：routing 未钉或不合法，或覆盖环境变量非空（点名变量）
 # 规划期组（propose / explore / new / continue / mini）不进路由配置；model 只写模型名。
@@ -57,7 +58,7 @@ BUILTIN = {
 PINNED_GROUPS = ("flight", "ship")
 # fork 命令的唯一登记处：路由键 → 命令文件名（frontmatter 的 model / effort 由 frontmatter 子命令渲染）
 FORK_COMMANDS = {"cleanup.runner": "clean-after-merged.md"}
-FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.S)
+FRONTMATTER_RE = re.compile(r"^---(\r?\n)(.*?)\r?\n---(\r?\n|\Z)", re.S)
 ENV_OVERRIDES = ("CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE")
 
 
@@ -270,7 +271,8 @@ def render_frontmatter(text, model, effort):
     m = FRONTMATTER_RE.match(text)
     if not m:
         return None, None
-    lines = m.group(1).split("\n")
+    eol = m.group(1)
+    lines = m.group(2).split(eol)
     if not any(l.strip() == "context: fork" for l in lines):
         return None, None
     want = {"model": model, "effort": effort}
@@ -284,7 +286,7 @@ def render_frontmatter(text, model, effort):
         actual[field] = line.split(":", 1)[1].strip()
         out.append("%s: %s" % (field, want[field]))
     out.extend("%s: %s" % (f, want[f]) for f in ("model", "effort") if f not in actual)
-    return "---\n%s\n---\n%s" % ("\n".join(out), text[m.end():]), actual
+    return "---" + eol + eol.join(out) + eol + "---" + m.group(3) + text[m.end():], actual
 
 
 def cmd_frontmatter(args):
@@ -297,7 +299,7 @@ def cmd_frontmatter(args):
         path = commands / filename
         if not path.is_file():
             die(EXIT_INVALID, ["%s：命令文件 %s 不存在" % (name, path)])
-        text = path.read_text(encoding="utf-8")
+        text = path.read_bytes().decode("utf-8")
         v = table[name]
         new, actual = render_frontmatter(text, v["model"], v["effort"])
         if new is None:
@@ -313,7 +315,7 @@ def cmd_frontmatter(args):
         return
     for path, text, new, _, v in plans:
         if new != text:
-            path.write_text(new, encoding="utf-8")
+            path.write_bytes(new.encode("utf-8"))
         print("%s  %s · %s" % (path.name, v["model"], v["effort"]))
 
 

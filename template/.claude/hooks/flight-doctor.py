@@ -6,9 +6,10 @@
 #   flight-doctor.py cost --change-dir DIR [--json]       从 timeline.md 归因每一次全量（必要 / 可避免 / 未分类）
 #                                                         另读备注里的「测试 Xs」（全量 final 秒数）与「排队 Xs」（按事件累加到 wait_sec）
 #                                                         wave-check 事件另汇总到 wave（次数 / 守护秒 / 测试秒 / 跳过测试次数）
-#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock] [tests]
+#   flight-doctor.py doctor [--openspec-root DIR]         项目级体检：[runner] [anchors] [gate.test] [declare] [checks] [lock] [tests] [routing]
 #                                                         [declare] 声明了 inert 时另与锚点池的依赖图对账，列出矛盾
 #                                                         [tests] 分层文件写了预算 / 放行时另列各范围预算对实际、区域超线条数与放行到期
+#                                                         [routing] 调用 model-routing.py frontmatter --check（只读），报 fork 命令 frontmatter 漂移
 #
 # 判定逻辑不复制：经 importlib 按路径加载同目录的 slice-gate.py，只调用它的 load_plan / load_baseline /
 # final_forecast / suite_sec / git（final 预告与 ship 的补跑预告共用 final_forecast）；inert 对账另调
@@ -581,6 +582,23 @@ def doctor_tests(openspec_root, changes):
     return lines
 
 
+def doctor_routing(openspec_root):
+    """[routing]：只读调用 model-routing.py frontmatter --check，报 fork 命令 frontmatter 与路由的漂移。"""
+    try:
+        p = subprocess.run([sys.executable, os.path.join(HOOKS_DIR, "model-routing.py"), "frontmatter", "--check",
+                            "--openspec", openspec_root], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return ["[routing]", "  不可用：%s" % _err(e)]
+    lines = [l for l in p.stdout.splitlines() if l.strip()]
+    if p.returncode == 0:
+        return ["[routing]", "  " + (lines[0] if lines else "frontmatter 与路由一致")]
+    if p.returncode == 1:
+        return (["[routing]"] + ["  " + l for l in lines]
+                + ["  修法：在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter"])
+    err = [l for l in p.stderr.splitlines() if l.strip()]
+    return ["[routing]", "  不可用：%s" % (err[0] if err else "exit %d" % p.returncode)]
+
+
 def doctor(openspec_root):
     openspec_root = os.path.abspath(openspec_root)
     changes = _changes(openspec_root)
@@ -598,6 +616,7 @@ def doctor(openspec_root):
         out += doctor_tests(openspec_root, changes)
     except (Exception, SystemExit) as e:
         out += ["[tests]", "  test-ledger.py 不可用：%s" % _err(e)]
+    out += doctor_routing(openspec_root)
     return "\n".join(out)
 
 

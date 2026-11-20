@@ -1,7 +1,6 @@
-"""fork-mechanical-commands 的 scenario 骨架（strict xfail；切片 S2 实现后去掉标记即解锁）。"""
+"""fork-mechanical-commands 与 cleanup-fork-report 的 scenario 测试（已解锁）。"""
 import json
 import re
-
 
 from conftest import ROOT, load_hook, run_hook
 
@@ -128,3 +127,35 @@ def test_cleanup_fork_guards_session_cwd():
     assert "merged-cleanup.py plan --markdown --fetch --protect" in text
     assert "merged-cleanup.py apply --protect" in text
     assert len(rows) == 1, rows
+
+
+def test_cleanup_final_reply_carries_plan_result_verify():
+    # Given: 模板的 `/clean-after-merged` 命令文件
+    # When: 读取它对最后一条回复的约定，以及 step 2 与 step 5 对输出的要求
+    # Then: 最后一条回复的约定依次点名 step 2 的计划原文、step 4 的 `done` / `failed` 与 manual 档代码块、step 5 的验证输出；step 2 与 step 5 都要求把输出放进最后一条回复
+    text = read(CMD / "clean-after-merged.md")
+    item = next((l for l in text.splitlines() if l.startswith("- **最后一条回复")), "")
+    assert item, "运行方式里没有「- **最后一条回复」条目"
+    marks = ["step 2", "计划", "step 4", "done", "failed", "manual", "step 5", "验证"]
+    pos = [item.find(m) for m in marks]
+    assert all(i >= 0 for i in pos), dict(zip(marks, pos))
+    assert pos[0] < pos[2] < pos[6], dict(zip(marks, pos))
+    assert pos[0] <= pos[1] < pos[2] <= pos[3] < pos[6] <= pos[7], dict(zip(marks, pos))
+    assert pos[2] <= pos[4] < pos[6] and pos[2] <= pos[5] < pos[6], dict(zip(marks, pos))
+    step2 = text[text.index("2. **"):text.index("3. **")]
+    step5 = text[text.index("5. **"):text.index("**退出码**")]
+    assert "最后一条回复" in step2, step2
+    assert "最后一条回复" in step5, step5
+
+
+def test_cleanup_doc_states_cwd_basis():
+    # Given: 模板的 `/clean-after-merged` 命令文件
+    # When: 读取运行方式一节与原因表
+    # Then: 运行方式写明起始 CWD 是主会话当前所在目录、主会话 `cd` 过也一样，并给出实测日期 2026-11-20；写明 `--protect` 传绝对路径；原因表的 `session-cwd` 一行说明只保护 `--protect` 传入的路径
+    text = read(CMD / "clean-after-merged.md")
+    run = text[text.index("运行方式"):text.index("**Input**")]
+    for k in ("主会话当前所在目录", "cd", "也一样", "2026-11-20", "绝对路径"):
+        assert k in run, k
+    row = next((l for l in text.splitlines() if l.startswith("| `session-cwd` |")), "")
+    assert row, "原因表没有 session-cwd 一行"
+    assert "只保护" in row and "--protect" in row, row

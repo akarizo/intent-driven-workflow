@@ -1,9 +1,8 @@
-"""routing-frontmatter 的 scenario 骨架（strict xfail；切片 S2 实现后去掉标记即解锁）。"""
+"""routing-frontmatter 与 routing-frontmatter-hardening 的 scenario 测试（已解锁）。"""
 import json
 import os
 import re
 import subprocess
-
 
 from conftest import ROOT
 
@@ -76,3 +75,23 @@ def test_install_survives_invalid_routing(tmp_path):
     assert "model-routing.py frontmatter" in p.stdout + p.stderr, p.stdout + p.stderr
     lines = frontmatter_lines(target)
     assert "model: sonnet" in lines and "effort: low" in lines, lines
+
+
+def test_install_hint_offers_upgrade(tmp_path):
+    # Given: 一个已安装本模板的目标仓库，它的 `.claude/commands/clean-after-merged.md` 被换成没有 `context: fork` 的旧版命令
+    target = tmp_path / "proj"
+    first = run_install(tmp_path, target)
+    assert first.returncode == 0, first.stderr
+    cmd = target / ".claude" / "commands" / "clean-after-merged.md"
+    cmd.write_text("---\ndescription: old\n---\n\n正文\n", encoding="utf-8")
+
+    # When: 不带 `--upgrade` 再运行一次 `install.sh <目标>`
+    second = run_install(tmp_path, target)
+    out = second.stdout + second.stderr
+
+    # Then: 退出 0，输出报告 fork 命令路由渲染失败；补救提示同时提到 `openspec/model-routing.json` 与 `install.sh --upgrade`
+    assert second.returncode == 0, out
+    assert "fork 命令路由渲染失败" in out, out
+    hint = [l for l in out.splitlines() if "openspec/model-routing.json" in l]
+    assert hint, out
+    assert any("install.sh --upgrade" in l for l in hint), hint

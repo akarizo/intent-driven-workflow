@@ -3,6 +3,7 @@
 #   plan  [--target T] [--remote R] [--fetch] [--markdown] [--protect P]   列出 worktree / 分支 / 远端分支 / 快照 ref 的清理档位
 #   apply [--target T] [--remote R] [--no-fetch] [--protect P]             fetch → ff 同步 → 只执行 safe 档；manual 交人
 # --protect P（可重复）：P 所在的 worktree 降为 manual（session-cwd），用于保护调用方会话的 CWD。
+#   P 应为绝对路径（相对路径按本脚本的 CWD，即主 worktree 根解析）。
 # 档位：safe 自动执行 · manual 打印命令交人 · keep 保留并写原因。必须在主 worktree 运行，否则 exit 2。
 # 退出码：0 正常 · 1 apply 有失败项 · 2 拒绝运行。纯标准库，兼容 Python 3.9。
 import argparse
