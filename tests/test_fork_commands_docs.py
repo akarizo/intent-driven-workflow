@@ -155,14 +155,13 @@ def test_cleanup_doc_states_cwd_basis():
     # Then: 运行方式写明起始 CWD 是主会话当前所在目录、主会话 `cd` 过也一样，并给出实测日期 2026-11-20；写明 `--protect` 传绝对路径；原因表的 `session-cwd` 一行说明只保护 `--protect` 传入的路径
     text = read(CMD / "clean-after-merged.md")
     run = text[text.index("运行方式"):text.index("**Input**")]
-    for k in ("主会话当前所在目录", "cd", "也一样", "2026-11-20", "绝对路径"):
+    for k in ("主会话当前所在目录", "主会话 `cd` 过也一样", "2026-11-20", "绝对路径"):
         assert k in run, k
     row = next((l for l in text.splitlines() if l.startswith("| `session-cwd` |")), "")
     assert row, "原因表没有 session-cwd 一行"
     assert "只保护" in row and "--protect" in row, row
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_cleanup_doc_marks_fork_command_untested():
     # Given: 模板的 `/clean-after-merged` 命令文件
     # When: 读取运行方式一节与 step 1 的代码块
