@@ -2,8 +2,6 @@
 import os
 import subprocess
 
-import pytest
-
 from conftest import commit_all
 from test_baseline_incremental import PLAIN_FULL, setup_change
 from test_baseline_warm import last_json, new_change, warm
@@ -26,7 +24,6 @@ def touch_later(path, offset=100):
     os.utime(path, (t, t))
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_warm_picks_latest_committed_change(git_repo):
     # Given: change old 与 new 的 `gate.test` 不同；new 的 `slices.json` 在 old 之后提交；之后把 old 的 `slices.json` 的修改时间改得比 new 晚
     old = setup_change(git_repo, change="old", gate_test=CMD_A, old_red=False, commit=False)
@@ -44,7 +41,6 @@ def test_warm_picks_latest_committed_change(git_repo):
     assert last_json(p.stdout)["test_cmd"] == CMD_B
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_warm_breaks_commit_tie_by_name(git_repo):
     # Given: change alpha 与 beta 的 `gate.test` 不同，两者的 `slices.json` 在同一次提交里
     alpha = setup_change(git_repo, change="alpha", gate_test=CMD_A, old_red=False, commit=False)
@@ -61,7 +57,6 @@ def test_warm_breaks_commit_tie_by_name(git_repo):
     assert last_json(p.stdout)["test_cmd"] == CMD_B
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_warm_ranks_uncommitted_after_committed(git_repo):
     # Given: change kept 的 `slices.json` 已提交；change draft 的 `slices.json` 从没提交过，修改时间更晚；两者 `gate.test` 不同
     setup_change(git_repo, change="kept", gate_test=CMD_A, old_red=False)

@@ -1,8 +1,6 @@
 """baseline-full-suite-sec 的 scenario 骨架（strict xfail；切片 S1 实现后去掉标记即解锁）。"""
 import json
 
-import pytest
-
 from conftest import commit_all
 from final_helpers import TEST_A, baseline, change_and_commit, final, latest_anchor, make_repo
 from test_baseline_anchor_reuse import clone_change
@@ -33,7 +31,6 @@ def touch_test_a(repo):
     change_and_commit(repo, "tests/test_a.py", TEST_A + "    # 改过\n")  # 与 TEST_A 同缩进：write 会整体 dedent
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_anchor_carries_full_suite_sec(git_repo):
     # Given: change c 跑过一次全量 baseline
     d = make_repo(git_repo)
@@ -49,7 +46,6 @@ def test_anchor_carries_full_suite_sec(git_repo):
     assert anchor["full_suite_sec"] == sec, (anchor.get("full_suite_sec"), sec)
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_final_anchor_keeps_full_suite_sec(git_repo):
     # Given: change c 跑过一次全量 baseline，记下的全量耗时为 T；之后提交了非测试文件 `src/a.py` 的改动
     d = make_repo(git_repo)
@@ -72,7 +68,6 @@ def test_final_anchor_keeps_full_suite_sec(git_repo):
     assert is_num(a2.get("full_suite_sec")) and a2["full_suite_sec"] > 0, (a2.get("full_suite_sec"), p2.stderr)
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_anchor_baseline_inherits_full_suite_sec(git_repo):
     # Given: change other 跑过全量 baseline，全量耗时为 T；change c 与 other 的 `gate.test` 相同，c 还没有基线
     d = make_repo(git_repo, extra=SLOW)
@@ -91,7 +86,6 @@ def test_anchor_baseline_inherits_full_suite_sec(git_repo):
     assert out["full_suite_sec"] == t, (out["full_suite_sec"], t)
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_own_reuse_keeps_inherited_full_suite_sec(git_repo):
     # Given: change c 的基线经 other 的锚点走增量，`full_suite_sec` 等于 other 的全量耗时 T；之后只提交了测试文件的改动
     d = make_repo(git_repo, extra=SLOW)
@@ -111,7 +105,6 @@ def test_own_reuse_keeps_inherited_full_suite_sec(git_repo):
     assert t not in (out1["test"].get("sec"), out2["test"].get("sec")), (t, out1["test"], out2["test"])
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_legacy_anchor_leaves_full_suite_sec_unknown(git_repo):
     # Given: change other 跑过全量 baseline，锚点池里的锚点都去掉了 `full_suite_sec`（模拟旧版本写的锚点）；change c 还没有基线
     d = make_repo(git_repo, extra=SLOW)

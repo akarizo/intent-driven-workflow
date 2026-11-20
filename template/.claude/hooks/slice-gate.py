@@ -4720,8 +4720,10 @@ def cmd_final(args):
                 byproducts = anchor.get("byproducts") or []
             else:  # 全量：按基线差分，并记录依赖图（design D4）
                 lmode = "full"
+                tf0 = time.time()
                 tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True, extra_env=genv,
                                    keep_junit=rjunit)
+                full_wall = round(time.time() - tf0, 1)
                 f2, w2 = (_nodes_verdict(tg, bt.get("failed_nodes")) if bt.get("failed_form") == "nodes"
                           else _diff_verdict("test", tg, bt.get("failed")))
                 failed.extend([f2] if f2 else [])
@@ -4741,7 +4743,7 @@ def cmd_final(args):
                                "tests": _node_counts((ad or {}).get("nodes") or {}),
                                "nodes": _nodes_lower((ad or {}).get("nodes")), "deps_kind": tg["deps_kind"],
                                "measured": ad is not None and _tg_measurable(tg), "source": "final-full",
-                               "regions": [], "hops": 0}
+                               "regions": [], "hops": 0, "full_suite_sec": full_wall}
                 nodes_ok = ad is not None
                 tres = {"mode": "full", "inherited": 0}
                 if ad is None:
@@ -5204,13 +5206,16 @@ def _run_baseline(change_dir, data, full, warm=False):
         warnings.extend(warnings_d6)
     except RuntimeError as e:  # design D12：运行标记一定被结果覆盖
         reasons.append("基线结束时内容快照失败：%s；重跑 baseline" % e)
-    # 全量耗时记在基线里（design D1）：全量 = 本次墙钟；增量 = 上一次已知 → 候选记的 → 候选的 test.sec（锚点包装都没有 → None）
+    # 全量耗时记在基线里（design D1 / D2）：全量 = 本次墙钟；增量 = 上一次已知 → 经锚点取锚点记的 /
+    # 其余取候选记的 → 候选本身是全量（池条目没有 mode）时取它的 test.sec；增量候选的 test.sec 是补跑秒数，不充当全量（都没有 → None）
     if hit is not None:
         full_sec = last_sec
-        if full_sec is None:
+        if full_sec is None and hit.get("source") == "anchor":
+            full_sec = _num((src.get("pick") or [{}])[0].get("full_suite_sec"))
+        elif full_sec is None:
             full_sec = _num(src.get("full_suite_sec"))
-        if full_sec is None:
-            full_sec = _num((src.get("test") or {}).get("sec"))
+            if full_sec is None and src.get("mode") != "incremental":  # 池条目没有 mode，都是全量
+                full_sec = _num((src.get("test") or {}).get("sec"))
     bl["full_suite_sec"] = full_sec
     # 后台跑期间人可能改了 slices.json：重读当前文件只为判 gate / verify 是否被改；baseline 不写 slices.json
     bl["plan_sha"] = sha0
@@ -5266,7 +5271,7 @@ def _run_baseline(change_dir, data, full, warm=False):
             "regions": sorted(regions) if measured else [],  # 依赖已并入锚点的区域（final 分层增量据此补跑锚点没测过的）
             # ceiling: secs 让锚点文件变大，选锚点变慢时挪到旁路文件 -> 把 secs 存到 flight-ledger/ 下按锚点文件名对应的文件
             "secs": _ledger_secs(led) if measured else None,
-            "measured": measured, "source": "baseline", "hops": 0})
+            "measured": measured, "source": "baseline", "hops": 0, "full_suite_sec": full_sec})
         if w:
             warnings.append(w)
     elif apart is not None:  # 经锚点的增量基线（design D7）：写新锚点，hops = 来源 + 1；基线无效时 measured false
@@ -5364,8 +5369,30 @@ def _wait_warm(change_dir):
         time.sleep(2)
 
 
+def _slices_commit_times(parent):
+    """<changes 根>/*/slices.json 各自最后一次提交的 committer 时间：{真实路径: 秒}；只调一次 git，失败 → {}。"""
+    try:
+        top = os.path.realpath(git(parent, "rev-parse", "--show-toplevel"))
+        rel = os.path.relpath(os.path.realpath(parent), top).replace(os.sep, "/")
+        out = git(top, "-c", "core.quotepath=off", "log", "--format=%ct", "--name-only", "--",
+                  (rel + "/*/slices.json") if rel != "." else "*/slices.json")
+    except (RuntimeError, OSError, ValueError):
+        return {}
+    times, cur = {}, None
+    for line in out.splitlines():  # 一行时间戳后跟若干路径行；log 由新到旧，每个路径只记第一次出现
+        line = line.strip()
+        if not line:
+            continue
+        if line.isdigit():
+            cur = int(line)
+        elif cur is not None:
+            times.setdefault(os.path.join(top, line), cur)
+    return times
+
+
 def _warm_source(change_dir):
-    """<changes 根> 下除 archive 与本 change 外，slices.json mtime 最新且 gate.test 非空的 change → (目录, gate)；没有 → None。"""
+    """<changes 根> 下除 archive 与本 change 外，gate.test 非空、slices.json 最后提交的 change → (目录, gate)；没有 → None。
+    排序键 (提交时间, 名字) 取最大：从没提交过的记 -1；git 失败时全部记 -1，退化为按名字。"""
     me = os.path.realpath(change_dir)
     parent = os.path.dirname(me)
     best = None
@@ -5373,6 +5400,7 @@ def _warm_source(change_dir):
         names = os.listdir(parent)
     except OSError:
         return None
+    times = _slices_commit_times(parent)
     for n in names:
         d = os.path.join(parent, n)
         p = os.path.join(d, "slices.json")
@@ -5381,11 +5409,11 @@ def _warm_source(change_dir):
         try:
             with open(p, "r", encoding="utf-8") as f:
                 gate = (json.load(f) or {}).get("gate")
-            mt = os.path.getmtime(p)
         except (OSError, ValueError, AttributeError):
             continue
-        if isinstance(gate, dict) and _nonblank(gate.get("test")) and (best is None or mt > best[0]):
-            best = (mt, d, gate)
+        rank = (times.get(os.path.realpath(p), -1), n)
+        if isinstance(gate, dict) and _nonblank(gate.get("test")) and (best is None or rank > best[0]):
+            best = (rank, d, gate)
     return (best[1], best[2]) if best else None
 
 
@@ -7001,6 +7029,7 @@ def _anchor_forward(root, old, sel, d, fails, outcomes, ran=None):
         "tests": tests,
         "regions": sorted(old.get("regions") or []),  # 沿用旧锚点测过的区域；本次跑并入的区域由调用方追加
         "measured": bool(d) or not sel,
+        "full_suite_sec": _num(old.get("full_suite_sec")),  # 沿链继承全量耗时；旧版本锚点没有 → None
     }
 
 
@@ -7606,7 +7635,7 @@ def main():
             p.add_argument("--full", action="store_true", help="不走增量与同树沿用，强制跑全量 gate.test")
     p = sub.add_parser("warm", help="规划开始时预热全量：写成本 change 的旧基线（warm: true）；跳过时打印原因并 exit 0，否则按 ok 退出")
     p.add_argument("--change-dir", required=True)
-    p.add_argument("--cmd", dest="cmd_text", help="显式的全量命令；缺省沿用最近一个 change 的 gate.test")
+    p.add_argument("--cmd", dest="cmd_text", help="显式的全量命令；缺省沿用最后提交的 change 的 gate.test")
     p = sub.add_parser("start")
     p.add_argument("slice")
     p.add_argument("--change-dir", required=True)
