@@ -1,0 +1,36 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5388,
+      "summary": "_slices_commit_times 的键是 os.path.join(top, 行)，没有 realpath；_warm_source 查表用的是 os.path.realpath(p)。只要 changes 根到 slices.json 之间有一级是仓库内的符号链接，两边就对不上，已提交的 change 会被当成未提交（记 -1），排序退化成按名字。docstring 写的「{真实路径: 秒}」也与实现不一致。",
+      "fix": "写入时改成 times.setdefault(os.path.realpath(os.path.join(top, line)), cur)；或者把 docstring 改成「相对 git 顶层拼出的路径」，并说明符号链接场景不支持。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5377,
+      "summary": "每次 warm 都对全部历史跑一遍带 pathspec 的 git log。pathspec 里的 '*' 默认会跨 '/' 匹配，archive/ 下更深层的 slices.json 也会列出来；rel 里如果带 [ ? * 这类 glob 字符，还会被当成通配符。现在结果正确，只是历史长的仓库会多花时间。",
+      "fix": "可选：给 rel 部分加 ':(literal)' 前缀，或者改用 ':(glob)<rel>/*/slices.json'，让 '*' 只匹配一级目录，同时避免 rel 被当成通配符。需要时再加 --max-count，或者在所有候选都拿到时间后提前停止。不阻断。"
+    }
+  ],
+  "fix": null,
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 435.6 秒（90 个文件），超过预算 120 秒，留给 final",
+        "est_sec": 435.6,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}

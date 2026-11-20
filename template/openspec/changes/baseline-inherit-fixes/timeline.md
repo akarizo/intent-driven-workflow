@@ -8,3 +8,5 @@
 2026-11-20T08:50:43Z	review	findings=2 blocking=0 deferred=2
 2026-11-20T09:02:35Z	final	增量（锚点 9b2f62f6d8，重跑 90 个文件 / 沿用 327 个用例） 测试 691.8s · 检查 schema-validate 2.3s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 7.3→7.7/18 ok
 2026-11-20T09:02:38Z	apply-done	blocked=0 blocking=0
+2026-11-20T09:03:24Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
+2026-11-20T09:03:41Z	ship	ready
