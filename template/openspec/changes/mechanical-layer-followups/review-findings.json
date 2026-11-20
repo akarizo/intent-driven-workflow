@@ -1,0 +1,44 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 587,
+      "summary": "doctor_routing 只捕获 OSError 与 subprocess.TimeoutExpired。text=True 按 locale 严格解码子进程输出，在非 UTF-8 locale 下中文输出可能抛 UnicodeDecodeError，并越过 doctor() 冒泡，破坏「doctor 恒 exit 0」的接口约定。相邻的 [anchors] 和 [tests] 段都用 except (Exception, SystemExit) 兜底，这里没有对齐（需进一步确认：PEP 538 会把 C locale 强制为 UTF-8，常见环境下触发概率低）。",
+      "fix": "subprocess.run 增加 encoding=\"utf-8\", errors=\"replace\"；或把异常捕获放宽到 except Exception，与同文件其他段保持一致。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_fork_commands_docs.py",
+      "line": 157,
+      "summary": "test_cleanup_doc_states_cwd_basis 断言关键字 \"cd\" 时，运行方式一节原有的「`cd` 不跨调用保留」已经含 cd，所以这条断言修改前就成立，验不到 Then 要求的「主会话 `cd` 过也一样」。\"也一样\" 只做了单独匹配，没约束它和 cd 的相邻关系。",
+      "fix": "把 \"cd\" 与 \"也一样\" 两个关键字合成一个短语来断言，例如 \"主会话 `cd` 过也一样\"，或用正则 r\"cd.{0,6}也一样\"，这样只有新措辞存在时测试才会通过。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/commands/clean-after-merged.md",
+      "line": 29,
+      "summary": "step 1 代码块的行内注释还写着「起始 CWD = 主会话所在目录」，运行方式一节已改成「主会话当前所在目录（cd 过也一样）」，两处措辞对不上。语义上没有冲突，但读文档的人可能以为是两种说法。",
+      "fix": "把注释改成「起始 CWD = 主会话当前所在目录（绝对路径），记下供 --protect 用」，和运行方式一节保持一致。"
+    }
+  ],
+  "fix": null,
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 213.0 秒（48 个文件），超过预算 120 秒，留给 final",
+        "rerun_tests": null,
+        "est_sec": 213,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}

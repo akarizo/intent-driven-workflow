@@ -9,3 +9,5 @@
 2026-11-20T10:27:17Z	review	findings=3 blocking=0 deferred=3
 2026-11-20T10:30:24Z	final	增量（锚点 e884c26c93，重跑 48 个文件 / 沿用 721 个用例） 测试 177.0s · 检查 schema-validate 1.4s · 用例 +0/-0（新增 0.0s） · 排队 0.0s · 负载 2.8→6.1/18 ok
 2026-11-20T10:30:31Z	apply-done	blocked=0 blocking=0
+2026-11-20T10:30:52Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
+2026-11-20T10:31:13Z	ship	ready
