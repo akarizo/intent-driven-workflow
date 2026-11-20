@@ -91,13 +91,15 @@ def test_self_hosting_config_leaves_fork_keys():
     # Given: 本仓库的 `template/openspec/model-routing.json` 与模板命令
     mr = load_hook("model-routing")
     cfg = json.loads(read(ROOT / "template" / "openspec" / "model-routing.json"))
-    groups = {k.split(".")[0] for k in mr.FORK_COMMANDS}
+    builtin = mr.BUILTIN["cleanup.runner"]
 
-    # When: 读取配置的组名，并在 `template/` 下运行 `model-routing.py frontmatter --check`
+    # When: 读取配置的 `cleanup.runner`，并在 `template/` 下运行 `model-routing.py frontmatter --check`
+    runner = cfg.get("cleanup", {}).get("runner", {})
     p = run_hook("model-routing", "frontmatter", "--check", cwd=ROOT / "template", env=CLEAN_ENV)
 
-    # Then: 配置里没有 `cleanup` 组；`--check` 退出 0
-    assert "cleanup" in groups and not (groups & set(cfg)), (groups, sorted(cfg))
+    # Then: 配置里 `cleanup.runner` 的 model / effort 等于内建默认（init 补全后与 frontmatter 一致）；`--check` 退出 0
+    assert "cleanup.runner" in mr.FORK_COMMANDS, mr.FORK_COMMANDS
+    assert (runner.get("model"), runner.get("effort")) == (builtin["model"], builtin["effort"]), (runner, builtin)
     assert p.returncode == 0, p.stdout + p.stderr
 
 
