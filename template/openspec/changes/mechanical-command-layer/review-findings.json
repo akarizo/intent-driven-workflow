@@ -1,0 +1,90 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 316,
+      "summary": "切片包要求换行风格不变，但 cmd_frontmatter 用 Path.read_text / write_text 读写，两者默认走 universal newlines。CRLF 文件读入时被归一成 LF，只要有一项值需要改，写回时整份文件都变成 LF，块外各行在字节层面已不是原样。抽查已复现：一个 CRLF 的 fork 命令，配置 haiku · low，执行后文件内已无任何 \\r。仓库里的命令文件目前都是 LF，实际影响小，不阻断。",
+      "fix": "读写都关掉换行转换，例如 path.read_bytes().decode('utf-8') 配 path.write_bytes(new.encode('utf-8'))，或者 open(path, newline='')。FRONTMATTER_RE 和行切分改成兼容 \\r?\\n，拼接时沿用原文件的换行符。也可以在 docstring 里写明只支持 LF，遇到 CRLF 就 die。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 60,
+      "summary": "FRONTMATTER_RE 要求收尾的 --- 后面必须有换行。如果文件只有 frontmatter、结尾的 --- 后面没有换行，正则匹配不上，会被当成非 fork 形态，以 exit 2 拒绝，错误信息也会误导人。",
+      "fix": "把正则改成 r\"^---\\n(.*?)\\n---(?:\\n|\\Z)\"，拼接时保留原文 m.end() 之后的内容（可能为空），不要硬补换行。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_routing_frontmatter.py",
+      "line": 4,
+      "summary": "本片删掉了全部 5 个 @pytest.mark.xfail，之后文件里再也没有用到 pytest，第 4 行的 import pytest 成了本片自己造出来的 orphan import。",
+      "fix": "删掉第 4 行的 import pytest。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 13,
+      "summary": "文件头的退出码说明只列了 0 / 2 / 3，新增的 frontmatter --check 遇到漂移时会 exit 1，说明里没有这一条，和实际行为对不上。",
+      "fix": "在退出码段补一行：exit 1  frontmatter --check 发现漂移（逐条点名「文件：字段 期望 x 实际 y」）。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/clean-after-merged.md",
+      "line": 16,
+      "summary": "改成 context: fork 后，子 agent 只有最后一条回复会到用户手里，但新加的『最后一条回复』条目只列了 step 4（done / failed 与 manual 代码块）。step 2 仍要求把 `merged-cleanup.py plan --markdown` 的 safe / manual / keep 三段『原样展示，不改写、不删减』，step 5 也要输出 `git worktree list`。在 fork 里这些中间输出用户看不到。结果是计划（尤其 keep 档及其原因）静默消失，step 2 这条指令变成无效约束，与 fork 前的行为不一致。",
+      "fix": "二选一：(a) 把该条改为『最后一条回复就是交给用户的全部汇报：依次包含 step 2 的计划原文、step 4 的 done / failed 与 manual 档代码块、step 5 的验证输出』；(b) 若有意只汇报结果，就把 step 2 的『原样展示』改成『读取计划供 step 3 / 4 使用』，并在汇报里至少带上 keep 档摘要。同步补一条断言钉住最终汇报的组成。"
+    },
+    {
+      "severity": "LOW",
+      "file": "install.sh",
+      "line": 428,
+      "summary": "渲染失败后的补救提示只说『修好 openspec/model-routing.json 后重跑』，但还有两种失败与配置无关。对旧版安装目标做非 --upgrade 重装时，copy_tree 不覆盖已存在的文件，目标里会留着旧的非 fork 形态 clean-after-merged.md，或者没有 frontmatter 子命令（甚至没有 model-routing.py）的旧 hook。这时 frontmatter 以 exit 2 失败，或 python3 报找不到文件，提示会把用户引向一个本来就没问题的配置文件。",
+      "fix": "把第二行 log_err 改为同时给出两条出路，例如『修好 openspec/model-routing.json，或用 install.sh --upgrade 刷新 .claude/ 后，在目标仓库根重跑：python3 .claude/hooks/model-routing.py frontmatter』。失败分支照旧不改 rc。"
+    }
+  ],
+  "fix": null,
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "files": [
+          "tests/test_budget_gate.py",
+          "tests/test_fork_commands_docs.py",
+          "tests/test_gate_lock.py",
+          "tests/test_install.py",
+          "tests/test_ledger_baseline.py",
+          "tests/test_ledger_final.py",
+          "tests/test_model_routing.py",
+          "tests/test_propose_toolchain.py",
+          "tests/test_routing_frontmatter.py"
+        ],
+        "rerun_tests": 73,
+        "est_sec": 70.3,
+        "sec": 88.4,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "impacted",
+        "why": null,
+        "rerun_tests": 132,
+        "est_sec": 77.3,
+        "sec": 98.5,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ]
+}
