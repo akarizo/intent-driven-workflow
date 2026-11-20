@@ -419,6 +419,17 @@ else
   log_scope "  gate.test 是普通测试命令（pytest / npm test / go test ./... / cargo test）→ 写 {\"builtin\": true}"
   log_scope "  仓库自带选测 → 写 {\"cmd\": \"<只算范围的命令>\"}（报告写到 \$GATE_SCOPE_OUT）"
 fi
+# fork 命令路由：.claude/ 刷新会冲掉 fork 命令 frontmatter 里的 model / effort，按目标仓库的 openspec/model-routing.json 写回
+if [[ "${PYTHON_OK:-0}" == 1 ]]; then
+  if ROUTE_OUT=$(python3 "$TARGET/.claude/hooks/model-routing.py" frontmatter --openspec "$TARGET/openspec" 2>&1); then
+    while IFS= read -r line; do [[ -n "$line" ]] && log_info "fork 命令路由：$line"; done <<< "$ROUTE_OUT"
+  else
+    log_err "fork 命令路由渲染失败：$ROUTE_OUT"
+    log_err "修好 openspec/model-routing.json 后在目标仓库根重跑：python3 .claude/hooks/model-routing.py frontmatter"
+  fi
+else
+  log_info "未检测到 python3，fork 命令保持模板默认路由；装好 python3 后在目标仓库根运行：python3 .claude/hooks/model-routing.py frontmatter"
+fi
 # openspec/schemas/：库自有 schema，升级时刷新；同时迁移根 adr/
 if [[ "$UPGRADE" == 1 ]]; then
   copy_tree "$TEMPLATE_SRC/openspec/schemas" "$TARGET/openspec/schemas" 1

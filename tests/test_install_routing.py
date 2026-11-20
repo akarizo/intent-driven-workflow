@@ -1,0 +1,78 @@
+"""routing-frontmatter 的 scenario 骨架（strict xfail；切片 S2 实现后去掉标记即解锁）。"""
+import json
+import os
+import re
+import subprocess
+
+
+from conftest import ROOT
+
+FM = re.compile(r"^---\n(.*?)\n---\n", re.S)
+
+
+def path_without_real_claude(bin_dir):
+    """PATH = 桩目录 + 原 PATH 中不含 claude 可执行文件的目录。"""
+    keep = [p for p in os.environ.get("PATH", "").split(os.pathsep)
+            if p and not os.path.exists(os.path.join(p, "claude"))]
+    return os.pathsep.join([str(bin_dir)] + keep)
+
+
+def run_install(tmp_path, target, *flags):
+    """用本仓库的 install.sh 安装 / 升级到 target；PATH 前置 openspec 与 claude 桩，并剔除真实 claude。"""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("openspec", "claude"):
+        stub = bin_dir / name
+        stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        stub.chmod(0o755)
+    env = {**os.environ, "PATH": path_without_real_claude(bin_dir)}
+    return subprocess.run(["bash", str(ROOT / "install.sh"), *flags, str(target)],
+                          env=env, capture_output=True, text=True, timeout=120)
+
+
+def write_routing(target, cfg):
+    path = target / "openspec" / "model-routing.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+
+
+def frontmatter_lines(target):
+    text = (target / ".claude" / "commands" / "clean-after-merged.md").read_text(encoding="utf-8")
+    m = FM.match(text)
+    assert m, text[:200]
+    return m.group(1).splitlines()
+
+
+def test_upgrade_rerenders_fork_frontmatter(tmp_path):
+    # Given: 一个已安装本模板的目标仓库，`openspec/model-routing.json` 把 `cleanup.runner` 设为 haiku · medium
+    target = tmp_path / "proj"
+    write_routing(target, {"cleanup": {"runner": {"model": "haiku", "effort": "medium"}}})
+
+    # When: 先运行 `install.sh <目标>`，再运行 `install.sh --upgrade <目标>`
+    first = run_install(tmp_path, target)
+    after_install = frontmatter_lines(target) if first.returncode == 0 else []
+    second = run_install(tmp_path, target, "--upgrade")
+    after_upgrade = frontmatter_lines(target) if second.returncode == 0 else []
+
+    # Then: 两次都退出 0；每次之后目标的 `.claude/commands/clean-after-merged.md` frontmatter 都是 `model: haiku` 与 `effort: medium`
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    for lines in (after_install, after_upgrade):
+        assert "model: haiku" in lines, lines
+        assert "effort: medium" in lines, lines
+
+
+def test_install_survives_invalid_routing(tmp_path):
+    # Given: 目标仓库的 `openspec/model-routing.json` 把 `cleanup.runner` 的 model 写成 `main`
+    target = tmp_path / "proj"
+    assert run_install(tmp_path, target).returncode == 0
+    write_routing(target, {"cleanup": {"runner": {"model": "main", "effort": "low"}}})
+
+    # When: 运行 `install.sh --upgrade <目标>`
+    p = run_install(tmp_path, target, "--upgrade")
+
+    # Then: 退出 0，输出含 `model-routing.py frontmatter` 的手动重跑提示；目标的 `clean-after-merged.md` frontmatter 是内建默认 `model: sonnet` 与 `effort: low`
+    assert p.returncode == 0, p.stderr
+    assert "model-routing.py frontmatter" in p.stdout + p.stderr, p.stdout + p.stderr
+    lines = frontmatter_lines(target)
+    assert "model: sonnet" in lines and "effort: low" in lines, lines

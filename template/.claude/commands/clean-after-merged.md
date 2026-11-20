@@ -1,8 +1,20 @@
 ---
 description: PR 合并后清理已合并的 worktree、分支与飞行快照（refs/flight/*）：先 --ff-only 同步 target，safe 档自动执行，manual 档只打印命令交你
+context: fork
+agent: general-purpose
+background: false
+model: sonnet
+effort: low
 ---
 
 PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步 target 分支 → 删除已合并的 worktree 与本地分支 → 删除已落地 change 的飞行快照 ref。是否已合并、是否需要 `--force`、用 `-d` 还是 `-D`，全部由 `.claude/hooks/merged-cleanup.py` 判定，模型不手工猜。命令本身即逻辑，无同名 skill。
+
+**运行方式**：本命令在一个**不继承对话**的子 agent 里运行（frontmatter 的 `context: fork`；模型与 effort 由 `model-routing.py frontmatter` 按路由键 `cleanup.runner` 渲染，不手改）。
+
+- **只认参数**：调用时的参数附在末尾的 `ARGUMENTS:` 行（可为空）；对话里说过的内容这里看不到。
+- **不问询**：删不删、带不带 `--force`、用 `-d` 还是 `-D`，全部由脚本判定。
+- **`cd` 不跨调用保留**：子 agent 的每条 Bash 都写成 `cd "<主 worktree 根>" && <命令>`。起始 CWD 就是主会话所在目录，主会话的 CWD 不会随子 agent 移动；plan 与 apply 都带 `--protect "<起始 CWD>"`，由脚本把主会话所在的 worktree 降为 manual（`session-cwd`），不删它。
+- **最后一条回复就是交给用户的全部汇报**（step 4 的 `done` / `failed` 与 manual 档代码块），主会话不再复述。
 
 **Input**：可选指定 target branch，缺省为远端默认分支（`<remote>/HEAD`），再缺省为 `main`。例如 `/clean-after-merged develop`。
 
@@ -11,18 +23,19 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 1. **定位主 worktree 根**
 
    ```bash
+   pwd                                                               # 起始 CWD = 主会话所在目录，记下供 --protect 用
    git rev-parse --path-format=absolute --git-dir --git-common-dir   # 两者相同 = 当前就在主 worktree
-   git rev-parse --show-toplevel                                     # 主 worktree 根
+   git worktree list --porcelain                                     # 第一条 worktree 即主 worktree 根
    ```
 
-   不要拿 `--git-common-dir` 的父目录当根：项目本身是 submodule（或用了 `--separate-git-dir`）时，它指向父仓的 `.git/modules`。
+   不要拿 `--git-common-dir` 的父目录当根：项目本身是 submodule（或用了 `--separate-git-dir`）时，它指向父仓的 `.git/modules`。起始 CWD 在 linked worktree 里时，`--show-toplevel` 给的是那个 worktree，主 worktree 根取 `git worktree list --porcelain` 的第一条。
 
-   之后所有命令都在主 worktree 根运行。当前会话 CWD 若在某个 worktree 里，先切到主仓库根；禁止 `cd` 进待删的 worktree（CWD 卡死）。
+   之后所有命令都以 `cd "<主 worktree 根>" && ` 开头；禁止 `cd` 进待删的 worktree（CWD 卡死）。
 
 2. **展示计划**
 
    ```bash
-   python3 .claude/hooks/merged-cleanup.py plan --markdown --fetch [--target <T>]
+   python3 .claude/hooks/merged-cleanup.py plan --markdown --fetch --protect "<起始 CWD>" [--target <T>]
    ```
 
    输出（safe / manual / keep 三段）原样展示，不改写、不删减。
@@ -30,7 +43,7 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 3. **执行 safe 档**
 
    ```bash
-   python3 .claude/hooks/merged-cleanup.py apply [--target <T>]
+   python3 .claude/hooks/merged-cleanup.py apply --protect "<起始 CWD>" [--target <T>]
    ```
 
    脚本依次执行：`fetch --prune` → `--ff-only` 同步 target → 删除 safe 档 worktree（带或不带 `--force` 由脚本判定）→ `worktree prune` → 删除已落地 change 的 `refs/flight/*` → `branch -d`。只执行 safe 档。
@@ -46,6 +59,7 @@ PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步
 | `dirty` | worktree 有未提交改动，先看清改动再决定 |
 | `locked` | worktree 被锁定，确认没有运行中的 agent |
 | `outside` | worktree 在仓库目录外，确认后再删 |
+| `session-cwd` | 主会话 CWD 在此 worktree 内，主会话先回主仓库根再删 |
 | `landed` | 临时 worktree 的提交已被 merge 进另一个本地分支（如 change 分支），删目录不丢内容 |
 | `dead-attempt` | 属于已落地 / 已归档 change 的作废尝试；有自己分支的进 safe，游离 HEAD 的进 manual（删了会丢提交） |
 | 远端分支 | `git push <R> --delete <branch>`，确认后自己执行 |

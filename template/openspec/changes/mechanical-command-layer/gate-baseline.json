@@ -1,0 +1,97 @@
+{
+  "commit": "e557aed737f3b76a82db95bc1c286000403b5592",
+  "at": "2026-11-20T07:06:37Z",
+  "plan_sha": "6d75cacaab6670cdb38936a03db64c17608c6883",
+  "ok": true,
+  "reasons": [],
+  "test": {
+    "exit": 0,
+    "failed": null,
+    "failed_nodes": [],
+    "failed_form": "nodes",
+    "sec": 4.2
+  },
+  "lint": {
+    "exit": 0,
+    "lines": [],
+    "cmd": "python3 -m compileall -q template/.claude/hooks",
+    "key": "22712fd2082119a015772ccea53775da87632481"
+  },
+  "typecheck": null,
+  "verify": {
+    "S1": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_routing_frontmatter.py tests/test_model_routing.py"
+    },
+    "S2": {
+      "exit": 0,
+      "cmd": "python3 -m pytest -q tests/test_fork_commands_docs.py tests/test_install_routing.py tests/test_clean_after_merged_docs.py tests/test_close_reap_docs.py tests/test_routing_docs.py"
+    }
+  },
+  "checks": {
+    "schema-validate": {
+      "exit": 0,
+      "sec": 1.4,
+      "cmd": "cd template && openspec schema validate intent-driven",
+      "key": "651acf9f2926d57f3b4c560b571724707ee3d73c"
+    }
+  },
+  "lock": {
+    "mode": "exclusive",
+    "state": "held",
+    "waited": 329.3,
+    "why": "",
+    "load": [
+      7.8,
+      7.0
+    ],
+    "cores": 18
+  },
+  "full_suite_sec": 475.8,
+  "test_ok": true,
+  "ledger": {
+    "cases": 910,
+    "measured": 12,
+    "inherited": 898,
+    "no_sec": 0,
+    "id_form": "nodeid",
+    "complete": true,
+    "tiers": {
+      "-": {
+        "cases": 910,
+        "sec": 477.6
+      }
+    }
+  },
+  "change": "mechanical-command-layer",
+  "mode": "incremental",
+  "snapshot": {
+    "template/openspec/adr/DRAFT-mechanical-commands-run-in-isolated-subagent.md": "60b3730e51a18ea313901e6b5d5e439e693b90ac",
+    "tests/test_fork_commands_docs.py": "6e8e5f9c14b15eb2f99f35f0660076f37d5fae0b",
+    "tests/test_install_routing.py": "d34c6d8f94542b7fde1dfbe1a7db734975e593f0",
+    "tests/test_routing_frontmatter.py": "de2861af4ffb33ab5881ce99b10e9b5f028d79b1"
+  },
+  "cmd_key": "42acca932cea8b4644b023bba08284d14a007cfa",
+  "byproducts": [],
+  "incremental": {
+    "source": "anchor",
+    "from": {
+      "change": "mechanical-command-layer",
+      "commit": "e557aed737f3b76a82db95bc1c286000403b5592",
+      "at": "2026-11-20T06:48:03Z"
+    },
+    "rerun_files": [
+      "tests/test_fork_commands_docs.py",
+      "tests/test_install_routing.py",
+      "tests/test_routing_frontmatter.py"
+    ],
+    "hops": 1,
+    "files": [
+      "template/openspec/adr/DRAFT-mechanical-commands-run-in-isolated-subagent.md",
+      "tests/test_fork_commands_docs.py",
+      "tests/test_install_routing.py",
+      "tests/test_routing_frontmatter.py"
+    ],
+    "sec": 4.2
+  }
+}
