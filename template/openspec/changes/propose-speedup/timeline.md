@@ -20,3 +20,7 @@
 2026-11-20T05:17:30Z	ship	ready
 2026-11-20T05:18:03Z	ship	draft: 1 条 CRITICAL/HIGH 评审未闭环
 2026-11-20T05:18:46Z	ship	ready
+2026-11-20T05:19:45Z	ship	ready
+2026-11-20T05:20:12Z	ship	ready
+2026-11-20T05:20:21Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/27
+2026-11-20T05:25:16Z	ship	ready
