@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 
-import pytest
 
 from conftest import ROOT
 
@@ -44,7 +43,6 @@ def frontmatter_lines(target):
     return m.group(1).splitlines()
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_upgrade_rerenders_fork_frontmatter(tmp_path):
     # Given: 一个已安装本模板的目标仓库，`openspec/model-routing.json` 把 `cleanup.runner` 设为 haiku · medium
     target = tmp_path / "proj"
@@ -64,7 +62,6 @@ def test_upgrade_rerenders_fork_frontmatter(tmp_path):
         assert "effort: medium" in lines, lines
 
 
-@pytest.mark.xfail(strict=True, reason="S2 未实现")
 def test_install_survives_invalid_routing(tmp_path):
     # Given: 目标仓库的 `openspec/model-routing.json` 把 `cleanup.runner` 的 model 写成 `main`
     target = tmp_path / "proj"

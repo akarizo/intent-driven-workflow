@@ -1,8 +1,19 @@
 ---
 description: PR 合并后清理已合并的 worktree、分支与飞行快照（refs/flight/*）：先 --ff-only 同步 target，safe 档自动执行，manual 档只打印命令交你
+context: fork
+agent: general-purpose
+background: false
+model: sonnet
+effort: low
 ---
 
 PR 被人类合并后，把本仓库里已落地的 change 收尾干净：同步 target 分支 → 删除已合并的 worktree 与本地分支 → 删除已落地 change 的飞行快照 ref。是否已合并、是否需要 `--force`、用 `-d` 还是 `-D`，全部由 `.claude/hooks/merged-cleanup.py` 判定，模型不手工猜。命令本身即逻辑，无同名 skill。
+
+**运行方式**：本命令在一个**不继承对话**的子 agent 里运行（frontmatter 的 `context: fork`；模型与 effort 由 `model-routing.py frontmatter` 按路由键 `cleanup.runner` 渲染，不手改）。
+
+- **只认参数**：调用时的参数附在末尾的 `ARGUMENTS:` 行（可为空）；对话里说过的内容这里看不到。
+- **不问询**：删不删、带不带 `--force`、用 `-d` 还是 `-D`，全部由脚本判定。
+- **最后一条回复就是交给用户的全部汇报**（step 4 的 `done` / `failed` 与 manual 档代码块），主会话不再复述。
 
 **Input**：可选指定 target branch，缺省为远端默认分支（`<remote>/HEAD`），再缺省为 `main`。例如 `/clean-after-merged develop`。
 
