@@ -1,7 +1,5 @@
-"""routing-frontmatter-hardening 的 scenario 骨架（strict xfail；切片 S1 实现后去掉标记即解锁）。"""
+"""routing-frontmatter-hardening 的 scenario 测试（已解锁）。"""
 import json
-
-import pytest
 
 from conftest import ROOT, run_hook
 
@@ -63,7 +61,6 @@ def doctor(openspec_root):
                     env=CLEAN_ENV, cwd=str(openspec_root.parent))
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_keeps_crlf(tmp_path):
     # Given: 命令目录里有 fork 形态的 `clean-after-merged.md`，每行都以 CRLF 结尾，frontmatter 里是 `model: sonnet` 与 `effort: low`；配置把 `cleanup.runner` 设为 haiku · medium
     original = ("\r\n".join(FORK_LINES) + "\r\n").encode("utf-8")
@@ -84,7 +81,6 @@ def test_frontmatter_keeps_crlf(tmp_path):
     assert restored == original
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_accepts_fence_at_eof(tmp_path):
     # Given: 命令目录里的 `clean-after-merged.md` 只有 frontmatter（含 `context: fork`），文件以收尾的 `---` 结束、后面没有换行；配置把 `cleanup.runner` 设为 haiku · medium
     original = "\n".join(FORK_LINES[:8]).encode("utf-8")
@@ -104,7 +100,6 @@ def test_frontmatter_accepts_fence_at_eof(tmp_path):
     assert not after.endswith(b"---\n"), after
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_doctor_reports_frontmatter_drift(tmp_path):
     # Given: openspec 根的 `model-routing.json` 把 `cleanup.runner` 设为 haiku · medium，`clean-after-merged.md` 的 frontmatter 仍是 sonnet · low
     root = tmp_path / "openspec"
@@ -125,7 +120,6 @@ def test_doctor_reports_frontmatter_drift(tmp_path):
     assert REAL_CMD.read_bytes() == before
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_doctor_reports_frontmatter_in_sync(tmp_path):
     # Given: openspec 根没有 `model-routing.json`，`clean-after-merged.md` 的 frontmatter 等于 `cleanup.runner` 的内建默认
     root = tmp_path / "openspec"
