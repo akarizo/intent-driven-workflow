@@ -10,7 +10,6 @@ import pytest
 from conftest import ROOT, run_hook
 
 CLEAN_ENV = {"CLAUDE_CODE_EFFORT_LEVEL": "", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": ""}
-REAL_CMD = ROOT / "template" / ".claude" / "commands" / "clean-after-merged.md"
 FORK_LINES = [
     "---",
     "description: d",
@@ -62,11 +61,6 @@ def routing_section(out):
     return "\n".join(seg)
 
 
-def doctor(openspec_root):
-    return run_hook("flight-doctor", "doctor", "--openspec-root", str(openspec_root),
-                    env=CLEAN_ENV, cwd=str(openspec_root.parent))
-
-
 def test_frontmatter_keeps_crlf(tmp_path):
     # Given: 命令目录里有 fork 形态的 `clean-after-merged.md`，每行都以 CRLF 结尾，frontmatter 里是 `model: sonnet` 与 `effort: low`；配置把 `cleanup.runner` 设为 haiku · medium
     original = ("\r\n".join(FORK_LINES) + "\r\n").encode("utf-8")
@@ -108,14 +102,14 @@ def test_frontmatter_accepts_fence_at_eof(tmp_path):
 
 def test_doctor_reports_frontmatter_drift(tmp_path):
     # Given: openspec 根的 `model-routing.json` 把 `cleanup.runner` 设为 haiku · medium，`clean-after-merged.md` 的 frontmatter 仍是 sonnet · low
-    root = tmp_path / "openspec"
-    root.mkdir()
-    (root / "model-routing.json").write_text(json.dumps(runner("haiku", "medium")), encoding="utf-8")
-    before = REAL_CMD.read_bytes()
-    assert b"\nmodel: sonnet\n" in before and b"\neffort: low\n" in before
+    isolated_hooks(tmp_path)
+    (tmp_path / "openspec" / "model-routing.json").write_text(json.dumps(runner("haiku", "medium")), encoding="utf-8")
+    cmd = tmp_path / ".claude" / "commands" / "clean-after-merged.md"
+    cmd.write_bytes(("\n".join(FORK_LINES) + "\n").encode("utf-8"))
+    before = cmd.read_bytes()
 
     # When: 运行 `flight-doctor.py doctor --openspec-root <该根>`
-    p = doctor(root)
+    p = run_isolated_doctor(tmp_path)
 
     # Then: 退出 0，输出含 `[routing]` 段，段内点名 `clean-after-merged.md` 的 `model` 期望 haiku 实际 sonnet、`effort` 期望 medium 实际 low，并给出 `model-routing.py frontmatter` 的重跑命令；`clean-after-merged.md` 的内容不变
     assert p.returncode == 0, p.stderr
@@ -123,16 +117,24 @@ def test_doctor_reports_frontmatter_drift(tmp_path):
     assert "clean-after-merged.md：model 期望 haiku 实际 sonnet" in seg, seg
     assert "clean-after-merged.md：effort 期望 medium 实际 low" in seg, seg
     assert "model-routing.py frontmatter" in seg, seg
-    assert REAL_CMD.read_bytes() == before
+    assert cmd.read_bytes() == before
 
 
 def test_doctor_reports_frontmatter_in_sync(tmp_path):
     # Given: openspec 根没有 `model-routing.json`，`clean-after-merged.md` 的 frontmatter 等于 `cleanup.runner` 的内建默认
-    root = tmp_path / "openspec"
-    root.mkdir()
+    hooks = isolated_hooks(tmp_path)
+    got = subprocess.run([sys.executable, str(hooks / "model-routing.py"), "get", "cleanup.runner",
+                          "--openspec", str(tmp_path / "openspec")],
+                         capture_output=True, text=True, env={**os.environ, **CLEAN_ENV})
+    assert got.returncode == 0, got.stderr
+    v = json.loads(got.stdout)
+    model, effort = v["model"], v["effort"]
+    lines = [("model: %s" % model) if l.startswith("model:") else ("effort: %s" % effort) if l.startswith("effort:") else l
+             for l in FORK_LINES[:8]] + FORK_LINES[8:]
+    (tmp_path / ".claude" / "commands" / "clean-after-merged.md").write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
 
     # When: 运行 `flight-doctor.py doctor --openspec-root <该根>`
-    p = doctor(root)
+    p = run_isolated_doctor(tmp_path)
 
     # Then: 退出 0，`[routing]` 段说明 frontmatter 与路由一致，没有漂移条目
     assert p.returncode == 0, p.stderr
@@ -166,7 +168,6 @@ def run_isolated_doctor(tmp_path):
         env={**os.environ, **CLEAN_ENV})
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_rejects_non_utf8_command(tmp_path):
     # Given: 命令目录里的 `clean-after-merged.md` 含 `context: fork`，frontmatter 里夹着一段不是 UTF-8 的字节；openspec 根没有 `model-routing.json`
     original = non_utf8_fork_bytes()
@@ -190,7 +191,6 @@ def test_frontmatter_rejects_non_utf8_command(tmp_path):
     assert cmd.read_bytes() == original
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_doctor_reports_unreadable_command_as_unavailable(tmp_path):
     # Given: 一份独立安装的 hooks，命令目录里的 `clean-after-merged.md` 含 `context: fork` 但夹着不是 UTF-8 的字节
     isolated_hooks(tmp_path)
@@ -207,7 +207,6 @@ def test_doctor_reports_unreadable_command_as_unavailable(tmp_path):
     assert "修法" not in seg, seg
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_doctor_reports_crash_as_unavailable(tmp_path):
     # Given: 一份独立安装的 hooks，其中的 `model-routing.py` 一运行就抛出未捕获的 `RuntimeError: boom`
     hooks = isolated_hooks(tmp_path)
@@ -223,7 +222,6 @@ def test_doctor_reports_crash_as_unavailable(tmp_path):
     assert "修法" not in seg, seg
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_doctor_survives_undecodable_output(tmp_path):
     # Given: 一份独立安装的 hooks，其中的 `model-routing.py` 往 stdout 写一段不是 UTF-8 的字节和「frontmatter 与路由一致」后退出 0
     hooks = isolated_hooks(tmp_path)

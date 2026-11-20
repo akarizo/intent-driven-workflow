@@ -13,7 +13,7 @@
 # 退出码：
 #   exit 0  成功
 #   exit 1  frontmatter --check 发现漂移（逐条点名「文件：字段 期望 x 实际 y」）
-#   exit 2  配置非法（逐条点名「组.键」）/ 未登记的键 / pin 时 slices.json 缺失
+#   exit 2  配置非法（逐条点名「组.键」）/ 未登记的键 / pin 时 slices.json 缺失 / frontmatter 命令文件读不了 · 不是 UTF-8 · 写不了
 #   exit 3  resolve 停飞：routing 未钉或不合法，或覆盖环境变量非空（点名变量）
 # 规划期组（propose / explore / new / continue / mini）不进路由配置；model 只写模型名。
 # 兼容 Python 3.8+，只用标准库。
@@ -299,7 +299,14 @@ def cmd_frontmatter(args):
         path = commands / filename
         if not path.is_file():
             die(EXIT_INVALID, ["%s：命令文件 %s 不存在" % (name, path)])
-        text = path.read_bytes().decode("utf-8")
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            die(EXIT_INVALID, ["%s：读不了命令文件 %s：%s" % (name, path, e)])
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            die(EXIT_INVALID, ["%s：%s 不是 UTF-8 文本" % (name, path)])
         v = table[name]
         new, actual = render_frontmatter(text, v["model"], v["effort"])
         if new is None:
@@ -315,7 +322,10 @@ def cmd_frontmatter(args):
         return
     for path, text, new, _, v in plans:
         if new != text:
-            path.write_bytes(new.encode("utf-8"))
+            try:
+                path.write_bytes(new.encode("utf-8"))
+            except OSError as e:
+                die(EXIT_INVALID, ["%s：写不了命令文件 %s：%s" % (name, path, e)])
         print("%s  %s · %s" % (path.name, v["model"], v["effort"]))
 
 
