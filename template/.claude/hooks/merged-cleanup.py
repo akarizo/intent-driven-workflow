@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # merged-cleanup · 合并后清理（零 token 判定）
-#   plan  [--target T] [--remote R] [--fetch] [--markdown]   列出 worktree / 分支 / 远端分支 / 快照 ref 的清理档位
-#   apply [--target T] [--remote R] [--no-fetch]             fetch → ff 同步 → 只执行 safe 档；manual 交人
+#   plan  [--target T] [--remote R] [--fetch] [--markdown] [--protect P]   列出 worktree / 分支 / 远端分支 / 快照 ref 的清理档位
+#   apply [--target T] [--remote R] [--no-fetch] [--protect P]             fetch → ff 同步 → 只执行 safe 档；manual 交人
+# --protect P（可重复）：P 所在的 worktree 降为 manual（session-cwd），用于保护调用方会话的 CWD。
 # 档位：safe 自动执行 · manual 打印命令交人 · keep 保留并写原因。必须在主 worktree 运行，否则 exit 2。
 # 退出码：0 正常 · 1 apply 有失败项 · 2 拒绝运行。纯标准库，兼容 Python 3.9。
 import argparse
@@ -81,8 +82,9 @@ def resolve_target(root, remote, target):
 # ---------- 判定 ----------
 
 class Ctx:
-    def __init__(self, root, remote, target, target_ref):
+    def __init__(self, root, remote, target, target_ref, protect=()):
         self.root, self.remote, self.target, self.target_ref = root, remote, target, target_ref
+        self.protect = [real(p) for p in protect]
         self.is_remote = target_ref.startswith("refs/remotes/")
         self.tgt_sha = out(root, "rev-parse", target_ref)
         self.tgt_tree = out(root, "rev-parse", target_ref + "^{tree}")
@@ -252,6 +254,9 @@ def worktree_item(ctx, wt):
         manual = check_subs(ctx, path, item) or manual
     if wt["locked"]:
         item["reasons"].append("locked: " + wt["locked"])
+        manual = True
+    if any(p == path or under(p, path) for p in ctx.protect):
+        item["reasons"].append("session-cwd: 主会话 CWD 在此 worktree 内，先回主仓库根再删")
         manual = True
     if not any(under(path, os.path.join(root, d)) for d in HOME_DIRS):
         item["reasons"].append("outside: 不在 .worktrees/ 或 .claude/worktrees/ 下")
@@ -433,7 +438,7 @@ def apply(root, args):
     if not args.no_fetch:
         do(["fetch", "--prune", args.remote])
     target, target_ref = resolve_target(root, args.remote, args.target)
-    ctx = Ctx(root, args.remote, target, target_ref)
+    ctx = Ctx(root, args.remote, target, target_ref, args.protect)
     plan = compute(ctx)
     if plan["sync"]:
         src = plan["sync"]["command"].split()[-1]
@@ -466,6 +471,7 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("--target")
         p.add_argument("--remote", default="origin")
+        p.add_argument("--protect", action="append", default=[])
         if name == "plan":
             p.add_argument("--fetch", action="store_true")
             p.add_argument("--markdown", action="store_true")
@@ -481,7 +487,7 @@ def main(argv=None):
         if args.fetch:
             run(root, "fetch", "--prune", args.remote)
         target, target_ref = resolve_target(root, args.remote, args.target)
-        plan = compute(Ctx(root, args.remote, target, target_ref))
+        plan = compute(Ctx(root, args.remote, target, target_ref, args.protect))
     except Refuse as e:
         emit({"ok": False, "reasons": [str(e)]})
         return 2

@@ -446,3 +446,26 @@ def test_plan_in_project_that_is_a_submodule(w):
     assert r.returncode == 0 and out["ok"] is True, r.stdout + r.stderr
     names = [i["name"] for i in out["items"]]
     assert "worktree-x" in names and "worktree-parent-only" not in names, out["items"]
+
+
+def test_plan_protects_session_cwd_worktree(w):
+    # Given: 已合并且干净的 .worktrees/a 与 .worktrees/b；主会话 CWD 停在 .worktrees/a 的子目录里
+    wa = feature(w, "a")
+    wb = feature(w, "b")
+    land(w, "worktree-a")
+    land(w, "worktree-b")
+    sync(w)
+    (wa / "sub").mkdir()
+
+    # When: 在主 worktree 运行 plan --protect <该子目录>，再运行 apply --no-fetch --protect <该子目录>
+    out = plan(w, "--protect", str(wa / "sub"))
+    rc, res = apply(w, "--no-fetch", "--protect", str(wa / "sub"))
+
+    # Then: .worktrees/a 与 worktree-a 降为 manual、原因带 session-cwd；.worktrees/b 仍是 safe；apply 只删 b，a 的目录与分支都还在
+    a = item(out, "worktree", ".worktrees/a")
+    assert a["tier"] == "manual" and has_reason(a, "session-cwd"), a
+    assert item(out, "branch", "worktree-a")["tier"] == "manual"
+    assert item(out, "worktree", ".worktrees/b")["tier"] == "safe"
+    assert rc == 0, res
+    assert wa.is_dir() and has_ref(w.main, "refs/heads/worktree-a")
+    assert not wb.exists() and not has_ref(w.main, "refs/heads/worktree-b")

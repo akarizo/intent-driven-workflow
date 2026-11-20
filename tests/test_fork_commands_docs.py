@@ -114,3 +114,17 @@ def test_docs_register_cleanup_runner():
     assert "/clean-after-merged" in row.group(0) and "sonnet · low" in row.group(0), row.group(0)
     for name, text in (("README.md", readme), ("WORKFLOW_zh.md", workflow)):
         assert "cleanup.runner" in text and "model-routing.py frontmatter" in text, name
+
+
+def test_cleanup_fork_guards_session_cwd():
+    # Given: 模板里 fork 形态的 `clean-after-merged.md`
+    text = read(CMD / "clean-after-merged.md")
+
+    # When: 查找子 agent 的 CWD 约定与原因表
+    rows = [ln for ln in text.splitlines() if ln.startswith("| `session-cwd` |")]
+
+    # Then: 正文写明 cd 不跨调用保留、plan 与 apply 都带 --protect；原因表有 session-cwd 一行
+    assert "不跨调用保留" in text
+    assert "merged-cleanup.py plan --markdown --fetch --protect" in text
+    assert "merged-cleanup.py apply --protect" in text
+    assert len(rows) == 1, rows
