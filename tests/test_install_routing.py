@@ -1,12 +1,10 @@
-"""routing-frontmatter 的 scenario 骨架（strict xfail；切片 S2 实现后去掉标记即解锁）。"""
+"""routing-frontmatter 与 routing-frontmatter-hardening 的 scenario 测试（已解锁）。"""
 import json
 import os
 import re
 import subprocess
 
-
 from conftest import ROOT
-import pytest
 
 FM = re.compile(r"^---\n(.*?)\n---\n", re.S)
 
@@ -79,7 +77,6 @@ def test_install_survives_invalid_routing(tmp_path):
     assert "model: sonnet" in lines and "effort: low" in lines, lines
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_install_hint_offers_upgrade(tmp_path):
     # Given: 一个已安装本模板的目标仓库，它的 `.claude/commands/clean-after-merged.md` 被换成没有 `context: fork` 的旧版命令
     target = tmp_path / "proj"

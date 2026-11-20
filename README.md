@@ -342,7 +342,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 
 渲染 / 分解 / 时间线是零 token 脚本，不用模型。本仓库的 `template/openspec/model-routing.json` 把 `flight.executor`（与 `flight.executor-large`）设为 opus · medium。
 
-`cleanup.runner` 写在 `/clean-after-merged` 的 frontmatter 里，由 `model-routing.py frontmatter` 按配置渲染：安装与升级时自动运行；改了配置后在仓库根手动运行一次；`--check` 只检查漂移、不写。主会话里运行的命令一律不写 `model`，因为 frontmatter 换模型会让那一轮整段不命中缓存。
+`cleanup.runner` 写在 `/clean-after-merged` 的 frontmatter 里，由 `model-routing.py frontmatter` 按配置渲染：安装与升级时自动运行；改了配置后在仓库根手动运行一次；`--check` 只检查漂移、不写。`flight-doctor.py doctor` 的 `[routing]` 段也会报漂移（`install.sh --upgrade` 结束时自动体检）。主会话里运行的命令一律不写 `model`，因为 frontmatter 换模型会让那一轮整段不命中缓存。
 
 `.claude/hooks/model-routing.py` 五个子命令：`show` 列出生效值与来源；`pin --change-dir` 在规划期把 flight / ship 两组 7 个键钉进 `slices.json` 顶层 `routing`（之后再改，起飞批准自动过期）；`resolve --change-dir` 起飞时读取钉住的路由；`get <组.键>` 供 `/pr-ship`、archive 等非飞行派发点现取；`frontmatter [--check]` 把 fork 命令的路由写进其 frontmatter。`resolve` 在 routing 未钉 / 不合法，或 `CLAUDE_CODE_EFFORT_LEVEL` / `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` 非空（会覆盖派发时传入的 model / effort）时 exit 3 停飞并点名原因。
 

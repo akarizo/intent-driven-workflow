@@ -425,7 +425,7 @@ if [[ "${PYTHON_OK:-0}" == 1 ]]; then
     while IFS= read -r line; do [[ -n "$line" ]] && log_info "fork 命令路由：$line"; done <<< "$ROUTE_OUT"
   else
     log_err "fork 命令路由渲染失败：$ROUTE_OUT"
-    log_err "修好 openspec/model-routing.json 后在目标仓库根重跑：python3 .claude/hooks/model-routing.py frontmatter"
+    log_err "修好 openspec/model-routing.json，或用 install.sh --upgrade 刷新 .claude/ 后，在目标仓库根重跑：python3 .claude/hooks/model-routing.py frontmatter"
   fi
 else
   log_info "未检测到 python3，fork 命令保持模板默认路由；装好 python3 后在目标仓库根运行：python3 .claude/hooks/model-routing.py frontmatter"
