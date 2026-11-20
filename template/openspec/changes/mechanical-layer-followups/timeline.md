@@ -6,3 +6,4 @@
 2026-11-20T10:25:27Z	gate	S2 ok
 2026-11-20T10:25:42Z	integrate	wave 1
 2026-11-20T10:25:56Z	wave-check	wave 1/1 · 测试跳过（受影响测试约 213.0 秒（48 个文件），超过预算 120 秒，留给 final） · 排队 0.0s · 负载 5.9→5.9/18 ok
+2026-11-20T10:27:17Z	review	findings=3 blocking=0 deferred=3
