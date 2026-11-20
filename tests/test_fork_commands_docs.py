@@ -3,6 +3,7 @@ import json
 import re
 
 from conftest import ROOT, load_hook, run_hook
+import pytest
 
 CMD = ROOT / "template" / ".claude" / "commands"
 SKILLS = ROOT / "template" / ".claude" / "skills"
@@ -90,13 +91,15 @@ def test_self_hosting_config_leaves_fork_keys():
     # Given: 本仓库的 `template/openspec/model-routing.json` 与模板命令
     mr = load_hook("model-routing")
     cfg = json.loads(read(ROOT / "template" / "openspec" / "model-routing.json"))
-    groups = {k.split(".")[0] for k in mr.FORK_COMMANDS}
+    builtin = mr.BUILTIN["cleanup.runner"]
 
-    # When: 读取配置的组名，并在 `template/` 下运行 `model-routing.py frontmatter --check`
+    # When: 读取配置的 `cleanup.runner`，并在 `template/` 下运行 `model-routing.py frontmatter --check`
+    runner = cfg.get("cleanup", {}).get("runner", {})
     p = run_hook("model-routing", "frontmatter", "--check", cwd=ROOT / "template", env=CLEAN_ENV)
 
-    # Then: 配置里没有 `cleanup` 组；`--check` 退出 0
-    assert "cleanup" in groups and not (groups & set(cfg)), (groups, sorted(cfg))
+    # Then: 配置里 `cleanup.runner` 的 model / effort 等于内建默认（init 补全后与 frontmatter 一致）；`--check` 退出 0
+    assert "cleanup.runner" in mr.FORK_COMMANDS, mr.FORK_COMMANDS
+    assert (runner.get("model"), runner.get("effort")) == (builtin["model"], builtin["effort"]), (runner, builtin)
     assert p.returncode == 0, p.stdout + p.stderr
 
 
@@ -154,8 +157,22 @@ def test_cleanup_doc_states_cwd_basis():
     # Then: 运行方式写明起始 CWD 是主会话当前所在目录、主会话 `cd` 过也一样，并给出实测日期 2026-11-20；写明 `--protect` 传绝对路径；原因表的 `session-cwd` 一行说明只保护 `--protect` 传入的路径
     text = read(CMD / "clean-after-merged.md")
     run = text[text.index("运行方式"):text.index("**Input**")]
-    for k in ("主会话当前所在目录", "cd", "也一样", "2026-11-20", "绝对路径"):
+    for k in ("主会话当前所在目录", "主会话 `cd` 过也一样", "2026-11-20", "绝对路径"):
         assert k in run, k
     row = next((l for l in text.splitlines() if l.startswith("| `session-cwd` |")), "")
     assert row, "原因表没有 session-cwd 一行"
     assert "只保护" in row and "--protect" in row, row
+
+
+def test_cleanup_doc_marks_fork_command_untested():
+    # Given: 模板的 `/clean-after-merged` 命令文件
+    # When: 读取运行方式一节与 step 1 的代码块
+    # Then: 运行方式一节含整句「主会话 `cd` 过也一样」，并写明 `context: fork` 命令本身未单独实测；step 1 代码块里 `pwd` 那一行的注释含「主会话当前所在目录」
+    text = read(CMD / "clean-after-merged.md")
+    run = text[text.index("运行方式"):text.index("**Input**")]
+    assert "主会话 `cd` 过也一样" in run, run
+    assert "`context: fork` 命令本身未单独实测" in run, run
+    step1 = text[text.index("1. **"):text.index("2. **")]
+    pwd_line = next((l for l in step1.splitlines() if l.strip().startswith("pwd")), "")
+    assert pwd_line and "#" in pwd_line, step1
+    assert "主会话当前所在目录" in pwd_line.split("#", 1)[1], pwd_line

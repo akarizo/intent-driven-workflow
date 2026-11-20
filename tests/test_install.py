@@ -333,10 +333,10 @@ def test_fresh_install_ships_only_seeds(tmp_path):
     # When: 运行 install.sh <目录>
     p, _ = run_install_stubbed(tmp_path, target, claude=False)
 
-    # Then: 以 0 退出；openspec/ 里的文件恰为种子清单、scope-seed 种下的 gate-scope.json，加上模板 openspec/schemas/ 下的全部文件
+    # Then: 以 0 退出；openspec/ 里的文件恰为种子清单、scope-seed 种下的 gate-scope.json、model-routing.py init 种下的 model-routing.json（D5），加上模板 openspec/schemas/ 下的全部文件
     assert p.returncode == 0, p.stderr
     schemas = {"schemas/" + rel for rel in _files_under(TEMPLATE_OPENSPEC / "schemas")}
-    assert _files_under(target / "openspec") == OPENSPEC_SEEDS | {"gate-scope.json"} | schemas
+    assert _files_under(target / "openspec") == OPENSPEC_SEEDS | {"gate-scope.json", "model-routing.json"} | schemas
 
 
 def test_upgrade_adds_no_dev_artifacts(tmp_path):

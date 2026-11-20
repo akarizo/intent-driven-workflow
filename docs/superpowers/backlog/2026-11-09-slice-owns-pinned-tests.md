@@ -30,3 +30,9 @@ S3 给 final 输出加 `lock` 键，但 `tests/test_gate_checks_baseline.py:280`
 证据：`template/openspec/changes/machine-test-lock/timeline.md` 的首飞 `final red` 与第二次 `approve`；首飞工作流 `wf_c4c88960-c82` 的 `blocked[S3]`。
 
 对防线的补充：上面「字面量引用 owns 路径」的规则拦不住这一例——测试经 `run_hook("slice-gate", …)` 按 hook 名调用，且钉的是输出 JSON 键而非文档措辞。lint 规则还应匹配：① `run_hook("<owns 里 hook 的文件名去后缀>")`；② 本片 spec / 切片包声明新增输出键时，verify 里含 `set(out) <=` / `set(out) ==` 的测试。
+
+## 再犯（2026-11-20 · routing-doctor-hardening，第 4 次）
+
+S3 让 `model-routing.py init` 把 `template/openspec/model-routing.json` 补全到 11 键（含 `cleanup` 组），install 也改成运行 init（D5）。但 `tests/test_fork_commands_docs.py` 的 `test_self_hosting_config_leaves_fork_keys` 钉死「配置里没有 `cleanup` 组」，`tests/test_install.py` 的 `test_fresh_install_ships_only_seeds` 钉死全新安装后 `openspec/` 的文件集合；两者都不在 S3 的 verify / owns 里 → 切片门禁 ok=true，全量 pytest 红，由评审挡下、跨片 fix 补救。这两个测试本应并入 S3 的 owns。
+
+对防线的补充：这一例连 verify 都没列，lint 规则只扫 verify 不够；还应扫全量 `tests/` 里以字面量引用本片 owns 路径（`model-routing.json`）或按 hook 名调用（`run_hook("model-routing")` / `install.sh`）的测试。

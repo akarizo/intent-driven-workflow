@@ -1,6 +1,70 @@
 {
+  "$comment": "每个「组.键」是一个派发用途；model 只写模型名（opus | sonnet | haiku | fable），effort 取 low | medium | high | xhigh | max；删掉某键 = 走内建默认；desc 只作说明；改 cleanup.runner 后在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter",
   "flight": {
-    "executor": {"model": "opus", "effort": "medium"},
-    "executor-large": {"model": "opus", "effort": "medium"}
+    "executor": {
+      "model": "opus",
+      "effort": "medium",
+      "desc": "飞行中实现切片的 slice-executor（标准档）"
+    },
+    "executor-large": {
+      "model": "opus",
+      "effort": "medium",
+      "desc": "飞行中实现大片档切片的 slice-executor-large"
+    },
+    "fixer": {
+      "model": "opus",
+      "effort": "high",
+      "desc": "飞行中的修复派发（评审后的批量修复 fix、wave 跨片修复 fix:w<i>）"
+    },
+    "reviewer": {
+      "model": "opus",
+      "effort": "high",
+      "desc": "飞行中的 code-reviewer（切片评审 / 复核）"
+    },
+    "integrator": {
+      "model": "sonnet",
+      "effort": "low",
+      "desc": "飞行中的 integrator（合回切片 · wave 集成检查 · final 门禁）"
+    }
+  },
+  "ship": {
+    "reviewer": {
+      "model": "opus",
+      "effort": "high",
+      "desc": "/pr-ship 对整个 PR 的干净评审"
+    },
+    "followup": {
+      "model": "opus",
+      "effort": "high",
+      "desc": "/pr-ship 自动修复后的复核评审"
+    }
+  },
+  "archive": {
+    "sync": {
+      "model": "sonnet",
+      "effort": "low",
+      "desc": "/opsx-archive 选择同步时，把 delta spec 同步进主 specs 的子 agent"
+    }
+  },
+  "claudemd": {
+    "evidence": {
+      "model": "sonnet",
+      "effort": "low",
+      "desc": "/claudemd-standardize 的证据调查子 agent（读文件核验真实路径）"
+    }
+  },
+  "bulk": {
+    "apply": {
+      "model": "opus",
+      "effort": "medium",
+      "desc": "/opsx-bulk-apply 为每个 change 派的执行子 agent"
+    }
+  },
+  "cleanup": {
+    "runner": {
+      "model": "sonnet",
+      "effort": "low",
+      "desc": "/clean-after-merged 的 fork 子 agent（不继承对话）；改后在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter"
+    }
   }
 }

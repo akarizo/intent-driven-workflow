@@ -586,16 +586,19 @@ def doctor_routing(openspec_root):
     """[routing]：只读调用 model-routing.py frontmatter --check，报 fork 命令 frontmatter 与路由的漂移。"""
     try:
         p = subprocess.run([sys.executable, os.path.join(HOOKS_DIR, "model-routing.py"), "frontmatter", "--check",
-                            "--openspec", openspec_root], capture_output=True, text=True, timeout=60)
+                            "--openspec", openspec_root], capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=60)
     except (OSError, subprocess.TimeoutExpired) as e:
         return ["[routing]", "  不可用：%s" % _err(e)]
     lines = [l for l in p.stdout.splitlines() if l.strip()]
     if p.returncode == 0:
         return ["[routing]", "  " + (lines[0] if lines else "frontmatter 与路由一致")]
+    err = [l for l in p.stderr.splitlines() if l.strip()]
+    if p.returncode == 1 and not lines:
+        return ["[routing]", "  不可用：%s" % (err[-1].strip() if err else "exit 1")]
     if p.returncode == 1:
         return (["[routing]"] + ["  " + l for l in lines]
                 + ["  修法：在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter"])
-    err = [l for l in p.stderr.splitlines() if l.strip()]
     return ["[routing]", "  不可用：%s" % (err[0] if err else "exit %d" % p.returncode)]
 
 

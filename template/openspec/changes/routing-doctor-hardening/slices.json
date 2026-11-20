@@ -1,0 +1,118 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ]
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "frontmatter 读写失败走退出码 2；doctor [routing] 段把崩溃报成不可用、UTF-8 宽松解码；doctor 用例改在临时目录跑复制的 hooks",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/model-routing.py",
+        "template/.claude/hooks/flight-doctor.py",
+        "tests/test_routing_followups.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_routing_followups.py tests/test_routing_frontmatter.py tests/test_model_routing.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_tests.py",
+      "scenarios": [
+        "routing-doctor-hardening#frontmatter-rejects-non-utf8-command",
+        "routing-doctor-hardening#doctor-reports-unreadable-command-as-unavailable",
+        "routing-doctor-hardening#doctor-reports-crash-as-unavailable",
+        "routing-doctor-hardening#doctor-survives-undecodable-output"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "/clean-after-merged 文档注明 context: fork 命令未单独实测、step 1 注释措辞对齐；起点依据断言改为整句",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/commands/clean-after-merged.md",
+        "tests/test_fork_commands_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_fork_commands_docs.py tests/test_clean_after_merged_docs.py",
+      "scenarios": [
+        "cleanup-doc-precision#cleanup-doc-marks-fork-command-untested"
+      ]
+    },
+    {
+      "id": "S3",
+      "title": "model-routing.py init 种下 / 补全 model-routing.json（11 键全写、每键 desc、顶层 $comment），校验接受 desc / $comment；install 安装与升级运行 init；本仓库配置补全；README 同步",
+      "packet": "slices/S3.md",
+      "owns": [
+        "template/.claude/hooks/model-routing.py",
+        "template/openspec/model-routing.json",
+        "install.sh",
+        "README.md",
+        "tests/test_routing_seed.py",
+        "tests/test_install_routing.py"
+      ],
+      "deps": [
+        "S1"
+      ],
+      "verify": "python3 -m pytest -q tests/test_routing_seed.py tests/test_install_routing.py tests/test_model_routing.py tests/test_routing_frontmatter.py tests/test_routing_followups.py tests/test_spec_html_routing.py tests/test_docs_iron_rules.py",
+      "scenarios": [
+        "routing-config-seeded#init-writes-full-config",
+        "routing-config-seeded#init-fills-missing-keeps-values",
+        "routing-config-seeded#init-leaves-invalid-config-untouched",
+        "routing-config-seeded#install-seeds-routing-config"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "routing-doctor-hardening#frontmatter-rejects-non-utf8-command": "tests/test_routing_followups.py::test_frontmatter_rejects_non_utf8_command",
+    "routing-doctor-hardening#doctor-reports-unreadable-command-as-unavailable": "tests/test_routing_followups.py::test_doctor_reports_unreadable_command_as_unavailable",
+    "routing-doctor-hardening#doctor-reports-crash-as-unavailable": "tests/test_routing_followups.py::test_doctor_reports_crash_as_unavailable",
+    "routing-doctor-hardening#doctor-survives-undecodable-output": "tests/test_routing_followups.py::test_doctor_survives_undecodable_output",
+    "cleanup-doc-precision#cleanup-doc-marks-fork-command-untested": "tests/test_fork_commands_docs.py::test_cleanup_doc_marks_fork_command_untested",
+    "routing-config-seeded#init-writes-full-config": "tests/test_routing_seed.py::test_init_writes_full_config",
+    "routing-config-seeded#init-fills-missing-keeps-values": "tests/test_routing_seed.py::test_init_fills_missing_keeps_values",
+    "routing-config-seeded#init-leaves-invalid-config-untouched": "tests/test_routing_seed.py::test_init_leaves_invalid_config_untouched",
+    "routing-config-seeded#install-seeds-routing-config": "tests/test_install_routing.py::test_install_seeds_routing_config"
+  },
+  "routing": {
+    "source": "template/openspec/model-routing.json",
+    "flight": {
+      "executor": {
+        "model": "opus",
+        "effort": "medium"
+      },
+      "executor-large": {
+        "model": "opus",
+        "effort": "medium"
+      },
+      "fixer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "reviewer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "integrator": {
+        "model": "sonnet",
+        "effort": "low"
+      }
+    },
+    "ship": {
+      "reviewer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "followup": {
+        "model": "opus",
+        "effort": "high"
+      }
+    }
+  }
+}
