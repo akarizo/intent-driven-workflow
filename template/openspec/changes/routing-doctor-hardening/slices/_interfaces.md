@@ -10,3 +10,9 @@
 
 - `template/.claude/commands/clean-after-merged.md`：文档，注明 context: fork 命令未单独实测。
 - `tests/test_fork_commands_docs.py`：起点依据断言改为整句。
+
+## S3
+
+- `template/.claude/hooks/model-routing.py` `cmd_init(args)`：种下或补全 model-routing.json（11 键全写、每键 desc、顶层 $comment）；已有值保留，无效配置不动；校验接受 desc / $comment。
+- `install.sh`：安装与升级时运行 model-routing.py init，种下 openspec/model-routing.json。
+- `tests/test_routing_seed.py` / `tests/test_install_routing.py`：S3 场景测试。
