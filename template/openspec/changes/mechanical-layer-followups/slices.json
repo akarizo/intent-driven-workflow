@@ -1,0 +1,100 @@
+{
+  "gate": {
+    "test": "python3 -m pytest -q tests",
+    "lint": "python3 -m compileall -q template/.claude/hooks",
+    "typecheck": null,
+    "checks": [
+      {
+        "name": "schema-validate",
+        "baseline": "cd template && openspec schema validate intent-driven",
+        "final": "cd template && openspec schema validate intent-driven",
+        "timeout_sec": 120
+      }
+    ]
+  },
+  "slices": [
+    {
+      "id": "S1",
+      "title": "model-routing.py frontmatter 保留换行风格、识别文件末尾的收尾 ---；flight-doctor doctor 新增 [routing] 段；install.sh 补救提示给出 --upgrade 出路；顺手清 C3 遗留 LOW",
+      "packet": "slices/S1.md",
+      "owns": [
+        "template/.claude/hooks/model-routing.py",
+        "template/.claude/hooks/flight-doctor.py",
+        "install.sh",
+        "README.md",
+        "tests/test_routing_followups.py",
+        "tests/test_routing_frontmatter.py",
+        "tests/test_install_routing.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_routing_followups.py tests/test_routing_frontmatter.py tests/test_install_routing.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_tests.py",
+      "scenarios": [
+        "routing-frontmatter-hardening#frontmatter-keeps-crlf",
+        "routing-frontmatter-hardening#frontmatter-accepts-fence-at-eof",
+        "routing-frontmatter-hardening#doctor-reports-frontmatter-drift",
+        "routing-frontmatter-hardening#doctor-reports-frontmatter-in-sync",
+        "routing-frontmatter-hardening#install-hint-offers-upgrade"
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "/clean-after-merged 最后一条回复带计划、结果与验证；起始 CWD 依据与 --protect 绝对路径写进文档；merged-cleanup.py 头注释同步",
+      "packet": "slices/S2.md",
+      "owns": [
+        "template/.claude/commands/clean-after-merged.md",
+        "template/.claude/hooks/merged-cleanup.py",
+        "tests/test_fork_commands_docs.py"
+      ],
+      "deps": [],
+      "verify": "python3 -m pytest -q tests/test_fork_commands_docs.py tests/test_merged_cleanup.py",
+      "scenarios": [
+        "cleanup-fork-report#cleanup-final-reply-carries-plan-result-verify",
+        "cleanup-fork-report#cleanup-doc-states-cwd-basis"
+      ]
+    }
+  ],
+  "scenario_tests": {
+    "routing-frontmatter-hardening#frontmatter-keeps-crlf": "tests/test_routing_followups.py::test_frontmatter_keeps_crlf",
+    "routing-frontmatter-hardening#frontmatter-accepts-fence-at-eof": "tests/test_routing_followups.py::test_frontmatter_accepts_fence_at_eof",
+    "routing-frontmatter-hardening#doctor-reports-frontmatter-drift": "tests/test_routing_followups.py::test_doctor_reports_frontmatter_drift",
+    "routing-frontmatter-hardening#doctor-reports-frontmatter-in-sync": "tests/test_routing_followups.py::test_doctor_reports_frontmatter_in_sync",
+    "routing-frontmatter-hardening#install-hint-offers-upgrade": "tests/test_install_routing.py::test_install_hint_offers_upgrade",
+    "cleanup-fork-report#cleanup-final-reply-carries-plan-result-verify": "tests/test_fork_commands_docs.py::test_cleanup_final_reply_carries_plan_result_verify",
+    "cleanup-fork-report#cleanup-doc-states-cwd-basis": "tests/test_fork_commands_docs.py::test_cleanup_doc_states_cwd_basis"
+  },
+  "routing": {
+    "source": "template/openspec/model-routing.json",
+    "flight": {
+      "executor": {
+        "model": "opus",
+        "effort": "medium"
+      },
+      "executor-large": {
+        "model": "opus",
+        "effort": "medium"
+      },
+      "fixer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "reviewer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "integrator": {
+        "model": "sonnet",
+        "effort": "low"
+      }
+    },
+    "ship": {
+      "reviewer": {
+        "model": "opus",
+        "effort": "high"
+      },
+      "followup": {
+        "model": "opus",
+        "effort": "high"
+      }
+    }
+  }
+}
