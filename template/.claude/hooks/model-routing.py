@@ -7,6 +7,7 @@
 #   model-routing.py resolve --change-dir D
 #   model-routing.py get     <组.键> [--change-dir D | --openspec DIR]
 #   model-routing.py frontmatter [--check] [--openspec DIR] [--commands DIR]   把路由值渲染进 fork 命令的 frontmatter
+#   model-routing.py init    [--openspec DIR]   种下 / 补全 model-routing.json（11 键 + desc + $comment，只补缺、不改已有值）
 #
 # 配置：<openspec 根>/model-routing.json，两级「组.键」→ {"model","effort"}；文件缺失视为 {}，缺的键走内建默认。
 #   openspec 根：--openspec 优先 > <change-dir>/../.. > ./openspec。
@@ -55,6 +56,24 @@ BUILTIN = {
     "bulk.apply": {"model": "opus", "effort": "medium"},
     "cleanup.runner": _SONNET_LOW,
 }
+DESC = {
+    "flight.executor": "飞行中实现切片的 slice-executor（标准档）",
+    "flight.executor-large": "飞行中实现大片档切片的 slice-executor-large",
+    "flight.fixer": "飞行中的修复派发（评审后的批量修复 fix、wave 跨片修复 fix:w<i>）",
+    "flight.reviewer": "飞行中的 code-reviewer（切片评审 / 复核）",
+    "flight.integrator": "飞行中的 integrator（合回切片 · wave 集成检查 · final 门禁）",
+    "ship.reviewer": "/pr-ship 对整个 PR 的干净评审",
+    "ship.followup": "/pr-ship 自动修复后的复核评审",
+    "archive.sync": "/opsx-archive 选择同步时，把 delta spec 同步进主 specs 的子 agent",
+    "claudemd.evidence": "/claudemd-standardize 的证据调查子 agent（读文件核验真实路径）",
+    "bulk.apply": "/opsx-bulk-apply 为每个 change 派的执行子 agent",
+    "cleanup.runner": "/clean-after-merged 的 fork 子 agent（不继承对话）；改后在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter",
+}
+assert set(DESC) == set(BUILTIN)
+COMMENT = ("每个「组.键」是一个派发用途；model 只写模型名（%s），effort 取 %s；"
+           "删掉某键 = 走内建默认；desc 只作说明；"
+           "改 cleanup.runner 后在仓库根运行 python3 .claude/hooks/model-routing.py frontmatter"
+           % (" | ".join(MODELS), " | ".join(EFFORTS)))
 PINNED_GROUPS = ("flight", "ship")
 # fork 命令的唯一登记处：路由键 → 命令文件名（frontmatter 的 model / effort 由 frontmatter 子命令渲染）
 FORK_COMMANDS = {"cleanup.runner": "clean-after-merged.md"}
@@ -105,6 +124,8 @@ def check_value(name, value):
         errs.append("%s：缺 effort" % name)
     elif value["effort"] not in EFFORTS:
         errs.append("%s：effort=%r 不在允许集合（%s）" % (name, value["effort"], " | ".join(EFFORTS)))
+    if "desc" in value and not isinstance(value["desc"], str):
+        errs.append("%s：desc 必须是字符串" % name)
     return errs
 
 
@@ -114,6 +135,10 @@ def validate(cfg):
         return ["%s 顶层必须是对象" % CONFIG_NAME]
     errs = []
     for group, keys in cfg.items():
+        if group == "$comment":
+            if not isinstance(keys, str):
+                errs.append("$comment：必须是字符串")
+            continue
         names = ["%s.%s" % (group, k) for k in keys] if isinstance(keys, dict) and keys else [group]
         if group in PLANNING_GROUPS:
             errs.extend("%s：规划期不进路由配置" % n for n in names)
@@ -329,6 +354,42 @@ def cmd_frontmatter(args):
         print("%s  %s · %s" % (path.name, v["model"], v["effort"]))
 
 
+def cmd_init(args):
+    root = openspec_root(args)
+    path = config_path(root)
+    if not path.is_file():
+        cfg = {"$comment": COMMENT}
+        for group, keys in REGISTRY.items():
+            cfg[group] = {k: dict(BUILTIN["%s.%s" % (group, k)], desc=DESC["%s.%s" % (group, k)]) for k in keys}
+        root.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print("已写入 %d 个键" % len(BUILTIN))
+        return
+    cfg, errs = load_config(root)
+    errs = errs or validate(cfg)
+    if errs:
+        die(EXIT_INVALID, errs)
+    added_keys = added_desc = 0
+    added_comment = "$comment" not in cfg
+    if added_comment:
+        cfg = dict([("$comment", COMMENT)] + list(cfg.items()))
+    for group, keys in REGISTRY.items():
+        block = cfg.setdefault(group, {})
+        for key in keys:
+            name = "%s.%s" % (group, key)
+            if key not in block:
+                block[key] = dict(BUILTIN[name], desc=DESC[name])
+                added_keys += 1
+            elif "desc" not in block[key]:
+                block[key]["desc"] = DESC[name]
+                added_desc += 1
+    if not (added_comment or added_keys or added_desc):
+        print("已完整")
+        return
+    path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print("补 %d 个键 · 补 %d 条说明" % (added_keys, added_desc))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="model-routing.py", description="执行层路由配置")
     sub = p.add_subparsers(dest="cmd")
@@ -361,6 +422,10 @@ def main(argv=None):
     s.add_argument("--openspec")
     s.add_argument("--commands")
     s.set_defaults(func=cmd_frontmatter)
+
+    s = sub.add_parser("init")
+    s.add_argument("--openspec")
+    s.set_defaults(func=cmd_init)
 
     args = p.parse_args(argv)
     args.func(args)

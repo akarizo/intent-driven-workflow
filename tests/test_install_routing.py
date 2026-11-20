@@ -99,7 +99,6 @@ def test_install_hint_offers_upgrade(tmp_path):
     assert any("install.sh --upgrade" in l for l in hint), hint
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_install_seeds_routing_config(tmp_path):
     # Given: 一个还没装过本模板的目标仓库
     target = tmp_path / "target"

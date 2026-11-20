@@ -1,7 +1,5 @@
-"""routing-config-seeded 的 scenario 骨架（strict xfail；切片 S3 实现后去掉标记即解锁）。"""
+"""routing-config-seeded 的 scenario 测试（已解锁）。"""
 import json
-
-import pytest
 
 from conftest import run_hook
 
@@ -32,7 +30,6 @@ def has_desc(value):
     return isinstance(value.get("desc"), str) and value["desc"].strip() != ""
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_init_writes_full_config(tmp_path):
     # Given: openspec 根没有 `model-routing.json`
     defaults = builtin(tmp_path)
@@ -57,7 +54,6 @@ def test_init_writes_full_config(tmp_path):
     assert {v["source"] for v in table.values()} == {"repo"}, table
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_init_fills_missing_keeps_values(tmp_path):
     # Given: `model-routing.json` 只写了 `flight.executor` = haiku · low，没有 `desc`
     defaults = builtin(tmp_path)
@@ -84,7 +80,6 @@ def test_init_fills_missing_keeps_values(tmp_path):
         assert has_desc(value), name
 
 
-@pytest.mark.xfail(strict=True, reason="S3 未实现")
 def test_init_leaves_invalid_config_untouched(tmp_path):
     # Given: `model-routing.json` 把 `flight.executor` 的 model 写成 `main`
     root = tmp_path / "openspec"
