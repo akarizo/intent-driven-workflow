@@ -39,7 +39,7 @@ description: 一次成稿：一步生成完整 change 的全部工件（含切�
    ```bash
    python3 .claude/hooks/slice-gate.py warm --change-dir openspec/changes/<name>
    ```
-   - 它沿用最近一个 change 的 `gate.test`（stdout 的 `test_cmd`）；
+   - 它沿用最后提交的 change 的 `gate.test`（stdout 的 `test_cmd`）；
    - 计划的 `gate.test` 写成同一条命令，正式 baseline 才能复用这次预热；
    - 分层仓库或无可沿用命令时，它打印「跳过预热」，什么也不做。
 
