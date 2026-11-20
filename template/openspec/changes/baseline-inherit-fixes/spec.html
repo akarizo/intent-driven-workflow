@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+baseline-inherit-fixes · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+baseline-inherit-fixes
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">specs</span><span class="chip" data-state="done">adr</span><span class="chip" data-state="done">tasks</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">baseline 从别的来源继承结论时，有两处会继承错东西。两处都是 C2（propose-speedup，#27）留下的。</p><p class="why-body">- <strong>全量耗时继承错</strong>：C2 的第一次 baseline 经锚点补跑了 131.6 秒，锚点条目里没有全量耗时，所以 <code>full_suite_sec</code> 留空。第二次 baseline 复用这份基线时，把它的 <code>test.sec</code>（也就是补跑的 131.6 秒）当成全量耗时记下，而真实全量约 470 秒。final 的超时上限因此只有 3 × 131.6 ≈ 395 秒，两次 final 都以「G2 test：增量重跑超时」红掉（<code>openspec/changes/propose-speedup/gate-report.md</code> 第 11、12 行）。
+- <strong>预热来源随机</strong>：预热（<code>slice-gate.py warm</code>）按 <code>slices.json</code> 的修改时间选来源 change。新 worktree 里全部 32 个 <code>slices.json</code> 的修改时间完全相同（实测），选中的其实是目录遍历顺序里排在前面的那个。本仓库各 change 的 <code>gate.test</code> 都一样，所以没出过事；下游仓库的 <code>gate.test</code> 一旦换过，就可能沿用到旧命令。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>锚点条目带全量耗时</strong>：全量 baseline 与全量 final 写锚点时记下本次全量耗时 <code>full_suite_sec</code>；增量 baseline 与增量 final 写的新锚点沿用来源锚点的值，沿锚点链一路传下去。</li><li><strong>经锚点的 baseline 继承全量耗时</strong>：取值顺序是本 change 上一次已知的全量耗时（例如预热），再到来源锚点的 <code>full_suite_sec</code>。</li><li><strong>增量来源不再拿 <code>test.sec</code> 充当全量</strong>：复用本 change 旧基线时，只有那份旧基线是全量运行，才用它的 <code>test.sec</code>；它本身是增量时，<code>full_suite_sec</code> 留空（final 超时上限退到 600 秒）。基线池只收全量结果，行为不变。</li><li><strong>预热来源按 git 最后提交时间选</strong>：取每个 change 的 <code>slices.json</code> 在 git 里最后一次提交的时间，最新的胜出；时间相同取 change 名字典序最后一个；从没提交过的排在所有已提交的之后，它们之间也按名字定。</li><li><strong>文档措辞</strong>：<code>/opsx-propose</code> 命令与同名 skill 里「沿用最近一个 change 的 <code>gate.test</code>」改为「沿用最后提交的 change 的 <code>gate.test</code>」，两处同改。</li></ul><div class="impact"><span class="tag"><strong>代码</strong>：<code>template/.claude/hooks/slice-gate.py</code>，涉及 <code>_run_baseline</code> 的全量耗时取值段、全量 baseline 与全量 final 的锚点写入、<code>_anchor_forward</code>、<code>_warm_source</code>。</span><span class="tag"><strong>数据</strong>：锚点池条目（<code>&lt;git common dir&gt;/flight-anchors/*.json</code>）新增可选字段 <code>full_suite_sec</code>。旧条目没有这个字段时按「未知」处理，不需要迁移。</span><span class="tag"><strong>文档</strong>：<code>template/.claude/commands/opsx-propose.md</code>、<code>template/.claude/skills/openspec-propose/SKILL.md</code> 各一行。</span><span class="tag"><strong>测试</strong>：新增 <code>tests/test_baseline_full_sec.py</code>、<code>tests/test_warm_source.py</code>。<code>tests/test_baseline_pool.py</code> 断言基线池复用时 <code>full_suite_sec == test.sec</code>，这条行为不变，需保持绿。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>baseline-full-suite-sec</code>：baseline 与 final 写锚点、继承锚点时，全量耗时的记录与取值规则。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>warm-source-selection</code>：预热选来源 change 的确定性规则。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>baseline-full-suite-sec <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 锚点条目记录全量耗时</p><p>全量 baseline 写出的锚点 SHALL 带 <code>full_suite_sec</code>，值等于该基线记下的全量耗时。增量 baseline 与增量 final 写出的新锚点 SHALL 沿用来源锚点的 <code>full_suite_sec</code>。全量 final 写出的锚点 SHALL 带本次全量运行的耗时。</p><p>Feature: 全量耗时沿锚点链传递
+Rule: 锚点是跨 change 复用的来源，全量耗时要跟着锚点走</p><div class="scenario"><p class="scenario-name">Scenario: anchor-carries-full-suite-sec</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change c 跑过一次全量 baseline</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读取锚点池里最新的锚点</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>它的 <code>full_suite_sec</code> 是数值，等于 c 的 <code>gate-baseline.json</code> 里的 <code>full_suite_sec</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: final-anchor-keeps-full-suite-sec</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change c 跑过一次全量 baseline，记下的全量耗时为 T；之后提交了非测试文件 <code>src/a.py</code> 的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对 c 运行 final，读取锚点池里最新的锚点；再运行 <code>final --full</code>，再读一次</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>第一次 final 走增量，最新锚点的 <code>full_suite_sec</code> 等于 T</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>final --full</code> 之后，最新锚点的 <code>full_suite_sec</code> 是大于 0 的数值</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 经锚点的 baseline 继承全量耗时</p><p>经锚点走增量的 baseline，在本 change 没有已知全量耗时时，SHALL 把来源锚点的 <code>full_suite_sec</code> 记作自己的 <code>full_suite_sec</code>，SHALL NOT 用补跑耗时代替。</p><p>Feature: 增量基线的全量耗时
+Rule: 全量耗时只来自真实的全量测量</p><div class="scenario"><p class="scenario-name">Scenario: anchor-baseline-inherits-full-suite-sec</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change other 跑过全量 baseline，全量耗时为 T；change c 与 other 的 <code>gate.test</code> 相同，c 还没有基线</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对 c 运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>c 的基线经锚点走增量，来源是 other</span></li><li><span class="step-key" data-kw="AND">AND</span><span>c 的 <code>full_suite_sec</code> 等于 T</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 复用增量基线不拿补跑耗时充当全量</p><p>复用本 change 旧基线时，旧基线 <code>mode</code> 为 <code>incremental</code> 且没有 <code>full_suite_sec</code>，新基线的 <code>full_suite_sec</code> SHALL 为空，SHALL NOT 取旧基线的 <code>test.sec</code>。旧基线带 <code>full_suite_sec</code> 时 SHALL 沿用它。</p><p>Feature: 复用链上的全量耗时
+Rule: 增量基线的 test.sec 是补跑耗时，不是全量耗时</p><div class="scenario"><p class="scenario-name">Scenario: own-reuse-keeps-inherited-full-suite-sec</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change c 的基线经 other 的锚点走增量，<code>full_suite_sec</code> 等于 other 的全量耗时 T</span></li><li><span class="step-key" data-kw="AND">AND</span><span>之后只提交了测试文件的改动</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>再对 c 运行 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>c 的基线复用本 change 旧基线（增量）</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>full_suite_sec</code> 仍等于 T，不等于本次或上次的 <code>test.sec</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: legacy-anchor-leaves-full-suite-sec-unknown</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change other 跑过全量 baseline，锚点池里的锚点都去掉了 <code>full_suite_sec</code>（模拟旧版本写的锚点）；change c 还没有基线</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对 c 运行 baseline，之后只提交测试文件的改动，再运行一次 baseline</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次 c 的基线都是增量，<code>full_suite_sec</code> 都为空</span></li></ul></div></div></div><div class="spec-card"><h3>warm-source-selection <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 预热按 git 最后提交时间选来源</p><p><code>slice-gate.py warm</code> 在没有 <code>--cmd</code> 时，SHALL 从 changes 根下其它 change 中选来源。候选是除 <code>archive</code> 与本 change 外，<code>slices.json</code> 存在且 <code>gate.test</code> 非空的 change。选择规则如下：
+- 取 <code>slices.json</code> 在 git 里最后一次提交时间最新的；
+- 时间相同取 change 名字典序最大的；
+- 从没提交过的排在所有已提交的之后，它们之间同样按名字取。</p><p>结果 SHALL NOT 取决于文件修改时间。</p><p>Feature: 预热来源确定
+Rule: 同一份 git 历史与 change 集合，预热总是选中同一个来源</p><div class="scenario"><p class="scenario-name">Scenario: warm-picks-latest-committed-change</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change old 与 new 的 <code>gate.test</code> 不同；new 的 <code>slices.json</code> 在 old 之后提交；之后把 old 的 <code>slices.json</code> 的修改时间改得比 new 晚</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对新 change c 运行 warm</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 的 <code>test_cmd</code> 是 new 的 <code>gate.test</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: warm-breaks-commit-tie-by-name</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change alpha 与 beta 的 <code>gate.test</code> 不同，两者的 <code>slices.json</code> 在同一次提交里</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对新 change c 运行 warm</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 的 <code>test_cmd</code> 是 beta 的 <code>gate.test</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: warm-ranks-uncommitted-after-committed</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>change kept 的 <code>slices.json</code> 已提交；change draft 的 <code>slices.json</code> 从没提交过，修改时间更晚；两者 <code>gate.test</code> 不同</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>对新 change c 运行 warm</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，stdout 的 <code>test_cmd</code> 是 kept 的 <code>gate.test</code></span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p>本 change 命中两条触发器： - <strong>数据模型</strong>：锚点池条目新增字段 <code>full_suite_sec</code>； - <strong>跨模块</strong>：baseline 与 final 写锚点，baseline、final、preflight 读全量耗时。</p><p><strong>全量耗时的现状</strong>（<code>slice-gate.py</code>）：</p><ul><li>读取只经 <code>suite_sec(change_dir, data)</code>。取值顺序是 <code>gate-baseline.json</code> 顶层的 <code>full_suite_sec</code>，再到计划里旧的 <code>gate.full_suite_sec</code>（<code>DRAFT-measurements-stay-out-of-plan-files</code> 决策 2、3）。</li><li>final 的超时上限是 <code>_g7_timeout</code>：有全量耗时时取 <code>max(120, 3 × 全量耗时)</code>，没有时取 600 秒。</li><li>baseline 结束时按下面的顺序写 <code>full_suite_sec</code>（<code>_run_baseline</code> 结尾，约 5207–5214 行）：</li></ul><p>| 情形 | 取值顺序（现状） | |---|---| | 全量运行 | 本次墙钟 | | 增量（复用旧基线 / 锚点 / 基线池） | <code>last_sec</code>（开跑前 <code>suite_sec</code>）→ <code>src.full_suite_sec</code> → <code>src.test.sec</code> |</p><p><strong>缺陷链</strong>：C2 实测，各 change 的 <code>gate-baseline.json</code> 与 <code>timeline.md</code> 可查。</p><p>``<code> baseline #1（经锚点）   last_sec=None · 锚点包装没有 full_suite_sec / test → full_suite_sec = None；test.sec = 补跑 131.6s baseline #2（复用 #1）  last_sec=None · src=#1：full_suite_sec=None → 取 src.test.sec = 131.6 → full_suite_sec = 131.6（真实全量约 470s） final                   超时上限 3 × 131.6 = 394.8s；增量重跑 394.9s → 「G2 test：增量重跑超时」×2 </code>``</p><p><strong>预热来源的现状</strong>：<code>_warm_source</code> 在 changes 根下按 <code>slices.json</code> 的 <code>os.path.getmtime</code> 取最新的那个，比较用严格的 <code>&gt;</code>。新 worktree 是一次检出的，32 个 <code>slices.json</code> 的 mtime 完全相同（实测），结果取决于 <code>os.listdir</code> 的顺序。</p></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong> - 增量 baseline 的 <code>full_suite_sec</code> 只来自真实的全量测量（本次全量、预热、来源锚点沿链继承下来的全量）；取不到时留空，不拿补跑秒数充当全量。 - 锚点条目带上全量耗时，并随增量 baseline 与增量 final 写出的新锚点传下去。 - 预热来源的选择只取决于 git 历史与 change 名，和检出时刻、文件系统顺序都无关。</p><p><strong>Non-Goals:</strong> - 不改 <code>_g7_timeout</code> 的公式与 600 秒缺省。 - 不回填旧锚点：没有字段就按未知处理（用户 2026-11-20 选定）。 - 不改基线池：池只收全绿的全量，它的 <code>test.sec</code> 就是全量耗时，<code>tests/test_baseline_pool.py</code> 钉住的行为保持。 - 不改预热的其它规则：分层仓库跳过、<code>--cmd</code> 显式命令、包装脚本沿用都不动。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><strong><code>last_sec</code> 仍然排第一</strong></summary><p>沿用 <code>DRAFT-measurements-stay-out-of-plan-files</code> 决策 2「增量基线沿用上一份的值」。预热写的就是真实全量，排第一能让 /opsx-propose 的常规流程拿到最新测量。</p></details><details><summary><strong>判定「是不是增量」</strong></summary><p>旧基线看自己的 <code>mode</code> 字段。基线池条目没有 <code>mode</code>，但按 <code>_pool_write</code> 的入池条件（<code>hit is None</code>）全是全量，所以按全量处理。</p></details><details><summary><strong>备选</strong></summary><p>锚点值优先于 <code>last_sec</code>。被否：<code>last_sec</code> 来自本 change 自己的测量，比跨 change 的锚点更贴近当前代码树；两者都是真实的全量测量。</p></details><details><summary><strong>排序键</strong></summary><p>每个候选 change（除 <code>archive</code> 与本 change 外，<code>slices.json</code> 存在且 <code>gate.test</code> 非空）记作 <code>(提交时间, 名字)</code>，取最大的那个。</p></details><details><summary><strong>提交时间</strong></summary><p>git 里最后一次改动该 <code>slices.json</code> 的提交的 committer 时间（<code>%ct</code>）。</p></details><details><summary><strong>从没提交过的</strong></summary><p>提交时间记为 <code>-1</code>，所以排在所有已提交的之后。</p></details><details><summary><strong>时间相同</strong></summary><p>取名字字典序最大的。</p></details><details><summary><strong>取时间的方式</strong></summary><p>一次 <code>git log --format=%ct --name-only -- &lt;changes 根&gt;/*/slices.json</code>，逐行解析，每个路径取第一次出现时的时间（<code>git log</code> 从新到旧排，第一次出现的就是最新提交）。git 调用失败时，全部按 <code>-1</code> 处理，退化为按名字排序。</p></details><details><summary><strong>备选</strong></summary></details><details><summary><strong>最近一条锚点所属的 change</strong></summary><p>锚点池为空、或那个 change 已经归档时还得再退一步，规则更长。被否（用户 2026-11-20 选定 git 提交时间）。</p></details><details><summary><strong>只按名字排序</strong></summary><p>确定，但名字和新旧无关。被否。</p></details><details><summary><strong>边界</strong></summary><p><code>slice-gate.py</code> 是唯一的写方；锚点池是跨 change 共享的测量存储；<code>gate-baseline.json</code> 是本 change 的测量归宿。</p></details><details><summary><strong>假设</strong></summary><p>锚点池里的旧条目没有 <code>full_suite_sec</code>，按未知处理。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[风险] 过渡期旧锚点没有字段</strong></summary><p>经旧锚点、本 change 又没有预热时，<code>full_suite_sec</code> 为空，final 超时上限退到 600 秒。本仓库 C2 的增量 final 跑过 609.6 秒，可能超时。→ <strong>缓解</strong>：</p></details><details><summary>/opsx-propose 的常规流程先预热，<code>last_sec</code> 排第一；</summary></details><details><summary>锚点池只留最新 20 条，每次 baseline / final 都写新锚点，旧条目很快被挤出；</summary></details><details><summary>必要时可设 <code>FLIGHT_G7_TIMEOUT</code> 临时覆盖超时上限（现有行为）。</summary></details><details><summary><strong>[风险] git 调用失败</strong></summary><p>比如不在 git 仓库内。→ 全部按 <code>-1</code> 退化为按名字排序，结果仍然确定，预热照常进行。</p></details><details><summary><strong>[权衡] 已提交的旧 change 会胜过没提交的新 change</strong></summary><p>同一 worktree 里正在规划、还没提交的另一个 change，排在已提交的后面。这种布局本来就少见（每个 change 有自己的 worktree），换来的是结果不依赖检出时刻。</p></details></div><div class="design-block"><h3>Migration Plan</h3><ul><li>不迁移数据：旧锚点没有字段按未知处理，旧 <code>gate-baseline.json</code> 不改。</li><li>回滚：revert 本 change 的代码 commit 即可。新锚点多出的字段旧代码不读，不影响回滚。</li></ul></div><div class="design-block"><h3>Open Questions</h3><ul><li>无。两项决策已在 grill-me 定下（2026-11-20）：预热来源按 git 最后提交时间；旧锚点留空、退到 600 秒。</li><li>与在役 ADR 一致：<code>DRAFT-measurements-stay-out-of-plan-files</code> 规定增量基线沿用上一份的值、读取经 <code>suite_sec</code>，本 change 两条都沿用，不需要 supersede。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-execution-routing-by-config.md">DRAFT. 执行层模型按派发用途由仓库配置显式路由，规划期继承主会话</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-executor-turn-tiers-by-owned-files.md">DRAFT. 执行体的轮次上限按切片的现存文件数分两档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-tests-only-rerun-without-graph.md">DRAFT. 没有依赖图时，只改了测试文件的 final 只重跑这些文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-flight-close-reaps-slice-worktrees.md">DRAFT. 飞行收口回收全部临时 worktree，作废尝试先归档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-inert-paths-declared-and-reconciled.md">DRAFT. 与测试无关的路径由仓库声明，并与依赖图对账</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-measurements-stay-out-of-plan-files.md">DRAFT. 脚本测出来的东西不写进计划文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-mechanical-commands-run-in-isolated-subagent.md">DRAFT. 主会话不被 frontmatter 换模型；不需对话历史的机械命令以 context: fork 子 agent 运行，模型由路由配置渲染</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-owns-cap-follows-turn-tier.md">DRAFT. owns 条数上限随轮次档，宽通配要写理由</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-retakeoff-skips-landed-slices.md">DRAFT. 重新起飞时已落地的切片不再派执行体</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-evidence-in-git-common-dir.md">DRAFT. 切片的测试留痕写在 git 共用目录，记录门禁结论时并回分支</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-worktrees-reaped-after-merge.md">DRAFT. 切片临时 worktree 在提交合回后由合回脚本回收</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-ledger-outside-repo-follows-anchors.md">DRAFT. 测试账本：逐用例数据放 git common dir，耗时跟着锚点沿用，入库的只有摘要</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-remediation-tracks.md">DRAFT. 测试整改按去向分三条轨道：机械处置命令内做，放行归人，改用例实现另立 change</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-suite-standard-audited-outside-gates.md">DRAFT. 测试套件的合规标准写成明文规则表，由门禁之外的只读体检来量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-time-budgets-ratchet-on-ledger.md">DRAFT. 时间预算写在分层文件里，集成层按账本做棘轮</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-unmeasured-deps-need-plan-statement.md">DRAFT. 基线的依赖图未测时计划须表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-wave-integration-check-and-cross-slice-fix.md">DRAFT. 每个 wave 合回后做集成检查，红了走工作流内的跨片修复</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>模型路由</h3><p>来源：<code>template/openspec/model-routing.json</code></p><table class="flight-table"><thead><tr><th>键</th><th>模型</th><th>effort</th></tr></thead><tbody><tr><td class="mono">flight.executor</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.executor-large</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.fixer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.integrator</td><td>sonnet</td><td>low</td></tr><tr><td class="mono">ship.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">ship.followup</td><td>opus</td><td>high</td></tr></tbody></table><h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody><tr><td class="mono">S1</td><td>slice-gate.py：锚点条目带 full_suite_sec 并沿链继承、增量来源不拿补跑秒数充当全量；_warm_source 按 git 最后提交时间选来源；/opsx-propose 措辞同改</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/slice-gate.py<br>template/.claude/commands/opsx-propose.md<br>template/.claude/skills/openspec-propose/SKILL.md<br>tests/test_baseline_full_sec.py<br>tests/test_warm_source.py</td><td><code>python3 -m pytest -q tests/test_baseline_full_sec.py tests/test_warm_source.py tests/test_baseline_warm.py tests/test_baseline_pool.py tests/test_baseline_anchor_reuse.py</code></td><td>标准档</td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>baseline-full-suite-sec#anchor-carries-full-suite-sec</td><td><code>tests/test_baseline_full_sec.py::test_anchor_carries_full_suite_sec</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-full-suite-sec#final-anchor-keeps-full-suite-sec</td><td><code>tests/test_baseline_full_sec.py::test_final_anchor_keeps_full_suite_sec</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-full-suite-sec#anchor-baseline-inherits-full-suite-sec</td><td><code>tests/test_baseline_full_sec.py::test_anchor_baseline_inherits_full_suite_sec</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-full-suite-sec#own-reuse-keeps-inherited-full-suite-sec</td><td><code>tests/test_baseline_full_sec.py::test_own_reuse_keeps_inherited_full_suite_sec</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>baseline-full-suite-sec#legacy-anchor-leaves-full-suite-sec-unknown</td><td><code>tests/test_baseline_full_sec.py::test_legacy_anchor_leaves_full_suite_sec_unknown</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>warm-source-selection#warm-picks-latest-committed-change</td><td><code>tests/test_warm_source.py::test_warm_picks_latest_committed_change</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>warm-source-selection#warm-breaks-commit-tie-by-name</td><td><code>tests/test_warm_source.py::test_warm_breaks_commit_tie_by_name</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>warm-source-selection#warm-ranks-uncommitted-after-committed</td><td><code>tests/test_warm_source.py::test_warm_ranks_uncommitted_after_committed</code></td><td><span class="chip" data-state="missing">missing</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>full</code></td><td>-</td><td>478.2</td></tr><tr><td>final</td><td><code>incremental</code></td><td>锚点 9b2f62f6d8，Δ 2 个文件</td><td>478.2（约）</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><table class="flight-table"><thead><tr><th>时间</th><th>事件</th><th>备注</th></tr></thead><tbody><tr><td class="mono">2026-11-20T08:07:12Z</td><td>warm</td><td>exit 0, 478.2s ok；全量：预热；排队 0.0s · 负载 4.8→3.7/18</td></tr></tbody></table>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 slice-gate.py：锚点条目带 full_suite_sec 并沿链继承、增量来源不拿补跑秒数充当全量；_warm_source 按 git 最后提交时间选来源；/opsx-propose 措辞同改 （deps: - · verify: <code>python3 -m pytest -q tests/test_baseline_full_sec.py tests/test_warm_source.py tests/test_baseline_warm.py tests/test_baseline_pool.py tests/test_baseline_anchor_reuse.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-20 08:13 · 章节 8 · 图示 0 · 任务 1
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
