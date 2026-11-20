@@ -1,4 +1,4 @@
-"""routing-frontmatter 的 scenario 骨架（strict xfail；切片 S1 实现后去掉标记即解锁）。"""
+"""routing-frontmatter 的 scenario 测试（切片 S1 已解锁）。"""
 import json
 
 import pytest
@@ -52,7 +52,6 @@ def strip_routing_lines(text):
     return head + lines[end:]
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_registry_has_cleanup_runner(tmp_path):
     # Given: 一个 openspec 根，没有 `model-routing.json`
     (tmp_path / "openspec").mkdir()
@@ -71,7 +70,6 @@ def test_registry_has_cleanup_runner(tmp_path):
     assert json.loads(p2.stdout)["cleanup.runner"] == {"model": "haiku", "effort": "medium", "source": "repo"}
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_writes_effective_values(tmp_path):
     # Given: 一个命令目录里有 fork 形态的 `clean-after-merged.md`（含 `description`、`context: fork`、`agent`、`background`、`model: sonnet`、`effort: low` 与正文）；配置把 `cleanup.runner` 设为 haiku · medium
     cmd = setup(tmp_path, FORK_CMD, runner("haiku", "medium"))
@@ -88,7 +86,6 @@ def test_frontmatter_writes_effective_values(tmp_path):
     assert strip_routing_lines(after) == strip_routing_lines(FORK_CMD)
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_check_reports_drift(tmp_path):
     # Given: fork 形态的 `clean-after-merged.md` 写着 `model: sonnet`，配置把 `cleanup.runner` 设为 haiku · medium
     cmd = setup(tmp_path, FORK_CMD, runner("haiku", "medium"))
@@ -108,7 +105,6 @@ def test_frontmatter_check_reports_drift(tmp_path):
     assert cmd.read_text(encoding="utf-8") == FORK_CMD
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_refuses_non_fork_command(tmp_path):
     # Given: `clean-after-merged.md` 的 frontmatter 只有 `description`，没有 `context: fork`
     cmd = setup(tmp_path, PLAIN_CMD)
@@ -123,7 +119,6 @@ def test_frontmatter_refuses_non_fork_command(tmp_path):
     assert cmd.read_text(encoding="utf-8") == PLAIN_CMD
 
 
-@pytest.mark.xfail(strict=True, reason="S1 未实现")
 def test_frontmatter_invalid_config_writes_nothing(tmp_path):
     # Given: fork 形态的 `clean-after-merged.md`，配置把 `cleanup.runner` 的 model 写成 `main`
     cmd = setup(tmp_path, FORK_CMD, runner("main", "low"))
