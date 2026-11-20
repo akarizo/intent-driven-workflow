@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 
+import pytest
+
 from conftest import ROOT
 
 FM = re.compile(r"^---\n(.*?)\n---\n", re.S)
@@ -95,3 +97,31 @@ def test_install_hint_offers_upgrade(tmp_path):
     hint = [l for l in out.splitlines() if "openspec/model-routing.json" in l]
     assert hint, out
     assert any("install.sh --upgrade" in l for l in hint), hint
+
+
+@pytest.mark.xfail(strict=True, reason="S3 未实现")
+def test_install_seeds_routing_config(tmp_path):
+    # Given: 一个还没装过本模板的目标仓库
+    target = tmp_path / "target"
+    target.mkdir()
+    path = target / "openspec" / "model-routing.json"
+
+    # When: 运行 `install.sh <目标>`，再把目标的 `flight.executor` 改成 haiku · low 后运行 `install.sh --upgrade <目标>`
+    p1 = run_install(tmp_path, target)
+    assert p1.returncode == 0, p1.stdout + p1.stderr
+    assert path.is_file(), p1.stdout
+    cfg = json.loads(path.read_text(encoding="utf-8"))
+    entries = {"%s.%s" % (g, k): v for g, keys in cfg.items() if g != "$comment" for k, v in keys.items()}
+    cfg["flight"]["executor"]["model"] = "haiku"
+    cfg["flight"]["executor"]["effort"] = "low"
+    path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    p2 = run_install(tmp_path, target, "--upgrade")
+
+    # Then: 两次都退出 0；第一次之后目标的 `openspec/model-routing.json` 含 11 个带 `desc` 的键；升级之后 `flight.executor` 仍是 haiku · low
+    assert len(entries) == 11, sorted(entries)
+    for name, v in entries.items():
+        assert isinstance(v.get("desc"), str) and v["desc"].strip(), name
+    assert p2.returncode == 0, p2.stdout + p2.stderr
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after["flight"]["executor"]["model"] == "haiku", after["flight"]
+    assert after["flight"]["executor"]["effort"] == "low", after["flight"]

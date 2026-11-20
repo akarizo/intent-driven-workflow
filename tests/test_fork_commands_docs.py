@@ -3,6 +3,7 @@ import json
 import re
 
 from conftest import ROOT, load_hook, run_hook
+import pytest
 
 CMD = ROOT / "template" / ".claude" / "commands"
 SKILLS = ROOT / "template" / ".claude" / "skills"
@@ -159,3 +160,18 @@ def test_cleanup_doc_states_cwd_basis():
     row = next((l for l in text.splitlines() if l.startswith("| `session-cwd` |")), "")
     assert row, "原因表没有 session-cwd 一行"
     assert "只保护" in row and "--protect" in row, row
+
+
+@pytest.mark.xfail(strict=True, reason="S2 未实现")
+def test_cleanup_doc_marks_fork_command_untested():
+    # Given: 模板的 `/clean-after-merged` 命令文件
+    # When: 读取运行方式一节与 step 1 的代码块
+    # Then: 运行方式一节含整句「主会话 `cd` 过也一样」，并写明 `context: fork` 命令本身未单独实测；step 1 代码块里 `pwd` 那一行的注释含「主会话当前所在目录」
+    text = read(CMD / "clean-after-merged.md")
+    run = text[text.index("运行方式"):text.index("**Input**")]
+    assert "主会话 `cd` 过也一样" in run, run
+    assert "`context: fork` 命令本身未单独实测" in run, run
+    step1 = text[text.index("1. **"):text.index("2. **")]
+    pwd_line = next((l for l in step1.splitlines() if l.strip().startswith("pwd")), "")
+    assert pwd_line and "#" in pwd_line, step1
+    assert "主会话当前所在目录" in pwd_line.split("#", 1)[1], pwd_line

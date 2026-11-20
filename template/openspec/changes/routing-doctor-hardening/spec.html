@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!-- block:title -->
+routing-doctor-hardening · 意图审批面板
+<!-- /block:title --></title>
+<style>
+:root {
+  color-scheme: light dark;
+
+  --font-display: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Songti SC", "Source Han Serif SC", serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Source Han Mono SC", monospace;
+
+  --space-1: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.4vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.6vw, 1.1rem);
+  --space-4: clamp(1rem, 0.8rem + 0.8vw, 1.5rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --space-6: clamp(2.25rem, 1.8rem + 1.8vw, 3.5rem);
+  --space-7: clamp(3.5rem, 2.8rem + 2.8vw, 5.5rem);
+
+  --text-xs:   0.78rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.18rem;
+  --text-xl:   1.45rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.4rem;
+  --text-hero: clamp(2.6rem, 1.4rem + 5vw, 5.5rem);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root,
+[data-theme="light"] {
+  --color-bg:        #f7f5ef;
+  --color-surface:   #ffffff;
+  --color-surface-2: #efece3;
+  --color-fg:        #15161a;
+  --color-fg-muted:  #5b5e68;
+  --color-border:    #d9d4c3;
+  --color-border-strong: #1a1b20;
+  --color-accent:    #1d4ed8;
+  --color-accent-soft: #dbeafe;
+  --color-new:       #15803d;
+  --color-new-soft:  #dcfce7;
+  --color-modified:  #b45309;
+  --color-modified-soft: #fef3c7;
+  --color-removed:   #b91c1c;
+  --color-removed-soft: #fee2e2;
+  --color-given:     #1d4ed8;
+  --color-when:      #b45309;
+  --color-then:      #15803d;
+  --shadow-sm: 0 1px 2px rgba(20,21,26,.06);
+  --shadow-md: 0 6px 24px -8px rgba(20,21,26,.16);
+}
+
+[data-theme="dark"] {
+  --color-bg:        #0e0f13;
+  --color-surface:   #16181d;
+  --color-surface-2: #1d2027;
+  --color-fg:        #f3f1e8;
+  --color-fg-muted:  #9a9ea9;
+  --color-border:    #2b2f37;
+  --color-border-strong: #f3f1e8;
+  --color-accent:    #60a5fa;
+  --color-accent-soft: rgba(96,165,250,0.18);
+  --color-new:       #4ade80;
+  --color-new-soft:  rgba(74,222,128,0.16);
+  --color-modified:  #fbbf24;
+  --color-modified-soft: rgba(251,191,36,0.16);
+  --color-removed:   #f87171;
+  --color-removed-soft: rgba(248,113,113,0.18);
+  --color-given:     #93c5fd;
+  --color-when:      #fcd34d;
+  --color-then:      #86efac;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 10px 32px -10px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg:        #0e0f13;
+    --color-surface:   #16181d;
+    --color-surface-2: #1d2027;
+    --color-fg:        #f3f1e8;
+    --color-fg-muted:  #9a9ea9;
+    --color-border:    #2b2f37;
+    --color-border-strong: #f3f1e8;
+    --color-accent:    #60a5fa;
+    --color-accent-soft: rgba(96,165,250,0.18);
+    --color-new:       #4ade80;
+    --color-new-soft:  rgba(74,222,128,0.16);
+    --color-modified:  #fbbf24;
+    --color-modified-soft: rgba(251,191,36,0.16);
+    --color-removed:   #f87171;
+    --color-removed-soft: rgba(248,113,113,0.18);
+    --color-given:     #93c5fd;
+    --color-when:      #fcd34d;
+    --color-then:      #86efac;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+code, pre { font-family: var(--font-mono); }
+pre {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+:not(pre) > code {
+  background: var(--color-surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar .brand-dot {
+  width: 10px; height: 10px;
+  background: var(--color-border-strong);
+  border-radius: 50%;
+}
+.topbar .change-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+.topbar .chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chip[data-state="done"]    { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="ready"]   { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="blocked"] { color: var(--color-fg-muted); }
+.theme-toggle {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.theme-toggle:hover { border-color: var(--color-border-strong); }
+
+/* ── Layout ──────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-6);
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; padding: var(--space-4); }
+  .toc { position: static; max-height: none; }
+}
+
+.toc {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+.toc h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-3);
+}
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: var(--space-1) 0; }
+.toc a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.toc a:hover, .toc a[aria-current="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  min-width: 1.7em;
+}
+
+main { min-width: 0; }
+
+/* ── Sections ────────────────────────────────────────────── */
+section {
+  margin-bottom: var(--space-7);
+  scroll-margin-top: 100px;
+}
+section > h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-strong);
+}
+section > h2 .eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-2);
+}
+section h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-5) 0 var(--space-2);
+  font-weight: 600;
+}
+section h4 {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  margin: var(--space-4) 0 var(--space-2);
+  font-weight: 600;
+}
+
+/* Why — 克制层级：粗体衬线，但不放大字号 */
+#why .why-statement {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-fg);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 60ch;
+}
+#why .why-body {
+  font-size: var(--text-base);
+  color: var(--color-fg-muted);
+  max-width: 60ch;
+}
+
+/* What */
+#what ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+#what li {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+#what .impact {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* Capabilities — bento */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.cap-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+.cap-card .cap-kind {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.cap-card[data-kind="new"]      { border-left: 4px solid var(--color-new); }
+.cap-card[data-kind="new"] .cap-kind { background: var(--color-new-soft); color: var(--color-new); }
+.cap-card[data-kind="modified"] { border-left: 4px solid var(--color-modified); }
+.cap-card[data-kind="modified"] .cap-kind { background: var(--color-modified-soft); color: var(--color-modified); }
+.cap-card h4 {
+  margin: 0 0 var(--space-2);
+  padding-right: 5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.cap-card p { margin: 0; color: var(--color-fg-muted); }
+
+/* Specs — Gherkin */
+.spec-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.spec-card h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spec-card h3 .delta {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.delta[data-op="added"]    { background: var(--color-new-soft); color: var(--color-new); }
+.delta[data-op="modified"] { background: var(--color-modified-soft); color: var(--color-modified); }
+.delta[data-op="removed"]  { background: var(--color-removed-soft); color: var(--color-removed); }
+
+.requirement {
+  padding: var(--space-3) 0;
+  border-top: 1px dashed var(--color-border);
+}
+.requirement:first-of-type { border-top: 0; padding-top: 0; }
+.requirement-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.scenario {
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin: var(--space-3) 0;
+}
+.scenario-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-2);
+}
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.step-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  min-width: 5em;
+  text-align: center;
+}
+.step-key[data-kw="GIVEN"] { color: var(--color-given); background: var(--color-accent-soft); }
+.step-key[data-kw="WHEN"]  { color: var(--color-when);  background: var(--color-modified-soft); }
+.step-key[data-kw="THEN"]  { color: var(--color-then);  background: var(--color-new-soft); }
+.step-key[data-kw="AND"],
+.step-key[data-kw="BUT"]   { color: var(--color-fg-muted); background: var(--color-surface); }
+
+/* Design */
+#design .design-block {
+  margin-bottom: var(--space-5);
+}
+#design details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#design details summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+#design details[open] summary { margin-bottom: var(--space-2); }
+
+/* Mermaid */
+.diagram-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.diagram-frame .mermaid { font-family: var(--font-body); }
+.diagram-frame .caption {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+}
+.diagram-fallback {
+  display: none;
+  background: var(--color-surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+body.offline .diagram-fallback { display: block; }
+/* 渲染成功后 Mermaid 会打上 data-processed；未渲染的不外露源码 */
+.diagram-frame .mermaid:not([data-processed]) { display: none; }
+
+/* Mockups */
+.mockup-frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-3) 0;
+}
+.mockup-frame .caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-3);
+}
+
+/* ADRs */
+#adrs ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+#adrs li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+#adrs .adr-num {
+  font-family: var(--font-mono);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  min-width: 4em;
+}
+#adrs .adr-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+/* Tasks */
+#tasks .task-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+}
+#tasks .task-group summary {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+#tasks ul { list-style: none; padding: var(--space-2) 0 0; margin: 0; }
+#tasks li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+#tasks input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+#tasks li[data-done="true"] { color: var(--color-fg-muted); text-decoration: line-through; }
+
+/* Flight */
+#flight h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-muted);
+  margin: var(--space-5) 0 var(--space-2);
+}
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.flight-table th, .flight-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flight-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+.flight-table td.mono { font-family: var(--font-mono); }
+.flight-table code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.chip[data-state="unlocked"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip[data-state="pending"]  { color: var(--color-modified); border-color: var(--color-modified); background: var(--color-modified-soft); }
+.chip[data-state="passed"]   { color: var(--color-new); border-color: var(--color-new); background: var(--color-new-soft); }
+.chip[data-state="missing"]  { color: var(--color-removed); border-color: var(--color-removed); background: var(--color-removed-soft); }
+
+/* Placeholders (rendered as-is when block is not filled) */
+.placeholder {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-left: 3px dashed var(--color-fg-muted);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>意图审批面板</div>
+    <span class="change-name"><!-- block:change-name -->
+routing-doctor-hardening
+<!-- /block:change-name --></span>
+    <div class="chips">
+      <!-- block:meta-chips -->
+<span class="chip" data-state="done">proposal</span><span class="chip" data-state="done">design</span><span class="chip" data-state="done">specs</span><span class="chip" data-state="done">adr</span><span class="chip" data-state="done">tasks</span>
+<!-- /block:meta-chips -->
+    </div>
+    <button class="theme-toggle" type="button" id="theme-toggle" aria-label="切换主题">切换主题</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="toc" aria-label="目录">
+    <h3>章节</h3>
+    <ol>
+      <li><a href="#why">为何而做</a></li>
+      <li><a href="#what">变更范围</a></li>
+      <li><a href="#capabilities">能力清单</a></li>
+      <li><a href="#specs">行为规范</a></li>
+      <li><a href="#design">技术设计</a></li>
+      <li><a href="#diagrams">关键图示</a></li>
+      <li><a href="#mockups">原型示意</a></li>
+      <li><a href="#adrs">架构决策</a></li>
+      <li><a href="#flight">飞行计划</a></li>
+      <li><a href="#tasks">落地任务</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <section id="why">
+      <h2><span class="eyebrow">Why · 01</span>为何而做</h2>
+      <!-- block:why -->
+<p class="why-statement">PR #30（<code>mechanical-layer-followups</code>）的干净评审留下 2 条 MEDIUM 与 4 条 LOW：</p><p class="why-body">- doctor 会把 <code>model-routing.py</code> 自己的崩溃误报成漂移，并给出错误的修法；
+- 两个 doctor 用例绑在仓库真实的命令文件上，有人改本仓库 <code>cleanup.runner</code> 的路由就会误红；
+- 另有若干 LOW：doctor 解码兜底、文档措辞、断言强度。</p><p class="why-body">另外，用户（2026-11-20）要求 <code>openspec/model-routing.json</code> 默认就存在，便于直接调整，并且每个键自带说明。现状是：</p><p class="why-body">- 下游仓库装完没有这个文件，11 个键里有几个、各管哪个派发点，只能去翻 README；
+- 本仓库的文件也只写了 2 个键。</p>
+<!-- /block:why -->
+    </section>
+
+    <section id="what">
+      <h2><span class="eyebrow">What · 02</span>变更范围</h2>
+      <!-- block:what -->
+<ul><li><strong>frontmatter 渲染</strong>：<code>model-routing.py frontmatter</code> 读写命令文件失败时（不是 UTF-8、读不了、写不了），以退出码 2 点名文件，不再带 traceback 以 1 退出。退出码 1 只表示漂移。</li><li><strong>doctor <code>[routing]</code> 段</strong>：</li><li>退出码 1 但 stdout 没有漂移条目时，报「不可用」加 stderr 末行，不给修法；</li><li>子进程输出按 UTF-8 宽松解码，解码失败不再吞掉整份 doctor 报告。</li><li><strong>doctor 用例隔离</strong>：两个 doctor 用例改为在临时目录里运行复制出来的 hooks 与命令文件，不再读仓库真实的 <code>clean-after-merged.md</code>。</li><li><strong><code>/clean-after-merged</code> 文档</strong>：</li><li>运行方式一节注明 <code>context: fork</code> 命令本身未单独实测；</li><li>step 1 注释措辞与运行方式一节对齐；</li><li>相应断言改为整句匹配。</li><li><strong>新增 <code>model-routing.py init</code></strong>：</li><li>openspec 根没有 <code>model-routing.json</code> 时，写出全部 11 个键：内建默认值，每键带 <code>desc</code>，顶层带 <code>$comment</code>；</li><li>文件已存在时只补缺失的键与缺失的 <code>desc</code>，不改已有的 <code>model</code> / <code>effort</code>；</li><li>配置非法时以退出码 2 报错，不动文件。</li><li><strong>校验器</strong>：接受每键的 <code>desc</code> 字段与顶层 <code>$comment</code>。</li><li><strong>安装</strong>：<code>install.sh</code> 安装与 <code>--upgrade</code> 都运行 <code>init</code>，失败不改变 install 的退出码。</li><li><strong>本仓库配置</strong>：本仓库的 <code>template/openspec/model-routing.json</code> 用 <code>init</code> 补全为 11 键，<code>flight.executor</code> 两档保持 opus · medium。</li></ul><div class="impact"><span class="tag"><strong>代码</strong>：</span><span class="tag"><code>template/.claude/hooks/model-routing.py</code>：frontmatter 报错、<code>init</code> 子命令、校验放宽 <code>desc</code> / <code>$comment</code>；</span><span class="tag"><code>template/.claude/hooks/flight-doctor.py</code>：<code>doctor_routing</code>；</span><span class="tag"><code>install.sh</code>：运行 <code>init</code> 与收尾提示措辞。</span><span class="tag"><strong>文档</strong>：</span><span class="tag"><code>template/.claude/commands/clean-after-merged.md</code>；</span><span class="tag"><code>README.md</code> 模型路由一节。</span><span class="tag"><strong>配置</strong>：<code>template/openspec/model-routing.json</code> 补全为 11 键。</span><span class="tag"><strong>测试</strong>：</span><span class="tag"><code>tests/test_routing_followups.py</code></span><span class="tag"><code>tests/test_fork_commands_docs.py</code></span><span class="tag"><code>tests/test_install_routing.py</code></span><span class="tag">新增 <code>tests/test_routing_seed.py</code></span><span class="tag"><strong>下游</strong>：</span><span class="tag"><code>install.sh --upgrade</code> 后，目标仓库多出（或补全）<code>openspec/model-routing.json</code>；</span><span class="tag">已有的值不变；</span><span class="tag">以后模板改内建默认，已装仓库里写好的值不会跟着变（用户 2026-11-20 选定全写显式值）。</span></div>
+<!-- /block:what -->
+    </section>
+
+    <section id="capabilities">
+      <h2><span class="eyebrow">Capabilities · 03</span>能力清单</h2>
+      <!-- block:capabilities -->
+<div class="cap-grid"><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>routing-doctor-hardening</code>：frontmatter 渲染对命令文件读写失败的报错，以及 doctor <code>[routing]</code> 段对崩溃与解码失败的报告。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>cleanup-doc-precision</code>：<code>/clean-after-merged</code> 文档对起点依据的限定与措辞一致。</h4><p></p></div><div class="cap-card" data-kind="new"><span class="cap-kind">New</span><h4><code>routing-config-seeded</code>：<code>model-routing.json</code> 默认存在、全键显式、每键自带说明，以及安装 / 升级时的补全规则。</h4><p></p></div><div class="cap-card" data-kind="modified"><span class="cap-kind">Modified</span><h4>无。前序 change 的 capability 尚未归档进 <code>openspec/specs/</code>。</h4><p></p></div></div>
+<!-- /block:capabilities -->
+    </section>
+
+    <!-- block:glossary -->
+    <!-- /block:glossary -->
+
+    <section id="specs">
+      <h2><span class="eyebrow">Specs · 04</span>行为规范 (Gherkin)</h2>
+      <!-- block:specs -->
+<div class="spec-card"><h3>cleanup-doc-precision <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 起点依据写明实测范围</p><p><code>/clean-after-merged</code> 命令的运行方式一节 SHALL 写明「主会话 <code>cd</code> 过也一样」的实测依据只覆盖 Agent 工具派发的子 agent，<code>context: fork</code> 命令本身未单独实测。step 1 代码块里 <code>pwd</code> 的注释 SHALL 与运行方式一节使用同一说法「主会话当前所在目录」。</p><p>Feature: 合并后清理的文档
+Rule: 依据说到实测为止，同一件事只用一种说法</p><div class="scenario"><p class="scenario-name">Scenario: cleanup-doc-marks-fork-command-untested</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>模板的 <code>/clean-after-merged</code> 命令文件</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>读取运行方式一节与 step 1 的代码块</span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>运行方式一节含整句「主会话 <code>cd</code> 过也一样」，并写明 <code>context: fork</code> 命令本身未单独实测</span></li><li><span class="step-key" data-kw="AND">AND</span><span>step 1 代码块里 <code>pwd</code> 那一行的注释含「主会话当前所在目录」</span></li></ul></div></div></div><div class="spec-card"><h3>routing-config-seeded <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: 路由配置默认存在且自带说明</p><p><code>model-routing.py init</code> 在 openspec 根没有 <code>model-routing.json</code> 时 SHALL 写出全部已登记的键，每个键的 <code>model</code> / <code>effort</code> 等于内建默认，并带非空的 <code>desc</code> 说明该键对应的派发用途；顶层 SHALL 带 <code>$comment</code> 说明可选的模型名与 effort。写出的文件 SHALL 能被 <code>show</code> / <code>get</code> / <code>pin</code> 正常读取。</p><p>Feature: 执行层路由配置
+Rule: 打开文件就能看到所有派发用途和它们的当前值</p><div class="scenario"><p class="scenario-name">Scenario: init-writes-full-config</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>openspec 根没有 <code>model-routing.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>model-routing.py init</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>model-routing.json</code> 含全部 11 个键，每个键的 <code>model</code> / <code>effort</code> 等于没有配置文件时 <code>show</code> 给出的内建默认，且带非空的 <code>desc</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>顶层有非空的 <code>$comment</code>，随后运行 <code>show</code> 退出 0，11 个键的来源都是 <code>repo</code></span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 补全配置不改已有的值</p><p><code>model-routing.py init</code> 在 <code>model-routing.json</code> 已存在且合法时 SHALL 只补缺失的键（内建默认值加 <code>desc</code>）与已有键缺失的 <code>desc</code>。已有键的 <code>model</code> / <code>effort</code> 与已有的 <code>desc</code> SHALL 保持原样。配置非法时 SHALL 以退出码 2 点名错误，文件 SHALL 保持不变。</p><p>Feature: 执行层路由配置
+Rule: 用户写过的值只由用户改</p><div class="scenario"><p class="scenario-name">Scenario: init-fills-missing-keeps-values</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.json</code> 只写了 <code>flight.executor</code> = haiku · low，没有 <code>desc</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>model-routing.py init</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>flight.executor</code> 仍是 haiku · low 并补上了 <code>desc</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span>其余 10 个键补上了内建默认值与 <code>desc</code></span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: init-leaves-invalid-config-untouched</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span><code>model-routing.json</code> 把 <code>flight.executor</code> 的 model 写成 <code>main</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>model-routing.py init</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 2，stderr 点名 <code>flight.executor</code></span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>model-routing.json</code> 的字节不变</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: 安装与升级种下路由配置</p><p><code>install.sh</code> 安装与 <code>--upgrade</code> SHALL 运行 <code>model-routing.py init</code>：目标仓库没有 <code>model-routing.json</code> 时种下完整文件；已有时只补缺。<code>init</code> 失败 SHALL NOT 改变 install 的退出码。</p><p>Feature: 安装时的路由配置
+Rule: 装完就有可直接改的配置，升级不冲掉用户的值</p><div class="scenario"><p class="scenario-name">Scenario: install-seeds-routing-config</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一个还没装过本模板的目标仓库</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>install.sh &lt;目标&gt;</code>，再把目标的 <code>flight.executor</code> 改成 haiku · low 后运行 <code>install.sh --upgrade &lt;目标&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>两次都退出 0；第一次之后目标的 <code>openspec/model-routing.json</code> 含 11 个带 <code>desc</code> 的键</span></li><li><span class="step-key" data-kw="AND">AND</span><span>升级之后 <code>flight.executor</code> 仍是 haiku · low</span></li></ul></div></div></div><div class="spec-card"><h3>routing-doctor-hardening <span class="delta" data-op="added">ADDED</span></h3><div class="requirement"><p class="requirement-name">Requirement: frontmatter 渲染读写失败时报配置不可用</p><p><code>model-routing.py frontmatter</code>（含 <code>--check</code>）在命令文件读不了、不是 UTF-8 文本或写不了时 SHALL 以退出码 2 退出，并在 stderr 点名路由键与文件路径。它 SHALL NOT 带 traceback 以退出码 1 退出：退出码 1 只表示 <code>--check</code> 发现漂移。命令文件 SHALL 保持不变。</p><p>Feature: fork 命令 frontmatter 渲染
+Rule: 退出码 1 只留给漂移</p><div class="scenario"><p class="scenario-name">Scenario: frontmatter-rejects-non-utf8-command</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>命令目录里的 <code>clean-after-merged.md</code> 含 <code>context: fork</code>，frontmatter 里夹着一段不是 UTF-8 的字节；openspec 根没有 <code>model-routing.json</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行 <code>model-routing.py frontmatter --check</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 2，stderr 点名 <code>cleanup.runner</code> 与 <code>clean-after-merged.md</code>，并说明它不是 UTF-8 文本</span></li><li><span class="step-key" data-kw="AND">AND</span><span>stderr 里没有 traceback，命令文件的字节不变</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: doctor 把崩溃报成不可用</p><p><code>flight-doctor.py doctor</code> 的 <code>[routing]</code> 段 SHALL 只在 <code>frontmatter --check</code> 退出 1 且 stdout 有漂移条目时报漂移并给出修法。退出 1 但 stdout 没有漂移条目时，SHALL 报「不可用」并附 stderr 的最后一个非空行，SHALL NOT 给出修法。doctor SHALL 恒 exit 0。</p><p>Feature: 路由漂移体检
+Rule: 修法只给真正的漂移</p><div class="scenario"><p class="scenario-name">Scenario: doctor-reports-unreadable-command-as-unavailable</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份独立安装的 hooks，命令目录里的 <code>clean-after-merged.md</code> 含 <code>context: fork</code> 但夹着不是 UTF-8 的字节</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行该 hooks 的 <code>flight-doctor.py doctor --openspec-root &lt;根&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>[routing]</code> 段报「不可用」并说明命令文件不是 UTF-8 文本</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>[routing]</code> 段没有「修法」行</span></li></ul></div><div class="scenario"><p class="scenario-name">Scenario: doctor-reports-crash-as-unavailable</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份独立安装的 hooks，其中的 <code>model-routing.py</code> 一运行就抛出未捕获的 <code>RuntimeError: boom</code></span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行该 hooks 的 <code>flight-doctor.py doctor --openspec-root &lt;根&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，<code>[routing]</code> 段报「不可用：RuntimeError: boom」</span></li><li><span class="step-key" data-kw="AND">AND</span><span><code>[routing]</code> 段没有「修法」行</span></li></ul></div></div><div class="requirement"><p class="requirement-name">Requirement: doctor 不因子进程输出解码失败丢掉报告</p><p><code>flight-doctor.py doctor</code> 读取 <code>frontmatter --check</code> 的输出时 SHALL 按 UTF-8 宽松解码。输出含不是 UTF-8 的字节时，doctor SHALL 照常输出包括 <code>[routing]</code> 在内的全部段落，SHALL NOT 退化为一行失败提示。</p><p>Feature: 路由漂移体检
+Rule: 一段的异常不拖垮整份报告</p><div class="scenario"><p class="scenario-name">Scenario: doctor-survives-undecodable-output</p><ul class="steps"><li><span class="step-key" data-kw="GIVEN">GIVEN</span><span>一份独立安装的 hooks，其中的 <code>model-routing.py</code> 往 stdout 写一段不是 UTF-8 的字节和「frontmatter 与路由一致」后退出 0</span></li><li><span class="step-key" data-kw="WHEN">WHEN</span><span>运行该 hooks 的 <code>flight-doctor.py doctor --openspec-root &lt;根&gt;</code></span></li><li><span class="step-key" data-kw="THEN">THEN</span><span>退出 0，输出同时含 <code>[runner]</code> 段与 <code>[routing]</code> 段</span></li><li><span class="step-key" data-kw="AND">AND</span><span>输出里没有「flight-doctor doctor 失败」</span></li></ul></div></div></div>
+<!-- /block:specs -->
+    </section>
+
+    <section id="design">
+      <h2><span class="eyebrow">Design · 05</span>技术设计</h2>
+      <!-- block:design -->
+<div class="design-block"><h3>Context</h3><p>本 change 命中「跨模块」触发器：<code>model-routing.py</code>（渲染 / 初始化 / 校验）、<code>flight-doctor.py</code>（体检）、<code>install.sh</code>（种子）、<code>/clean-after-merged</code> 命令文档与本仓库路由配置各改一处，彼此通过 <code>model-routing.py</code> 的退出码与 <code>model-routing.json</code> 的形状相连。</p><p><strong>现状（main 851183a）</strong>：</p><ul><li><strong>frontmatter 渲染的退出码</strong>：<code>cmd_frontmatter</code> 用 <code>path.read_bytes().decode(&quot;utf-8&quot;)</code> 读命令文件。</li><li>文件不是 UTF-8 时抛 <code>UnicodeDecodeError</code>，Python 带 traceback 以 1 退出，与「<code>--check</code> 发现漂移」的 exit 1 撞号。</li><li>PR #30 评审的定向抽查证实了这一点。</li><li><strong>doctor <code>[routing]</code> 段</strong>：<code>doctor_routing</code> 认定退出码 1 就是漂移。它原样打印 stdout 各行，再追加「修法：…frontmatter」。</li><li>崩溃时 stdout 为空，用户只看到一行错误的修法。</li><li><code>subprocess.run(..., text=True)</code> 按 locale 严格解码。子进程输出解码失败时异常越过 <code>doctor_routing</code>，被 <code>main()</code> 的兜底吞掉，整份 doctor 报告只剩一行「flight-doctor doctor 失败」。</li><li><strong>doctor 用例</strong>（<code>tests/test_routing_followups.py</code>）：</li><li>drift 与 in-sync 两个用例运行仓库真实的 <code>flight-doctor.py</code>，后者调用的 <code>model-routing.py</code> 读的是仓库真实的 <code>template/.claude/commands/clean-after-merged.md</code>；</li><li>drift 用例硬断言该文件是 sonnet · low，in-sync 用例要求它等于内建默认。</li><li><strong>路由配置文件</strong>：</li><li><code>install.sh</code> 的 openspec 种子是显式清单（<code>.gitignore config.yaml changes/.gitkeep adr/.gitkeep superpower/.gitkeep</code>），没有 <code>model-routing.json</code>，下游装完没有这个文件；</li><li>本仓库的 <code>template/openspec/model-routing.json</code> 只写 <code>flight.executor</code> / <code>flight.executor-large</code> 两键；</li><li>校验器 <code>validate()</code> 拒绝未登记的顶层键（<code>$comment</code> 会判红）。<code>check_value()</code> 不检查额外字段（<code>desc</code> 目前就能过）。</li><li><strong>文档</strong>：</li><li><code>clean-after-merged.md</code> 第 16 行写「普通子 agent 与 fork 子 agent 的首条 <code>pwd</code> 都是该子目录」，但探针（2026-11-20）用的是 Agent 工具派发，没有直接跑 <code>context: fork</code> 命令；</li><li>第 26 行注释仍是「主会话所在目录」。</li></ul></div><div class="design-block"><h3>Goals / Non-Goals</h3><p><strong>Goals:</strong> - <code>model-routing.py frontmatter</code> 的退出码 1 只表示漂移；读写失败点名文件、以 2 退出。 - doctor 的 <code>[routing]</code> 段：崩溃或解码异常时报「不可用」，不给错误修法，也不吞掉其他段。 - doctor 用例不读仓库真实的命令文件与配置。 - <code>openspec/model-routing.json</code> 默认存在：11 键全写显式值，每键带 <code>desc</code>，用户直接改值即可（用户 2026-11-20 选定）。 - 安装与升级只补缺，不改用户写过的值。</p><p><strong>Non-Goals:</strong> - 不改「文件缺失 / 缺键走内建默认」的语义，<code>effective()</code> 照旧。老仓库没跑 <code>init</code> 也照常工作。 - 不改 <code>show</code> / <code>pin</code> / <code>resolve</code> 的输出形状。<code>show</code> 的 <code>source</code> 列在补全后会显示 <code>repo</code>，这是如实反映。 - 不随升级刷新已有键的值或已有的 <code>desc</code>：用户可能改过。 - 不处理 #29 的 LOW（用户 2026-11-20 只要 #30 遗留）。 - 不改 ADR。</p></div><div class="design-block"><h3>Decisions</h3><details><summary><code>cmd_frontmatter</code> 对每个命令文件</summary></details><details><summary><code>read_bytes()</code> 抛 <code>OSError</code> → `die(EXIT_INVALID, [&quot;&lt;键&gt;</summary><p>读不了命令文件 &lt;路径&gt;：&lt;错误&gt;&quot;])`；</p></details><details><summary><code>decode(&quot;utf-8&quot;)</code> 抛 <code>UnicodeDecodeError</code> → `die(EXIT_INVALID, [&quot;&lt;键&gt;</summary><p>&lt;路径&gt; 不是 UTF-8 文本&quot;])`；</p></details><details><summary><code>write_bytes()</code> 抛 <code>OSError</code> → `die(EXIT_INVALID, [&quot;&lt;键&gt;</summary><p>写不了命令文件 &lt;路径&gt;：&lt;错误&gt;&quot;])`。</p></details><details><summary>文件头退出码说明的 exit 2 一行补上「命令文件读不了 / 不是 UTF-8 / 写不了」。</summary></details><details><summary>备选</summary><p>只在 doctor 侧兜。被否：exit 1 仍然二义，<code>install.sh</code> 等其他调用方照样分不清（用户 2026-11-20 选定两端都修）。</p></details><details><summary><code>subprocess.run</code> 改为 <code>encoding=&quot;utf-8&quot;, errors=&quot;replace&quot;</code></summary><p>解码不再抛异常，其他段照常输出。</p></details><details><summary>备选</summary><p>在 <code>doctor()</code> 里给 <code>doctor_routing</code> 包 <code>except (Exception, SystemExit)</code>。被否：异常会让 <code>[routing]</code> 段整段丢失；宽松解码更直接，且保留输出内容。</p></details><details><summary>测试 helper 把仓库的 <code>template/.claude/hooks/</code> 复制到 <code>tmp/.claude/hooks/</code>（忽略 <code>__pycache__</code>），在 <code>tmp/.claude/commands/</code> 写一份命令文件，openspec 根取 <code>tmp/openspec/</code>，再运行复制出来的 <code>flight-doctor.py doctor --openspec-root tmp/openspec</code>，cwd 为 <code>tmp</code>。</summary></details><details><summary><code>model-routing.py</code> 的命令目录缺省值是 <code>&lt;自身目录&gt;/../commands</code>，复制后自然指向 <code>tmp/.claude/commands</code>，产品代码不用为测试加参数。</summary></details><details><summary>in-sync 用例</summary><p>命令文件的 <code>model</code> / <code>effort</code> 取复制出来的 <code>model-routing.py get cleanup.runner --openspec &lt;空根&gt;</code> 的输出，不在测试里写死内建默认。</p></details><details><summary>崩溃 / 解码类场景</summary><p>把复制出来的 <code>model-routing.py</code> 换成桩脚本（抛异常 / 输出非 UTF-8 字节）。</p></details><details><summary>备选</summary><p>从真实文件当前值推导期望。被否：仍读真实文件；in-sync 的前提会从「内建默认」变成「当前值」（用户 2026-11-20 选定复制 hooks）。</p></details><details><summary><strong>说明文本的唯一来源</strong></summary><p><code>model-routing.py</code> 里新增 <code>DESC = {&quot;组.键&quot;: &quot;&lt;一句话&gt;&quot;}</code>，键集合与 <code>BUILTIN</code> 相同（测试校验）。文本依据 README 模型路由表的「派发点」列：</p></details><details><summary><strong>顶层 <code>$comment</code></strong></summary><p>一个字符串，写明：</p></details><details><summary>每个「组.键」是一个派发用途；</summary></details><details><summary>model 只写模型名（<code>MODELS</code>），effort 取 <code>EFFORTS</code>；</summary></details><details><summary>删掉某键 = 走内建默认；</summary></details><details><summary><code>desc</code> 只作说明；</summary></details><details><summary>改 <code>cleanup.runner</code> 后要运行 <code>frontmatter</code>。</summary></details><details><summary><strong><code>init [--openspec DIR]</code></strong>，按文件状态分三种</summary></details><details><summary><strong>写出格式</strong></summary><p><code>json.dumps(cfg, ensure_ascii=False, indent=2) + &quot;\n&quot;</code>。补全已有文件时会重排格式，这是可接受的代价：只在确实有缺项时才写。</p></details><details><summary><strong>校验放宽</strong></summary></details><details><summary><code>validate()</code> 跳过顶层 <code>$comment</code>（值须是字符串）；</summary></details><details><summary><code>check_value()</code> 接受可选的 <code>desc</code>（须是字符串）。</summary></details><details><summary>其余未登记字段照旧不检查（不收紧，避免打破已有配置）。</summary></details><details><summary><strong>备选</strong></summary><p>只写说明与只读的 <code>default</code>，写了值才覆盖。被否：要分清哪些是提示、哪些是覆盖，用户选定「所见即所用」。</p></details><details><summary><strong>代价</strong></summary><p>模板以后改内建默认，已装仓库里写好的值不跟着变（用户 2026-11-20 接受）。</p></details><details><summary><code>install.sh</code> 在 fork 命令渲染（<code>frontmatter</code>）之前运行 <code>python3 &quot;$TARGET/.claude/hooks/model-routing.py&quot; init --openspec &quot;$TARGET/openspec&quot;</code>，安装与 <code>--upgrade</code> 都跑</summary></details><details><summary>成功 → <code>log_add</code> / <code>log_info</code> 打印它的一行输出；</summary></details><details><summary>失败 → <code>log_err</code> 点名，并提示修好 <code>openspec/model-routing.json</code> 后在目标仓库根重跑 <code>init</code>，不改变 install 的退出码；</summary></details><details><summary>没有 python3 → 与现有分支一致，只打印提示。</summary></details><details><summary>收尾说明（第 521 行一带）的「缺省内建默认，仓库可写 openspec/model-routing.json 覆盖」改为「安装时种下 openspec/model-routing.json（11 键全写、每键带 desc），直接改值」。</summary></details><details><summary>本仓库</summary><p><code>template/openspec/model-routing.json</code> 由 S3 运行一次 <code>init</code> 补全。<code>flight.executor</code> 两档的 opus · medium 不变，所以已钉进 <code>slices.json.routing</code> 的值与生效值一致。</p></details><details><summary>README 模型路由一节同步</summary><p>「文件缺失或缺键走内建默认」后补一句「安装与升级时 <code>model-routing.py init</code> 种下完整文件（11 键、每键带 <code>desc</code>），只补缺、不改已有值」。</p></details><details><summary><strong>边界</strong></summary></details><details><summary><code>model-routing.py</code> 是 <code>model-routing.json</code>（init）与 fork 命令 frontmatter（frontmatter）唯一的写方；</summary></details><details><summary>doctor 只读；</summary></details><details><summary>install 只调用、不判定。</summary></details><details><summary><strong>假设</strong></summary><p><code>init</code> 运行在 <code>frontmatter</code> 之前，所以首次安装渲染出的 frontmatter 等于种下的值（与内建默认相同）。</p></details></div><div class="design-block"><h3>Risks / Trade-offs</h3><details><summary><strong>[风险] 补全时重排了用户手写的格式（缩进、键顺序）</strong> → <strong>缓解</strong></summary><p>只在确实有缺项时写；值与 <code>desc</code> 逐字保留。</p></details><details><summary><strong>[风险] <code>show</code> 的 <code>source</code> 列在补全后全是 <code>repo</code>，看不出哪些等于内建默认</strong> → <strong>缓解</strong></summary><p>如实反映「值来自文件」；用户要回到内建默认就删掉该键。不在本 change 加标记（Non-Goals）。</p></details><details><summary><strong>[权衡] 内建默认不再自动传到已装仓库</strong></summary><p>用户选定「所见即所用」的代价，写进 README。</p></details><details><summary><strong>[风险] doctor 用例复制整个 hooks 目录变慢</strong> → <strong>缓解</strong></summary><p>hooks 目录是几十个小文件，复制在毫秒级；测试仍是单元层。</p></details></div><div class="design-block"><h3>Migration Plan</h3><ul><li>下游执行 <code>install.sh --upgrade</code>：</li><li>拿到新脚本；</li><li><code>init</code> 种下或补全 <code>openspec/model-routing.json</code>；</li><li>已有值不变，frontmatter 随后按它渲染。</li><li>回滚：revert 本 change 的代码 commit。已种下的 <code>model-routing.json</code> 内容等于内建默认（或用户原值），留着不影响旧脚本：旧校验器对 <code>$comment</code> 会判红，回滚时需一并删掉 <code>$comment</code> 键或整个文件。</li></ul></div><div class="design-block"><h3>Open Questions</h3><ul><li>无。已在 2026-11-20 定下的决策：</li><li>误报两端都修；</li><li>用例复制 hooks 隔离；</li><li>文档补「未单独实测」；</li><li>种子并进本 change；</li><li>11 键全写显式值；</li><li>说明用每键 <code>desc</code>。</li><li>与在役 ADR 一致：</li><li><code>DRAFT-execution-routing-by-config</code> 规定执行层路由由配置驱动、缺键走内建默认，本 change 只让配置文件默认存在，不改这一语义；</li><li><code>DRAFT-mechanical-commands-run-in-isolated-subagent</code> 不受影响。</li></ul></div>
+<!-- /block:design -->
+    </section>
+
+    <section id="diagrams">
+      <h2><span class="eyebrow">Diagrams · 06</span>关键图示</h2>
+      <!-- block:diagrams -->
+      <p class="placeholder">design.md 含关键 Mermaid 流程图时自动填入；否则保留占位。</p>
+      <!-- /block:diagrams -->
+    </section>
+
+    <section id="mockups">
+      <h2><span class="eyebrow">Mockups · 07</span>原型示意</h2>
+      <!-- block:mockups -->
+      <p class="placeholder">仅当 capabilities 涉及 UI/UX、数据流、状态机时由 spec-html-render 按需填入；其它情况此段保留占位以示"无原型需求"。</p>
+      <!-- /block:mockups -->
+    </section>
+
+    <section id="adrs">
+      <h2><span class="eyebrow">ADRs · 08</span>架构决策</h2>
+      <!-- block:adrs -->
+<h3>待定号（本次新增）</h3><ul><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-apply-as-flight.md">DRAFT. apply 作为一次飞行：所有权切片 + 确定性调度 + 机械门禁 + 离路径评审</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-by-content-fingerprint.md">DRAFT. 基线按内容指纹复用全量结果</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-reuse-via-dependency-anchor.md">DRAFT. 基线经依赖图锚点复用：非测试改动按依赖补跑，跨 change 带预存红只经锚点</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-baseline-verify-derived-from-full-suite.md">DRAFT. 基线上的 verify 可由全量 junit 推导</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-builtin-scope-provider-and-shell-closure.md">DRAFT. 内建选测提供方与 final 的依赖补全：声明文件不触发全量、shell 静态闭包计入依赖</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-domain-glossary-in-openspec.md">DRAFT. 项目术语表是 openspec 下的持久工件，格式由脚本解析，检查只提示不阻断</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-execution-routing-by-config.md">DRAFT. 执行层模型按派发用途由仓库配置显式路由，规划期继承主会话</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-executor-turn-tiers-by-owned-files.md">DRAFT. 执行体的轮次上限按切片的现存文件数分两档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-external-capability-intake.md">DRAFT. 从外部 prompt 工程吸收能力的判据</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-incremental-by-dependency-anchor.md">DRAFT. final 以锚点为基准、按实测依赖图增量运行</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-final-tests-only-rerun-without-graph.md">DRAFT. 没有依赖图时，只改了测试文件的 final 只重跑这些文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-flight-close-reaps-slice-worktrees.md">DRAFT. 飞行收口回收全部临时 worktree，作废尝试先归档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-evidence-not-self-reported.md">DRAFT. 门禁判据不得由被门禁的一方提供</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-paired-checks-by-exit-code.md">DRAFT. 仓库自定义的成对检查只按退出码判定，数据放 git common dir</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-gate-test-result-handoff-and-runner-contract.md">DRAFT. 门禁与项目之间的两份运行契约：测试结果交给检查，依赖图插件经包装脚本转发</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-goal-as-standing-takeoff-approval.md">DRAFT. 会话 /goal 生效即人类持续授权起飞，人类插话附件也是人类消息</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-inert-paths-declared-and-reconciled.md">DRAFT. 与测试无关的路径由仓库声明，并与依赖图对账</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-installer-versioned-with-template.md">DRAFT. 安装器与模板同版本：pipe 模式只做引导，交给目标版本自带的 install.sh</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-machine-wide-test-lock.md">DRAFT. 全机测试锁：门禁的测量运行经一把用户级读写锁排队</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-measurements-stay-out-of-plan-files.md">DRAFT. 脚本测出来的东西不写进计划文件</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-mechanical-commands-run-in-isolated-subagent.md">DRAFT. 主会话不被 frontmatter 换模型；不需对话历史的机械命令以 context: fork 子 agent 运行，模型由路由配置渲染</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-as-fifth-resident-carrier.md">DRAFT. memory 是第五记忆载体，按「索引常驻 + 正文按需」纳入分流体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-memory-sedimentation-auto-with-divergence-alignment.md">DRAFT. 记忆层沉淀自动录入，较大差异才对齐；反复错误有上限地进入载体体系</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-model-routing-defaults-for-template.md">DRAFT. 模板分发的模型路由默认策略</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-owns-cap-follows-turn-tier.md">DRAFT. owns 条数上限随轮次档，宽通配要写理由</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-post-merge-cleanup-by-tiered-script.md">DRAFT. 合并后清理由脚本分档判定，显式调用命令即授权 safe 档</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-repo-selector-reports-scope-at-plan-time.md">DRAFT. 项目自带选测须在计划期报告范围，退化为全选须逐项表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-retakeoff-skips-landed-slices.md">DRAFT. 重新起飞时已落地的切片不再派执行体</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-review-orchestration-watermark.md">DRAFT. 多守门点的 review 编排采用水位线增量模型</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-scope-provider-mandatory-with-runtime-guard.md">DRAFT. 选测提供方必有、计划文件可见、baseline / final 开跑前复核</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-evidence-in-git-common-dir.md">DRAFT. 切片的测试留痕写在 git 共用目录，记录门禁结论时并回分支</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-slice-worktrees-reaped-after-merge.md">DRAFT. 切片临时 worktree 在提交合回后由合回脚本回收</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-submodule-slices-borrow-home-worktree.md">DRAFT. 含 submodule 的飞行：隔离 worktree 借用家子仓的 linked worktree，gitlink 随切片提交、由合回脚本合并</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-gate-baseline-diff.md">DRAFT. 全量测试门禁按基线逐条差分</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-ledger-outside-repo-follows-anchors.md">DRAFT. 测试账本：逐用例数据放 git common dir，耗时跟着锚点沿用，入库的只有摘要</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-remediation-tracks.md">DRAFT. 测试整改按去向分三条轨道：机械处置命令内做，放行归人，改用例实现另立 change</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-suite-standard-audited-outside-gates.md">DRAFT. 测试套件的合规标准写成明文规则表，由门禁之外的只读体检来量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-parts-and-runner-contracts.md">DRAFT. 测试分层按部件组织，非 pytest runner 经 JUnit 与探针适配器两种契约接入</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-test-tiers-unit-baseline-by-audit-probe.md">DRAFT. 测试分两层：单元层是基线，纯度与耗时由审计钩子探针机械判定</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-tier-file-diffed-by-entry-in-final.md">DRAFT. 分层文件按条目参与增量 final，只有单元层改动才全量</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-time-budgets-ratchet-on-ledger.md">DRAFT. 时间预算写在分层文件里，集成层按账本做棘轮</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-unmeasured-deps-need-plan-statement.md">DRAFT. 基线的依赖图未测时计划须表态</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-wave-integration-check-and-cross-slice-fix.md">DRAFT. 每个 wave 合回后做集成检查，红了走工作流内的跨片修复</a><span class="adr-status">unknown</span></li><li><span class="adr-num">DRAFT</span><a href="../../adr/DRAFT-workflow-edition-repo.md">DRAFT. Workflow 版独立成仓：以 stable-v2.0 为起点，按需摘取 Mod 版的通用改进</a><span class="adr-status">unknown</span></li></ul>
+<!-- /block:adrs -->
+    </section>
+
+    <section id="flight">
+      <h2><span class="eyebrow">Flight · 09</span>飞行计划</h2>
+      <!-- block:flight -->
+<h3>模型路由</h3><p>来源：<code>template/openspec/model-routing.json</code></p><table class="flight-table"><thead><tr><th>键</th><th>模型</th><th>effort</th></tr></thead><tbody><tr><td class="mono">flight.executor</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.executor-large</td><td>opus</td><td>medium</td></tr><tr><td class="mono">flight.fixer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">flight.integrator</td><td>sonnet</td><td>low</td></tr><tr><td class="mono">ship.reviewer</td><td>opus</td><td>high</td></tr><tr><td class="mono">ship.followup</td><td>opus</td><td>high</td></tr></tbody></table><h3>切片</h3><table class="flight-table"><thead><tr><th>切片</th><th>标题</th><th>wave</th><th>deps</th><th>owns</th><th>verify</th><th>轮次档</th></tr></thead><tbody><tr><td class="mono">S1</td><td>frontmatter 读写失败走退出码 2；doctor [routing] 段把崩溃报成不可用、UTF-8 宽松解码；doctor 用例改在临时目录跑复制的 hooks</td><td>wave 1</td><td>-</td><td>template/.claude/hooks/model-routing.py<br>template/.claude/hooks/flight-doctor.py<br>tests/test_routing_followups.py</td><td><code>python3 -m pytest -q tests/test_routing_followups.py tests/test_routing_frontmatter.py tests/test_model_routing.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_tests.py</code></td><td>标准档</td></tr><tr><td class="mono">S2</td><td>/clean-after-merged 文档注明 context: fork 命令未单独实测、step 1 注释措辞对齐；起点依据断言改为整句</td><td>wave 1</td><td>-</td><td>template/.claude/commands/clean-after-merged.md<br>tests/test_fork_commands_docs.py</td><td><code>python3 -m pytest -q tests/test_fork_commands_docs.py tests/test_clean_after_merged_docs.py</code></td><td>标准档</td></tr><tr><td class="mono">S3</td><td>model-routing.py init 种下 / 补全 model-routing.json（11 键全写、每键 desc、顶层 $comment），校验接受 desc / $comment；install 安装与升级运行 init；本仓库配置补全；README 同步</td><td>wave 2</td><td>S1</td><td>template/.claude/hooks/model-routing.py<br>template/openspec/model-routing.json<br>install.sh<br>README.md<br>tests/test_routing_seed.py<br>tests/test_install_routing.py</td><td><code>python3 -m pytest -q tests/test_routing_seed.py tests/test_install_routing.py tests/test_model_routing.py tests/test_routing_frontmatter.py tests/test_routing_followups.py tests/test_spec_html_routing.py tests/test_docs_iron_rules.py</code></td><td>标准档</td></tr></tbody></table><h3>选测范围</h3><p>模板内建（builtin）（仓库声明 gate-scope.json）</p><h3>Scenario 状态</h3><table class="flight-table"><thead><tr><th>scenario</th><th>test</th><th>状态</th></tr></thead><tbody><tr><td>routing-doctor-hardening#frontmatter-rejects-non-utf8-command</td><td><code>tests/test_routing_followups.py::test_frontmatter_rejects_non_utf8_command</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-doctor-hardening#doctor-reports-unreadable-command-as-unavailable</td><td><code>tests/test_routing_followups.py::test_doctor_reports_unreadable_command_as_unavailable</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-doctor-hardening#doctor-reports-crash-as-unavailable</td><td><code>tests/test_routing_followups.py::test_doctor_reports_crash_as_unavailable</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-doctor-hardening#doctor-survives-undecodable-output</td><td><code>tests/test_routing_followups.py::test_doctor_survives_undecodable_output</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>cleanup-doc-precision#cleanup-doc-marks-fork-command-untested</td><td><code>tests/test_fork_commands_docs.py::test_cleanup_doc_marks_fork_command_untested</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-config-seeded#init-writes-full-config</td><td><code>tests/test_routing_seed.py::test_init_writes_full_config</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-config-seeded#init-fills-missing-keeps-values</td><td><code>tests/test_routing_seed.py::test_init_fills_missing_keeps_values</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-config-seeded#init-leaves-invalid-config-untouched</td><td><code>tests/test_routing_seed.py::test_init_leaves_invalid_config_untouched</code></td><td><span class="chip" data-state="missing">missing</span></td></tr><tr><td>routing-config-seeded#install-seeds-routing-config</td><td><code>tests/test_install_routing.py::test_install_seeds_routing_config</code></td><td><span class="chip" data-state="missing">missing</span></td></tr></tbody></table><h3>测试成本预告</h3><table class="flight-table"><thead><tr><th>阶段</th><th>模式</th><th>原因</th><th>秒数</th></tr></thead><tbody><tr><td>baseline</td><td><code>pending</code></td><td>baseline 运行中（始于 2026-11-20T10:42:16Z）</td><td>-</td></tr><tr><td>final</td><td><code>incremental</code></td><td>锚点 e884c26c93，Δ 11 个文件</td><td>-</td></tr></tbody></table><p>检查 1 项：schema-validate（只预告，不阻断）</p><h3>飞行记录</h3><p class="placeholder">尚无飞行记录事件。</p>
+<!-- /block:flight -->
+    </section>
+
+    <section id="tasks">
+      <h2><span class="eyebrow">Tasks · 10</span>落地任务</h2>
+      <!-- block:tasks -->
+<details class="task-group" open><summary>切片</summary><ul><li data-done="false"><input type="checkbox" disabled><span>S1 frontmatter 读写失败走退出码 2；doctor [routing] 段把崩溃报成不可用、UTF-8 宽松解码；doctor 用例改在临时目录跑复制的 hooks （deps: - · verify: <code>python3 -m pytest -q tests/test_routing_followups.py tests/test_routing_frontmatter.py tests/test_model_routing.py tests/test_flight_doctor.py tests/test_flight_doctor_lock.py tests/test_flight_doctor_tests.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S2 /clean-after-merged 文档注明 context: fork 命令未单独实测、step 1 注释措辞对齐；起点依据断言改为整句 （deps: - · verify: <code>python3 -m pytest -q tests/test_fork_commands_docs.py tests/test_clean_after_merged_docs.py</code>）</span></li><li data-done="false"><input type="checkbox" disabled><span>S3 model-routing.py init 种下 / 补全 model-routing.json（11 键全写、每键 desc、顶层 $comment），校验接受 desc / $comment；install 安装与升级运行 init；本仓库配置补全；README 同步 （deps: S1 · verify: <code>python3 -m pytest -q tests/test_routing_seed.py tests/test_install_routing.py tests/test_model_routing.py tests/test_routing_frontmatter.py tests/test_routing_followups.py tests/test_spec_html_routing.py tests/test_docs_iron_rules.py</code>）</span></li></ul></details>
+<!-- /block:tasks -->
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <!-- block:footer -->
+生成于 2026-11-20 11:50 · 章节 8 · 图示 0 · 任务 3
+<!-- /block:footer -->
+</footer>
+
+<script>
+(function () {
+  const KEY = 'spec-html-theme';
+  const root = document.documentElement;
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'dark') {
+    root.setAttribute('data-theme', stored);
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem(KEY, next);
+  });
+
+  // TOC 当前章节高亮
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  const setActive = (id) => {
+    links.forEach(a => {
+      a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + id);
+    });
+  };
+  const io = new IntersectionObserver((entries) => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (visible) setActive(visible.target.id);
+  }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] });
+  sections.forEach(s => io.observe(s));
+})();
+</script>
+
+<script type="module">
+  // Mermaid 通过 jsdelivr CDN 加载；失败/超时给 body 加 .offline 让 .diagram-fallback 显示
+  // ⚠ startOnLoad 必须为 false：动态 import 落地时 window 的 load 事件早已触发，
+  //   Mermaid 挂在 load 上的自动渲染钩子永远不会执行 —— 只能显式 run()
+  const degrade = (e) => {
+    document.body.classList.add('offline');
+    console.warn('[spec-html] Mermaid 渲染失败，已切换降级显示。', e);
+  };
+  const timer = setTimeout(() => degrade(new Error('Mermaid CDN 加载超时')), 10000);
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark'
+      || (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: dark ? 'dark' : 'default',
+      fontFamily: 'var(--font-body)'
+    });
+    await mod.default.run();
+    clearTimeout(timer);
+  } catch (e) {
+    clearTimeout(timer);
+    degrade(e);
+  }
+</script>
+
+</body>
+</html>
