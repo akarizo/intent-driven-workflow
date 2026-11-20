@@ -1,21 +1,6 @@
 {
   "blocked": [],
-  "blocking": [
-    {
-      "severity": "HIGH",
-      "file": "tests/test_fork_commands_docs.py",
-      "line": 100,
-      "summary": "门禁误判（越出 owns 的连带破坏）：S3 按切片包把 template/openspec/model-routing.json 补全到 11 键，其中包括 cleanup 组。但 test_self_hosting_config_leaves_fork_keys 断言配置里没有 cleanup 组，所以全量 `python3 -m pytest -q tests` 在本 commit 上是红的。切片 verify 没跑这个文件，门禁 ok=true 掩盖了这个问题。按仓库纪律（全量 pytest 全绿、门禁红不收口），这条必须在收口前闭环。",
-      "fix": "由主会话做一次跨片修复，在同一处提交：把 tests/test_fork_commands_docs.py:100 的断言改成配置里 cleanup.runner 的 model / effort 等于 BUILTIN['cleanup.runner']，或者等于 clean-after-merged.md frontmatter 的值；保留 frontmatter --check 退出 0 的断言。同时按 CLAUDE.md 的『切片 owns 含钉文档的旧测试』纪律，在计划或 backlog 里留一条痕迹，说明该测试本应并入 S3 的 owns。"
-    },
-    {
-      "severity": "HIGH",
-      "file": "tests/test_install.py",
-      "line": 339,
-      "summary": "门禁误判（越出 owns 的连带破坏）：install 现在会运行 init，在目标仓库种下 openspec/model-routing.json（D5 的要求）。test_fresh_install_ships_only_seeds 断言 openspec/ 里的文件集合恰好是种子清单、gate-scope.json 和 schemas/，所以全新安装后多出的 model-routing.json 让这条测试失败，全量测试红。",
-      "fix": "在跨片修复里把期望集合改成 `OPENSPEC_SEEDS | {\"gate-scope.json\", \"model-routing.json\"} | schemas`，并更新 Then 注释，与 D5 保持一致。"
-    }
-  ],
+  "blocking": [],
   "deferred": [
     {
       "severity": "MEDIUM",
@@ -62,7 +47,32 @@
     "summary": "final 通过：scenario 9/9；增量：重跑 47 个文件（193 个用例）/ 沿用 743 个，锚点 851183aaa5。两条 HIGH 各一个 commit：1fd6aae 改 test_self_hosting_config_leaves_fork_keys 为断言 cleanup.runner 等于 BUILTIN 并在 backlog 追加再犯记录；95d72d0 把 test_fresh_install_ships_only_seeds 期望集合纳入 model-routing.json。全量 936 passed。"
   },
   "waves": [
-    {"wave": 1, "ok": true, "failed": [], "tests": {"mode": "skipped", "why": "受影响测试约 147.6 秒（29 个文件），超过预算 120 秒，留给 final", "est_sec": 147.6, "sec": 0, "budget_sec": 120}, "fix": null},
-    {"wave": 2, "ok": true, "failed": [], "tests": {"mode": "skipped", "why": "受影响测试约 153.5 秒（47 个文件），超过预算 120 秒，留给 final", "rerun_tests": null, "est_sec": 153.5, "sec": 0, "budget_sec": 120}, "fix": null}
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 147.6 秒（29 个文件），超过预算 120 秒，留给 final",
+        "est_sec": 147.6,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 153.5 秒（47 个文件），超过预算 120 秒，留给 final",
+        "rerun_tests": null,
+        "est_sec": 153.5,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
   ]
 }
