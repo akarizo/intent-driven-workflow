@@ -324,7 +324,7 @@ RED → 验证 RED → GREEN → 验证 GREEN → REFACTOR
 
 #### 模型路由（按派发用途显式声明，配置驱动，铁律）
 
-执行层每个派发点读 `openspec/model-routing.json` 的一个「组.键」，值为 `{model, effort}`；文件缺失或缺键走内建默认。model 只写模型名（`opus|sonnet|haiku|fable`），禁 `main` / `inherit`；规划期组（propose / explore / new / continue / mini）不进配置，规划期产出只来自主会话或 fork。
+执行层每个派发点读 `openspec/model-routing.json` 的一个「组.键」，值为 `{model, effort}`；文件缺失或缺键走内建默认。安装与升级时 `model-routing.py init` 种下完整文件（11 键、每键带 `desc`），只补缺、不改已有值；内建默认以后变了，已写进文件的值不跟着变。model 只写模型名（`opus|sonnet|haiku|fable`），禁 `main` / `inherit`；规划期组（propose / explore / new / continue / mini）不进配置，规划期产出只来自主会话或 fork。
 
 | 键 | 派发点 | 内建默认 |
 | --- | --- | --- |
