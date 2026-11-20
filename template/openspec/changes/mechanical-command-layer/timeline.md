@@ -5,3 +5,5 @@
 2026-11-20T07:23:06Z	gate	S1 ok
 2026-11-20T07:23:17Z	integrate	wave 1
 2026-11-20T07:24:59Z	wave-check	wave 1/2 · 测试 88.4s（9 个文件） · 排队 0.0s · 负载 6.0→4.0/18 ok
+2026-11-20T07:35:38Z	gate	S2 ok
+2026-11-20T07:35:58Z	integrate	wave 2
