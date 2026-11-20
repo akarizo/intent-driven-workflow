@@ -13,3 +13,6 @@
 2026-11-20T07:41:39Z	apply-done	blocked=0 blocking=0
 2026-11-20T07:42:17Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
 2026-11-20T07:42:43Z	ship	ready
+2026-11-20T07:43:33Z	ship	ready
+2026-11-20T07:44:09Z	pr-open	https://github.com/akarizo/intent-driven-workflow/pull/28
+2026-11-20T07:52:07Z	final	增量（锚点 d07855ae03，重跑 10 个文件 / 沿用 826 个用例） 测试 108.7s · 检查 schema-validate 1.5s · 用例 +2/-0（新增 1.3s） · 排队 0.0s · 负载 2.7→3.9/18 ok
