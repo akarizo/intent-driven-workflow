@@ -16,6 +16,7 @@
 #                                              带通配的条目在轮次档那棵树上展开 > 20 个现存文件 → 须在该片 owns_wide（条目 → 非空理由）写理由，
 #                                              时间线已有 approve 事件时只提示不判红；owns_wide 形状 / 多余键 / 空理由判红；不在 git 仓库里不数文件；
 #                                              通过时 stderr 为每条通配打一行 `owns: <切片> <条目> → <N> 个文件`
+#                                              skeleton:：.py 的 scenario 测试函数体仍有 `assert False, "PLAN-SCAFFOLD-PLACEHOLDER…` 占位行 → 判红（文件 / 函数不存在跳过）
 #   waves    --change-dir DIR                 只打印 waves JSON（不跑选测命令、不判未声明）
 #   turns    --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: standard / large}：owns 在基线 commit（取不到 → HEAD）树上的已提交文件 > 8 → large，计划写 "turns": "large" 可升档；不写任何文件
 #   landed   --change-dir DIR                 先按 waves 的规则 lint；打印 {切片 id: 门禁行 commit}：最新门禁行绿、commit 能解析且是 HEAD 祖先、
@@ -42,7 +43,8 @@
 #                                              分层文件合法时：单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒），已选区域按基线 regions 差分（缺记录 / cmd 变 → G2 region 红）
 #                                              实跑了套件时写收口账本并与基线账本对账：JSON 的 tests、时间线「用例 +A/-R」片段、delta.json（只报告）
 #                                              分层文件写了 budget 时落账之后判预算（G13 集成层新增超线 / G14 层总量；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 tests.budget 与 delta.json，附相对基线的预算变更
-#   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；先把 gate-baseline.json
+#   baseline --change-dir DIR [--full]       起飞前预检：gate.test 须显式写出（缺失即停，不探测）；读旧基线前先等仍在跑的预热
+#                                              （warm 运行标记且 pid 存活 → stderr 打印一次「等待预热结束」、每 2 秒复查）；先把 gate-baseline.json
 #                                              写成运行标记 {running, pid, started[, full_suite_sec]}，
 #                                              再跑 gate.test / lint / typecheck 与每片 verify，结束时整体覆盖为结果；
 #                                              全量耗时记在 gate-baseline.json 顶层 full_suite_sec（不写 slices.json）；退出码按 ok；
@@ -58,6 +60,11 @@
 #                                              分层文件写了 budget 时落账之后判预算（G14 层总量红 → 基线红、不动 test_ok；依赖测试账本，不可用只警告；锁 timeout 时降为警告），摘要进 ledger.budget
 #                                              分层文件存在时：恒走全量，单元层带探针判 G10 / G11（线取分层文件的 unit.budget.case_sec，缺省 3 秒；红 → 基线红），verify 之后逐个跑已选区域记 regions；
 #                                              分层文件不合法或 gate.integration 有未知区域 → 停下、不写运行标记
+#   warm     --change-dir DIR [--cmd CMD]    规划开始时预热全量：命令取 --cmd → 分层文件存在则打印「跳过预热」exit 0 →
+#                                              <changes 根> 下（除 archive 与本 change）slices.json 最新且 gate.test 非空的 change
+#                                              （沿用其落在来源目录下的包装脚本，复制到本 change、命令换成本 change 路径；带上 gate.pytest）
+#                                              → 都没有则打印「跳过预热」exit 0；与 baseline 同一路径恒全量，不复核选测范围、无检查，
+#                                              运行标记与结果带 warm: true、plan_sha 为 null；时间线 warm 事件；stdout 结果 JSON 带 test_cmd；退出码按 ok
 #   preflight --change-dir DIR                lint_plan + 运行标记识别（仍在跑 / 已中断）+ 基线四项校验（存在 / ok / plan_sha /
 #                                              commit 在分支历史）；基线带 snapshot 且 timeline.md 无 approve 事件时再按内容判过期
 #                                              （Δ 非空 → 基线过期）；通过打印 waves；plan_sha 含各检查的 [name, baseline]（有检查带 slice 时另含 ["slice", [[name, slice]…]]），只改 final 不算过期
@@ -2875,6 +2882,32 @@ def slice_turns(data, change_dir, root):
     return out
 
 
+SCAFFOLD_PLACEHOLDER = "PLAN-SCAFFOLD-PLACEHOLDER"
+# 只认 scaffold 生成的那一行占位断言（design D5 形状），与 plan-scaffold.py 的 PLACEHOLDER_RE 同一判定
+SCAFFOLD_PLACEHOLDER_RE = re.compile(r"^\s*assert\s+False\s*,\s*[\"']" + re.escape(SCAFFOLD_PLACEHOLDER), re.M)
+
+
+def _scaffold_errors(data, change_dir):
+    """.py 的 scenario 测试函数体仍含 scaffold 占位标记 → skeleton: 一条（propose-speedup design D6）；
+    取不到仓库根、文件或函数不存在时跳过（G7 的事）。"""
+    targets = [t for t in (data.get("scenario_tests") or {}).values() if isinstance(t, str) and "::" in t]
+    root = _git_top(change_dir) if any(t.split("::", 1)[0].endswith(".py") for t in targets) else None
+    errors, bodies = [], {}
+    for target in targets if root else ():
+        rel, func = target.split("::", 1)
+        if not rel.endswith(".py"):
+            continue
+        if rel not in bodies:
+            try:
+                with open(os.path.join(root, rel), "r", encoding="utf-8") as f:
+                    bodies[rel] = dict(_test_bodies(rel, f.read().splitlines()))
+            except OSError:
+                bodies[rel] = {}
+        if SCAFFOLD_PLACEHOLDER_RE.search(bodies[rel].get(func.rsplit("::", 1)[-1], "")):
+            errors.append("skeleton: %s 仍是 scaffold 占位断言，补真实断言后再 lint" % target)
+    return errors
+
+
 def lint_plan(data, change_dir=None, run_scope=False, phase="lint"):
     errors = []
     scope_note = None
@@ -2977,6 +3010,7 @@ def lint_plan(data, change_dir=None, run_scope=False, phase="lint"):
                     and not _nonblank(c.get("slice"))):
                 errors.append("checks: 仓库默认检查 %s 是全局守护（声明了 slice），计划里的同名检查须带 slice" % c["name"])
         errors.extend(_lint_tiers(data, change_dir))
+        errors.extend(_scaffold_errors(data, change_dir))
         scope_errors, scope_note = _lint_scope(data.get("gate") or {}, change_dir, run_scope, data, phase)
         errors.extend(scope_errors)
     if scope_note and not errors:
@@ -4872,8 +4906,13 @@ def cmd_final(args):
 
 
 def cmd_baseline(args):
+    _run_baseline(args.change_dir, load_plan(args.change_dir), args.full)
+
+
+def _run_baseline(change_dir, data, full, warm=False):
+    """baseline 主体；warm=True（propose-speedup design D7）：不复核选测范围、恒全量、plan_sha 为 null、
+    不判计划被改、运行标记与结果带 warm、时间线记 warm 事件。打印结果 JSON 后按 ok 退出。"""
     root = toplevel()
-    data = load_plan(args.change_dir)
     gate = data.setdefault("gate", {})
     test_cmd = gate.get("test")
     if not (isinstance(test_cmd, str) and test_cmd.strip()):  # 不探测、不回填（design D1）
@@ -4882,7 +4921,7 @@ def cmd_baseline(args):
     cerrs = _lint_checks(gate)[0]
     if cerrs:
         die("gate.checks 形状非法，先跑 lint 修好：%s" % "；".join(cerrs))
-    tiers, terrs = _load_tiers(args.change_dir)
+    tiers, terrs = _load_tiers(change_dir)
     if not terrs:  # 部件形态：探针适配器自检记录不符与分层文件不合法同处（design D8）
         terrs = tier_adapter_errors(root, tiers)
     if terrs:
@@ -4893,14 +4932,16 @@ def cmd_baseline(args):
     if unknown:
         die("gate.integration 的区域 %s 不在测试分层文件 regions 里，先跑 lint 修好" % ", ".join(unknown))
     # 选测范围复核（design D8）：与 lint 同一套规则；不通过时不写运行标记，不碰现有 gate-baseline.json
-    serrs = _lint_scope(gate, args.change_dir, True, data, "baseline")[0]
+    serrs = [] if warm else _lint_scope(gate, change_dir, True, data, "baseline")[0]
     if serrs:
         die("选测范围复核未过（baseline 不运行）：\n  - " + "\n  - ".join(serrs))
-    sha0 = plan_sha(data)
-    name = os.path.basename(os.path.realpath(args.change_dir))
-    change_rel = _change_rel(root, args.change_dir)
+    sha0 = None if warm else plan_sha(data)
+    name = os.path.basename(os.path.realpath(change_dir))
+    change_rel = _change_rel(root, change_dir)
+    if not warm:  # 仍在跑的预热先等它结束（propose-speedup design D7），再读旧基线
+        _wait_warm(change_dir)
     # 开跑前（覆盖成运行标记之前）：旧基线（运行标记不算；--full 也要读它的 byproducts）、开始快照、命令指纹
-    old = load_baseline(args.change_dir)
+    old = load_baseline(change_dir)
     if not isinstance(old, dict) or old.get("running") is True:
         old = None
     try:
@@ -4909,24 +4950,26 @@ def cmd_baseline(args):
     except RuntimeError as e:  # design D12：不写运行标记，不碰现有 gate-baseline.json
         die("内容快照失败：%s" % e)
     # 上一次已知的全量耗时（design D1）：写进运行标记供 preflight 估时；内存里的 gate 供 _g7_timeout，不落盘
-    last_sec = suite_sec(args.change_dir, data)
+    last_sec = suite_sec(change_dir, data)
     gate["full_suite_sec"] = last_sec
     # 运行标记：preflight 据此分辨「还在跑」与「跑到一半中断」，不把半成品当缺基线
     run_mark = {"running": True, "pid": os.getpid(), "started": now_iso()}
+    if warm:
+        run_mark["warm"] = True
     if last_sec is not None:
         run_mark["full_suite_sec"] = last_sec
-    with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
+    with open(os.path.join(change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump(run_mark, f, ensure_ascii=False)
         f.write("\n")
     # 独占锁：运行标记之后、复用候选判定之前取，检查全部结束之后放（design D3）
     hold = flight_lock("exclusive", name, "baseline", _lock_expect_sec(old, gate))
     # 有分层文件时恒走全量：G10 / G11 要单元层探针，复用的旧结果没有（design D5）
-    nocand = args.full or tiers is not None
-    extras = _scope_extras(args.change_dir)  # blind / global / anchor_max_hops（unified-test-result-reuse D5 / D6）
+    nocand = full or tiers is not None
+    extras = _scope_extras(change_dir)  # blind / global / anchor_max_hops（unified-test-result-reuse D5 / D6）
     akey = _anchor_key(root, change_rel, test_cmd, gate)
     acand = None if nocand else _baseline_anchor(root, akey, s0, git(root, "rev-parse", "HEAD"), change_rel, name,
                                                  extras["anchor_max_hops"],
-                                                 drop=_inert_drop(root, args.change_dir, data, recon=False)[0])
+                                                 drop=_inert_drop(root, change_dir, data, recon=False)[0])
     cands = _baseline_candidates(root, old, key, name, nocand, acand)
     # 本 change 旧基线候选是 dict(old, …) 的浅拷贝，与 old 共用 snapshot 对象；池候选各自读盘，不会共用。
     # 旧基线 snapshot 缺失时它不进候选，须排除锚点包装 / 池候选的 None is None 误判（design D7：经锚点 verify 全部重跑）
@@ -4935,10 +4978,10 @@ def cmd_baseline(args):
     hit, src, skipped, rerun_cache = None, None, [], {}
     for cand in cands:
         if cand is acand:
-            hit, why, abort = _try_anchor(root, args.change_dir, data, cand, extras)
+            hit, why, abort = _try_anchor(root, change_dir, data, cand, extras)
             ref = cand["pick"][0] if cand.get("pick") else {}
         else:
-            hit, why, abort = _try_reuse(root, args.change_dir, data, cand, s0, key, rerun_cache, own=cand is own)
+            hit, why, abort = _try_reuse(root, change_dir, data, cand, s0, key, rerun_cache, own=cand is own)
             ref = cand
         if hit is not None:
             src = cand
@@ -4949,7 +4992,7 @@ def cmd_baseline(args):
             break
     apart = None  # 经锚点时新锚点的依赖部分（design D7）
     # 全量原因在开跑前定（本次写出的锚点不算，design D13）
-    full_reason = _baseline_full_reason(root, args.full, tiers, skipped, akey) if hit is None else None
+    full_reason = ("预热" if warm else _baseline_full_reason(root, full, tiers, skipped, akey)) if hit is None else None
     reasons, warnings, out = [], [], ""
     unit_wall, part_wall = 0.0, {}
     # 锚点的依赖图（全量与区域运行并起来）、没测到的 (类别, 原因)（design D3；unified-test-result-reuse D4）与不可度量的原因
@@ -4977,7 +5020,7 @@ def cmd_baseline(args):
     else:
         t0 = time.time()
         tg = run_test_gate(test_cmd, root, probe=tiers is not None, deps=True,
-                           extra_env=_gate_test_env("baseline", args.change_dir))
+                           extra_env=_gate_test_env("baseline", change_dir))
         rc, out = tg["rc"], tg["out"]
         full_sec = round(time.time() - t0, 1)
         bl["test"] = {"exit": rc, "sec": full_sec}
@@ -5170,9 +5213,8 @@ def cmd_baseline(args):
             full_sec = _num((src.get("test") or {}).get("sec"))
     bl["full_suite_sec"] = full_sec
     # 后台跑期间人可能改了 slices.json：重读当前文件只为判 gate / verify 是否被改；baseline 不写 slices.json
-    cur = load_plan(args.change_dir)
     bl["plan_sha"] = sha0
-    if plan_sha(cur) != sha0:
+    if not warm and plan_sha(load_plan(change_dir)) != sha0:  # 预热时本 change 还没有 slices.json
         reasons.append("基线运行期间 gate / verify 被修改，重跑 baseline")
     # test_ok（design D8）：上面三类「基线无效」原因任一出现 → 测试部分也不可信
     bl["test_ok"] = test_ok and len(reasons) == n_valid
@@ -5213,7 +5255,7 @@ def cmd_baseline(args):
             warnings.append("锚点不可用：%s" % "；".join(deps_whys))
         elif reasons and not deps_un:
             warnings.append("锚点不可用：基线无效（%s）" % reasons[0])
-        tkey = _tiers_key(root, args.change_dir, tiers)
+        tkey = _tiers_key(root, change_dir, tiers)
         ad = adeps if measured else {"deps": {}, "blind": [], "files": []}
         w = _anchor_write(root, {
             "change": name, "commit": bl["commit"], "at": now_iso(), "snapshot": s1, "byproducts": byproducts,
@@ -5238,6 +5280,8 @@ def cmd_baseline(args):
         bl["warnings"] = warnings
     bl.update({"change": name, "mode": "incremental" if hit is not None else "full", "snapshot": s1,
                "cmd_key": key, "byproducts": byproducts})
+    if warm:
+        bl["warm"] = True
     if hit is not None:
         bl["incremental"] = hit
     elif skipped:
@@ -5251,7 +5295,7 @@ def cmd_baseline(args):
         if w:
             warnings.append(w)
             bl["warnings"] = warnings
-    with open(os.path.join(args.change_dir, BASELINE), "w", encoding="utf-8") as f:
+    with open(os.path.join(change_dir, BASELINE), "w", encoding="utf-8") as f:
         json.dump(bl, f, ensure_ascii=False, indent=2)
         f.write("\n")
     t, verdict = bl["test"], "ok" if bl["ok"] else "red"
@@ -5272,7 +5316,7 @@ def cmd_baseline(args):
     lk = _lock_note(bl["lock"])  # 三种备注末尾各接锁片段（design D8）
     if lk:
         note += "；" + lk
-    timeline_record(args.change_dir, "baseline", note)
+    timeline_record(change_dir, "warm" if warm else "baseline", note)
     print(json.dumps(dict(bl, test_cmd=test_cmd, tail=_tail(out)), ensure_ascii=False))
     sys.exit(0 if bl["ok"] else 1)
 
@@ -5291,19 +5335,107 @@ def _baseline_full_reason(root, full, tiers, skipped, akey):
     return "锚点不可用（依赖图未测：%s）" % un[0]["deps_kind"] if un else "无可用候选（锚点池为空）"
 
 
+def _pid_alive(pid):
+    """运行标记里的 pid 是否存活；pid 不合法 → False。"""
+    if not (isinstance(pid, int) and not isinstance(pid, bool) and pid > 0):
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:  # ProcessLookupError 等：进程已不在
+        return False
+    return True
+
+
+def _wait_warm(change_dir):
+    """gate-baseline.json 是 warm 运行标记且进程活着 → stderr 打印一次「等待预热结束」，每 2 秒复查，
+    直到它不再是运行标记或进程已不在（propose-speedup design D7）。"""
+    told = False
+    while True:
+        bl = load_baseline(change_dir)
+        if not (isinstance(bl, dict) and bl.get("running") is True and bl.get("warm") is True
+                and _pid_alive(bl.get("pid"))):
+            return
+        if not told:
+            sys.stderr.write("等待预热结束（pid %s）\n" % bl.get("pid"))
+            sys.stderr.flush()
+            told = True
+        time.sleep(2)
+
+
+def _warm_source(change_dir):
+    """<changes 根> 下除 archive 与本 change 外，slices.json mtime 最新且 gate.test 非空的 change → (目录, gate)；没有 → None。"""
+    me = os.path.realpath(change_dir)
+    parent = os.path.dirname(me)
+    best = None
+    try:
+        names = os.listdir(parent)
+    except OSError:
+        return None
+    for n in names:
+        d = os.path.join(parent, n)
+        p = os.path.join(d, "slices.json")
+        if n == "archive" or os.path.realpath(d) == me or not os.path.isfile(p):
+            continue
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                gate = (json.load(f) or {}).get("gate")
+            mt = os.path.getmtime(p)
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(gate, dict) and _nonblank(gate.get("test")) and (best is None or mt > best[0]):
+            best = (mt, d, gate)
+    return (best[1], best[2]) if best else None
+
+
+def _adopt_wrapper(root, src_dir, change_dir, cmds):
+    """沿用来源 change 的包装脚本（design D7）：命令引用到的、落在来源目录下的文件及其 shell 闭包里同样落在来源目录下的，
+    复制到本 change 同一相对位置（已存在不覆盖，保留可执行位）；返回把来源目录换成本 change 目录后的命令。"""
+    src_rel, dst_rel = _change_rel(root, src_dir), _change_rel(root, change_dir)
+    files = set()
+    for cmd in cmds:
+        try:
+            toks = shlex.split(cmd)
+        except ValueError:
+            continue
+        files.update(r for r in (_repo_rel(root, t) for t in toks)
+                     if r and r.startswith(src_rel + "/") and os.path.isfile(os.path.join(root, r)))
+    files |= {r for r in _shell_closure(root, files) if r.startswith(src_rel + "/")}
+    for r in sorted(files):
+        dst = os.path.join(root, dst_rel, r[len(src_rel) + 1:])
+        if os.path.lexists(dst):
+            continue
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(os.path.join(root, r), dst)
+    pat = re.compile(re.escape(src_rel) + r"(?![A-Za-z0-9_.-])")
+    return [pat.sub(lambda _m: dst_rel, c) for c in cmds]
+
+
+def cmd_warm(args):
+    """warm（propose-speedup design D7）：规划开始时把全量跑成本 change 的旧基线，供正式 baseline 按原规则复用。"""
+    change_dir = args.change_dir
+    gate = {}
+    if args.cmd_text:
+        gate["test"] = args.cmd_text
+    elif os.path.isfile(_tiers_path(change_dir)):
+        print("跳过预热：分层仓库的 baseline 恒走全量")
+        sys.exit(0)
+    else:
+        src = _warm_source(change_dir)
+        if src is None:
+            print("跳过预热：没有可沿用的 gate.test")
+            sys.exit(0)
+        root = toplevel()
+        keys = [k for k in ("test", "pytest") if _nonblank(src[1].get(k))]
+        gate = dict(zip(keys, _adopt_wrapper(root, src[0], change_dir, [src[1][k] for k in keys])))
+    _run_baseline(change_dir, {"gate": gate, "slices": []}, True, warm=True)
+
+
 def _die_running_baseline(change_dir, bl, data):
     """gate-baseline.json 仍是运行标记：进程活着 → 等；进程已不在 / pid 不合法 → 中断，重跑。"""
     pid = bl.get("pid")
-    alive = False
-    if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
-        try:
-            os.kill(pid, 0)
-            alive = True
-        except PermissionError:
-            alive = True
-        except OSError:  # ProcessLookupError 等：进程已不在
-            alive = False
-    if not alive:
+    if not _pid_alive(pid):
         die("基线中断（进程 %s 已不在）：重跑 slice-gate.py baseline --change-dir %s" % (pid, change_dir))
     try:
         started = datetime.strptime(bl.get("started") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
@@ -7472,6 +7604,9 @@ def main():
             p.add_argument("--full", action="store_true", help="不复用旧基线，强制跑全量 gate.test")
         if name == "final":
             p.add_argument("--full", action="store_true", help="不走增量与同树沿用，强制跑全量 gate.test")
+    p = sub.add_parser("warm", help="规划开始时预热全量：写成本 change 的旧基线（warm: true）；跳过时打印原因并 exit 0，否则按 ok 退出")
+    p.add_argument("--change-dir", required=True)
+    p.add_argument("--cmd", dest="cmd_text", help="显式的全量命令；缺省沿用最近一个 change 的 gate.test")
     p = sub.add_parser("start")
     p.add_argument("slice")
     p.add_argument("--change-dir", required=True)
@@ -7513,7 +7648,7 @@ def main():
     p.add_argument("--fix-base", help="跨片修复的起点：列出 SHA..HEAD 改动的文件与 owns 外的文件，飞行记录文件判 G6")
     args = ap.parse_args()
     {"lint": cmd_lint, "waves": cmd_lint, "start": cmd_start, "gate": cmd_gate, "record": cmd_record,
-     "final": cmd_final, "baseline": cmd_baseline, "preflight": cmd_preflight, "ship": cmd_ship,
+     "final": cmd_final, "baseline": cmd_baseline, "warm": cmd_warm, "preflight": cmd_preflight, "ship": cmd_ship,
      "checkpoint": cmd_checkpoint, "scope-seed": cmd_scope_seed, "sub-sync": cmd_sub_sync,
      "merge": cmd_merge, "reap": cmd_reap, "turns": cmd_turns, "landed": cmd_landed, "wave-check": cmd_wave_check}[args.cmd](args)
 

@@ -1,0 +1,161 @@
+{
+  "blocked": [],
+  "blocking": [],
+  "deferred": [
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-kit.py",
+      "line": 89,
+      "summary": "文件头声明 slices.json 不合法时 exit 2，但 load_plan 只校验了 slices 是不是列表。某片缺 id（line 112/168 的 s[\"id\"]）、或某片不是 dict 时，会抛 KeyError/TypeError 打出 traceback 并 exit 1，和自己声明的退出码不一致。",
+      "fix": "在 load_plan 里逐片校验：是 dict 且有字符串类型的 id，否则 raise KitError(\"%s 不合法：第 N 片缺 id\")；也可以在 main 里把 KeyError/TypeError 统一转成 exit 2。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-kit.py",
+      "line": 177,
+      "summary": "标记定位用 old.find(END) 取第一个 END。如果说明区（标记之外）出现在 BEGIN 之前的位置含有 END 字面量，或者 BEGIN 有、END 缺，会判成 e<=b 走插入分支，把新机械区插到最前面，旧的 BEGIN/END 残留在文件里。之后再运行就会出现重复或错位的机械区。",
+      "fix": "改为 e = old.find(END, b + len(BEGIN)) if b != -1 else -1；b!=-1 但 e==-1（只有半对标记）时 raise KitError 点名文件，不要静默前插。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-kit.py",
+      "line": 69,
+      "summary": "template 固定用三个反引号的 ```markdown 包住。如果工件模板本身含 ``` 代码块（自定义 schema 的模板很常见，例如 mermaid 或示例代码），围栏会被提前闭合，后续输出的 markdown 结构错乱。当前仓库 5 个模板都不含 ```，所以暂时不触发。",
+      "fix": "按模板里最长的连续反引号长度动态选围栏：fence = '`' * max(3, longest_run + 1)，开头和结尾都用同一个 fence。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_plan_kit.py",
+      "line": 100,
+      "summary": "切片包接口约定 stderr 写成『openspec <参数…> 失败：<子进程 stderr 末行>』，但 fails_loud 用例只断言了命令前缀，没有断言子进程 stderr 末行（桩会输出 boom design）有没有透传。末行透传这部分契约没有测试守住。",
+      "fix": "补一行断言 assert \"boom design\" in p.stderr（scenario 的 Then 只要求含命令，这一行是加严，不改原断言）。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-kit.py",
+      "line": 171,
+      "summary": "packet 路径直接取自 slices.json，拼成 d / packet 后不做任何校验。绝对路径或含 ../ 的值会让 packets 在 change 目录外写文件（无标记时还会把机械区前插进任意已有文件）。slices.json 由规划期生成，风险较低，但没有防线。",
+      "fix": "解析后校验 path.resolve() 位于 d.resolve() 之下，不在则 raise KitError 点名该片。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/plan-scaffold.py",
+      "line": 45,
+      "summary": "split_target 按第一个 '::' 切分后，func 没有校验是不是合法标识符。如果映射写成 'tests/t.py::TestK::test_m' 这类类方法 / 参数化形式，scaffold 会把 'def TestK::test_m():' 原样写进测试文件，整个模块从此不能 collect，同文件里已有的测试也一起失效。抽查已复现：exit 0，created 含该项，生成的文件 compile 报 SyntaxError。G7 对这种映射本来就判「未定义」，所以这类映射在门禁里也通不过，但 scaffold 不该替人把文件写坏。",
+      "fix": "在 cmd_scaffold 的循环里先判断 func.isidentifier()（这样也排除了含 '::' 的情况）。不合法时二选一：列进 skipped；或像 scenario 找不到那样 exit 2，在 stderr 点名。另外补一条测试覆盖。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-scaffold.py",
+      "line": 107,
+      "summary": "ensure_pytest_import 遇到 SyntaxError 时把 tree 置为 None，has_pytest_import 跟着判为「缺 import」，于是在文件开头再插一行 import pytest。这会造成重复导入，还会把 import 放到模块 docstring / __future__ 之前。只要已有测试文件本身有语法错误，或同一次运行里上一个追加的函数已把文件写坏（见上一条），就会发生。抽查输出里在 docstring 前多出了一行 import pytest。",
+      "fix": "解析失败时不要盲插：直接返回原文，并记一条 stderr 警告；或退回文本判据 re.search(r'(?m)^import pytest\\b', text)，命中就不插。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-scaffold.py",
+      "line": 204,
+      "summary": "placeholder_funcs 在文件读失败或 AST 解析失败时返回 []，gwt 就静默认定「无占位」。另外，映射到的文件不存在、或函数没定义时，gwt_violations 和占位检查都会直接跳过，gwt 照样 exit 0。结果是：没跑 scaffold，或 fork 把文件写坏了，规划期自查照样显示通过。起飞时 lint 的 G7 能兜底，但这条自查本身对「骨架补完」给出了假阴性。",
+      "fix": "解析失败时退回纯文本检查：在 '\\n'.join(lines) 中查 PLACEHOLDER，命中就按文件级点名。或者至少打印一行「无法解析: <path>」并算作问题。映射文件不存在、函数未定义时，也各打印一条问题。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-scaffold.py",
+      "line": 232,
+      "summary": "gwt 靠子串匹配 'path::func '（带尾随空格）来筛 gwt_violations 的输出，等于隐式依赖 slice-gate.py 的消息格式 'G4 GWT: <rel>::<name> 缺 ...'。S3 正在并行改 slice-gate.py；只要它把这条消息的格式改了（比如名字后改用全角冒号，或去掉空格），过滤会一条都不剩，gwt 静默通过，而本切片的测试只锁住了当前格式。子串匹配还会在另一个映射文件路径以本路径结尾时误命中，例如 'xtests/a.py' 和 'tests/a.py'。",
+      "fix": "改用锚定的正则提取 rel 和 name，例如 re.match(r'G4 GWT: (\\S+?)::(\\S+) ', msg)，再按 (rel, name) 元组做精确匹配。如果解析失败（格式变了），就原样保留这条消息，不要丢弃，这样格式漂移会暴露成 exit 1，而不是静默通过。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/plan-scaffold.py",
+      "line": 120,
+      "summary": "packet 和 spec 规定的「已有文件缺 import pytest → 按 AST 插到最后一条顶层 import 后 / docstring 后 / 文件开头」整条分支，tests/test_plan_scaffold.py 一条都没覆盖：4 个 scenario 用的要么是新文件，要么是已经有 import pytest 的文件。抽查手动验证过三种位置，插入都正确，只有「无 import 也无 docstring」时，import 后只空一行就接 def，不符合 PEP 8 的两行空行。",
+      "fix": "补一条单测：已有文件带 docstring 和 import os、但没有 import pytest，断言 import pytest 落在 import os 之后且原有函数逐字不变。文件开头插入时改为 ['import pytest', '', '']，或者交给追加逻辑统一处理空行。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5349,
+      "summary": "_wait_warm 等待没有上限，只靠 os.kill(pid, 0) 判断进程是否还活着。如果预热进程被强杀、来不及覆盖运行标记，而 pid 恰好被别的长寿进程复用，正式 baseline 会每 2 秒复查一次、永远等下去，stderr 也只打印一次提示，看上去像卡死。同文件的 _die_running_baseline 至少会结合 started 判断时长。",
+      "fix": "给等待加上限：取运行标记里的 started 和 full_suite_sec，算出预计结束时间再加宽限（例如 2 倍 + 60 秒；没有 full_suite_sec 时用一个固定上限）。超时后往 stderr 写「预热超时，按中断处理」并 return，让后续流程把这个运行标记当作 old=None 照常全量。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5430,
+      "summary": "warm 写运行标记前不看 D 里已有的 gate-baseline.json，会直接覆盖它。两种情况：一是 D 已有一份正式 baseline 结果（重新 propose 同一 change 时），其中 verify / lint / checks 的可复用记录会被丢掉；二是 D 的正式 baseline 正在跑，它的运行标记会被改成 warm 标记，preflight 会误识别。规格没有覆盖这两种情况，是否属于预期需要进一步确认。",
+      "fix": "在 cmd_warm 开头读 load_baseline(change_dir)：如果是非 warm 的运行标记且 pid 存活，或者已经是非 warm 的完整结果，就打印「跳过预热：本 change 已有正式基线」并 exit 0。或者在 design D7 里写明 warm 只用于新建的 change 目录。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 5409,
+      "summary": "_adopt_wrapper 换路径的正则只有右边界，没有左边界。命令里如果出现以 src_rel 结尾的更长路径（例如 x/openspec/changes/prev/...），也会被替换。此外，当命令以 `cd template && ...` 这类子目录相对路径引用包装脚本时，_repo_rel 按仓库根解析不到文件，脚本既不会被复制、命令也不会被改写，于是 warm 静默跑来源 change 的命令，后续 cmd_key 对不上，复用落空。",
+      "fix": "给正则加上左边界 `(?<![A-Za-z0-9_./-])`。另外，如果命令文本里含有来源 change 名，却没有收集到任何文件，就往 stderr 打一行提示，让人知道包装脚本没有被沿用。"
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/commands/opsx-propose.md",
+      "line": 80,
+      "summary": "文档让每个并行 fork 在补完自己那组后运行 `plan-scaffold.py gwt --change-dir …`，而第 3 步又写「必须 exit 0」。但 `cmd_gwt`（template/.claude/hooks/plan-scaffold.py:215-244）检查的是整个 change 中 scenario_tests 映射到的全部函数，不按文件过滤。多个 fork 并发时，先完成的 fork 一定会看到其他组尚未替换的 PLAN-SCAFFOLD-PLACEHOLDER，于是 exit 1。fork 可能因此回报失败（主会话据此走串行回退，重复劳动），也可能为了让它变绿去改别组的文件，与「不碰其他文件」冲突。SKILL.md:88 有同样问题。",
+      "fix": "两份文档同改，在 fork 的 prompt 里写明：「gwt 输出中只看以本组测试文件路径开头的行；其他文件的占位属于别的 fork，不处理、不算失败」。把「必须 exit 0」明确为主会话在全部 fork 返回（或串行补完）后执行的那一次校验。可选做法是给 gwt 加 `--file` 过滤参数，但这超出 S4 owns，可记入 backlog。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_routing_docs.py",
+      "line": 91,
+      "summary": "规划期不变式从「正文完全不含 subagent_type」放宽为正则 `subagent_type:\\s*\"?([\\w-]+)`，只能匹配 `subagent_type: x` 这种写法。JSON 写法 `\"subagent_type\": \"general-purpose\"`（键后先有引号再有冒号）和 `subagent_type=general-purpose` 都匹配不上，findall 返回空，all() 空真通过。今后有人在规划文档里用这两种写法加非 fork 派发，测试拦不住，铁律 11 的规划期防线因此出现漏洞。test_propose_toolchain.py:52 用的是同一正则。",
+      "fix": "正则改为容忍键两侧的引号以及 `:` / `=`，例如 `r'subagent_type\"?\\s*[:=]\\s*\"?([\\w-]+)'`。另加一条反向断言：t.count(\"subagent_type\") 等于匹配到的取值个数（或者对纯文字提及另行白名单），保证没有逃逸的写法。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": false,
+    "commit": "9baa3fb070ca5ae9d3e55f6b03f5623c76dd6e45",
+    "failed": [
+      "G2 test：增量重跑超时"
+    ],
+    "warnings": [],
+    "summary": "final 阻断：scenario 19/19；增量：重跑 107 个文件（392 个用例）/ 沿用 181 个，锚点 dc6c26a128"
+  },
+  "waves": [
+    {
+      "wave": 1,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 424.8 秒（107 个文件），超过预算 120 秒，留给 final",
+        "rerun_tests": null,
+        "est_sec": 424.8,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    },
+    {
+      "wave": 2,
+      "ok": true,
+      "failed": [],
+      "tests": {
+        "mode": "skipped",
+        "why": "受影响测试约 424.8 秒（107 个文件），超过预算 120 秒，留给 final",
+        "rerun_tests": null,
+        "est_sec": 424.8,
+        "sec": 0,
+        "budget_sec": 120
+      },
+      "fix": null
+    }
+  ],
+  "resolved": [
+    {
+      "severity": "HIGH",
+      "file": "template/.claude/hooks/slice-gate.py",
+      "line": 2904,
+      "summary": "占位判定只看函数体里有没有 PLAN-SCAFFOLD-PLACEHOLDER 子串。凡是在断言或字符串里合法引用这个标记的 scenario 测试都会被误判为未补完的骨架。已实测：在当前 HEAD（含 S3）上运行 `slice-gate.py lint --change-dir template/openspec/changes/propose-speedup`，rc=2，报出两条 skeleton: 错误，分别指向 tests/test_propose_toolchain.py::test_propose_docs_fork_with_serial_fallback（第 49 行 `\"PLAN-SCAFFOLD-PLACEHOLDER\" in seg`）和 ::test_lint_rejects_unfilled_scaffold（第 88 行 re.sub 的正则文本）。这两个函数都映射了本 change 的 scenario。lint_plan 会被 gate / preflight / final 调用，所以本 change 后续切片（S4）的门禁和收口 final gate 会恒红；凡是测试本身讨论 scaffold 标记的下游仓库也会被误拦。",
+      "fix": "只认 scaffold 生成的那一行占位断言，不做子串匹配。例如在 _scaffold_errors 里用行锚定正则 `re.compile(r'^\\s*assert\\s+False\\s*,\\s*[\"\\']' + re.escape(SCAFFOLD_PLACEHOLDER), re.M)` 搜函数体，与 design D5 的骨架形状 `assert False, \"PLAN-SCAFFOLD-PLACEHOLDER：…\"` 对齐。在 tests/test_lint_placeholder.py 补一条护栏：函数体在断言字符串里引用该标记（例如 `assert \"PLAN-SCAFFOLD-PLACEHOLDER\" in s`）时，lint 不出 skeleton:。plan-scaffold.py gwt 的占位残留检查最好与此保持同一判定，防止两边漂移。",
+      "fixed_by": "9baa3fb"
+    }
+  ]
+}
