@@ -1,0 +1,68 @@
+{
+  "blocked": [],
+  "blocking": [
+    {
+      "severity": "HIGH",
+      "file": "tests/test_fork_commands_docs.py",
+      "line": 100,
+      "summary": "门禁误判（越出 owns 的连带破坏）：S3 按切片包把 template/openspec/model-routing.json 补全到 11 键，其中包括 cleanup 组。但 test_self_hosting_config_leaves_fork_keys 断言配置里没有 cleanup 组，所以全量 `python3 -m pytest -q tests` 在本 commit 上是红的。切片 verify 没跑这个文件，门禁 ok=true 掩盖了这个问题。按仓库纪律（全量 pytest 全绿、门禁红不收口），这条必须在收口前闭环。",
+      "fix": "由主会话做一次跨片修复，在同一处提交：把 tests/test_fork_commands_docs.py:100 的断言改成配置里 cleanup.runner 的 model / effort 等于 BUILTIN['cleanup.runner']，或者等于 clean-after-merged.md frontmatter 的值；保留 frontmatter --check 退出 0 的断言。同时按 CLAUDE.md 的『切片 owns 含钉文档的旧测试』纪律，在计划或 backlog 里留一条痕迹，说明该测试本应并入 S3 的 owns。"
+    },
+    {
+      "severity": "HIGH",
+      "file": "tests/test_install.py",
+      "line": 339,
+      "summary": "门禁误判（越出 owns 的连带破坏）：install 现在会运行 init，在目标仓库种下 openspec/model-routing.json（D5 的要求）。test_fresh_install_ships_only_seeds 断言 openspec/ 里的文件集合恰好是种子清单、gate-scope.json 和 schemas/，所以全新安装后多出的 model-routing.json 让这条测试失败，全量测试红。",
+      "fix": "在跨片修复里把期望集合改成 `OPENSPEC_SEEDS | {\"gate-scope.json\", \"model-routing.json\"} | schemas`，并更新 Then 注释，与 D5 保持一致。"
+    }
+  ],
+  "deferred": [
+    {
+      "severity": "MEDIUM",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 328,
+      "summary": "写回循环 `for path, text, new, _, v in plans` 里的 die 消息用的 `name`，是前一个 `for name, filename in FORK_COMMANDS.items()` 循环结束时剩下的值，不是当前 path 对应的组名。现在 FORK_COMMANDS 只有 cleanup.runner 一项，所以碰巧没错；只要再登记第二个 fork 命令，写第一个文件失败时报错就会点名错误的组（成了最后一个组），违背「逐条点名 组.键」的契约。",
+      "fix": "把 name 放进 plans 元组：`plans.append((name, path, text, new, actual, v))`。check 分支和写回循环同步解包（`for name, path, text, new, _, v in plans`），die 用循环自己的 name。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/flight-doctor.py",
+      "line": 597,
+      "summary": "新分支只在 stdout 为空时把 exit 1 判成崩溃。如果 model-routing.py 先往 stdout 写了一部分内容再抛未捕获异常（Python 未捕获异常同样退出 1），会落进漂移分支，把这段 stdout 当漂移条目，还追加一行「修法」，掩盖真实的崩溃。现有 cmd_frontmatter --check 只在最后才 print，眼下碰不到这条路径，属潜在问题，需进一步确认是否值得收紧。",
+      "fix": "可选：进漂移分支前加一道判断，要求 stderr 里没有 `Traceback` 开头的行（或 stdout 每行都匹配「文件：字段 期望 x 实际 y」）；不满足就按「不可用：<stderr 最后一个非空行>」报告。"
+    },
+    {
+      "severity": "LOW",
+      "file": "tests/test_fork_commands_docs.py",
+      "line": 6,
+      "summary": "本片去掉了最后一个 `@pytest.mark.xfail` 骨架标记，`tests/test_fork_commands_docs.py` 里已经没有任何 `pytest.` 引用，`import pytest` 成了本片留下的未使用 import。grep 结果只剩第 6 行这一处 `pytest`。",
+      "fix": "删掉第 6 行的 `import pytest`。如果打算保留它给以后的骨架标记用，就在 PR 说明里写清楚。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 389,
+      "summary": "cmd_init 用 path.write_text 直接覆盖已有配置，不是原子写；写失败（权限、磁盘满）时会抛出原始 traceback、退出 1，和文件头『写不了 → exit 2 点名』的约定不一致。补全路径上如果写到一半中断，会留下截断的 JSON，之后 show / pin / frontmatter 全部退出 2。",
+      "fix": "先写到同目录的临时文件 `path.with_suffix('.json.tmp')`，再 os.replace 到目标路径；用 try/except OSError 包住写操作，转成 die(EXIT_INVALID, ['%s：写不了 %s：%s' % (CONFIG_NAME, path, e)])。fresh 分支（第 365 行）同样处理。"
+    },
+    {
+      "severity": "LOW",
+      "file": "template/.claude/hooks/model-routing.py",
+      "line": 12,
+      "summary": "文件头的配置说明仍写着值为 {\"model\",\"effort\"}，没有提到现在校验会接受的可选 desc（字符串）和顶层 $comment（字符串）。读文件头的人会以为加 desc 会被判非法。",
+      "fix": "把第 12 行改成『两级「组.键」→ {\"model\",\"effort\"[,\"desc\"]}，顶层可有 \"$comment\"（字符串，只作说明）』。"
+    }
+  ],
+  "fix": {
+    "slice": "final",
+    "ok": true,
+    "commit": "95d72d0658f1b19f374b3daba5b317531ab00106",
+    "failed": [],
+    "warnings": [],
+    "summary": "final 通过：scenario 9/9；增量：重跑 47 个文件（193 个用例）/ 沿用 743 个，锚点 851183aaa5。两条 HIGH 各一个 commit：1fd6aae 改 test_self_hosting_config_leaves_fork_keys 为断言 cleanup.runner 等于 BUILTIN 并在 backlog 追加再犯记录；95d72d0 把 test_fresh_install_ships_only_seeds 期望集合纳入 model-routing.json。全量 936 passed。"
+  },
+  "waves": [
+    {"wave": 1, "ok": true, "failed": [], "tests": {"mode": "skipped", "why": "受影响测试约 147.6 秒（29 个文件），超过预算 120 秒，留给 final", "est_sec": 147.6, "sec": 0, "budget_sec": 120}, "fix": null},
+    {"wave": 2, "ok": true, "failed": [], "tests": {"mode": "skipped", "why": "受影响测试约 153.5 秒（47 个文件），超过预算 120 秒，留给 final", "rerun_tests": null, "est_sec": 153.5, "sec": 0, "budget_sec": 120}, "fix": null}
+  ]
+}

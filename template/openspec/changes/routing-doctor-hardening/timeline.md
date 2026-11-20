@@ -12,3 +12,5 @@
 2026-11-20T13:40:00Z	review	findings=7 blocking=2 deferred=5
 2026-11-20T13:40:02Z	final	同树沿用 95d72d0658 ok
 2026-11-20T13:40:05Z	apply-done	blocked=0 blocking=2
+2026-11-20T13:40:59Z	reap	回收 0 个 · 释放 0.0 MB · 归档 0 个 · 保留 0 个
+2026-11-20T13:41:22Z	ship	draft: 2 条 CRITICAL/HIGH 评审未闭环
